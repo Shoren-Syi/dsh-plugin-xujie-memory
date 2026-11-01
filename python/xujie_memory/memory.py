@@ -217,6 +217,61 @@ class Memory:
             raise ValueError("trace_not_found")
         return self.lifecycle.curve(trace_id, points=max(2, min(60, int(points))))
 
+    # ------------------------------------------------------------ 删除 / 统计
+    def forget(self, scope_id: str, trace_id: str) -> dict[str, Any]:
+        """删一条记忆：内容清空、FTS 移除、依赖它的事件一起失效。
+
+        不是物理删行——行还在，`erased_at` 有值，审计能看见"删过什么"。
+        依赖传播（欠账、偏好等由它推出的事实）由 `Engine.erase_trace` 负责，
+        它会在同一事务里把受影响的状态重算干净。
+        """
+        trace = self.engine.get_trace(trace_id)
+        if trace is None or trace.get("scope_id") != scope_id:
+            raise ValueError("trace_not_found")
+        already_erased = bool(trace.get("erased_at"))
+        result = {"state_keys": []} if already_erased else self.engine.erase_trace(trace_id)
+
+        # 状态重算后重新对账画像，避免已删除的事实继续出现在提示词中。
+        from .profile import ProfileStore
+        profiles = ProfileStore(self.engine)
+        accounts = self.engine._conn().execute(
+            "SELECT account_id FROM person_profiles WHERE scope_id=?", (scope_id,)
+        ).fetchall()
+        for account in accounts:
+            profiles.derive_from_memory(scope_id, account["account_id"])
+        return {"trace_id": trace_id, "erased": True, "already_erased": already_erased,
+                "state_keys": result["state_keys"]}
+
+    def stats(self, scope_id: str) -> dict[str, Any]:
+        """库里的账：有多少条、多少条被删过、多少条锚住。
+
+        透明度用：用户问"你到底记了我多少东西"时，这里给得出数。
+        """
+        conn = self.engine._conn()
+
+        def count(sql: str, *args) -> int:
+            return int(conn.execute(sql, args).fetchone()[0])
+
+        return {
+            "scope_id": scope_id,
+            "traces": count(
+                "SELECT COUNT(*) FROM traces WHERE scope_id=? AND erased_at IS NULL",
+                scope_id),
+            "traces_erased": count(
+                "SELECT COUNT(*) FROM traces WHERE scope_id=? AND erased_at IS NOT NULL",
+                scope_id),
+            "events": count(
+                "SELECT COUNT(*) FROM events WHERE scope_id=?", scope_id),
+            "states": count(
+                "SELECT COUNT(*) FROM states WHERE scope_id=?", scope_id),
+            "anchors": len(self.lifecycle.anchored(scope_id)),
+            "clarifications_open": count(
+                "SELECT COUNT(*) FROM clarifications"
+                " WHERE scope_id=? AND status='open'", scope_id),
+            "summaries": count(
+                "SELECT COUNT(*) FROM summaries WHERE scope_id=?", scope_id),
+        }
+
     # ------------------------------------------------------------ 搜索
     def search(self, scope_id: str, query: str, *, limit: int = 5) -> list[dict]:
         return self.fuzzy.search(scope_id, query, limit=limit)

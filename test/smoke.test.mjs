@@ -18,7 +18,7 @@ function createHarness() {
   const logs = []
   const sections = []
   const handlers = new Map()
-  let cleanup = null
+  const effects = []
   const ctx = {
     logger: {
       debug: (m) => logs.push(['debug', m]),
@@ -27,8 +27,11 @@ function createHarness() {
       error: (m) => logs.push(['error', m]),
     },
     effect(fn) {
-      cleanup = fn()
-      return cleanup
+      // 每个 effect 都要留 disposer：插件现在有内核 + 工具两组，
+      // 只存最后一个会把内核留成孤儿进程，占着端口和 sqlite 文件。
+      const dispose = fn()
+      effects.push(dispose)
+      return dispose
     },
     inject(_deps, cb) {
       cb({ get: () => ({ section: (spec) => sections.push(spec) }) })
@@ -37,7 +40,14 @@ function createHarness() {
       handlers.set(event, cb)
     },
   }
-  return { ctx, logs, sections, handlers, close: () => cleanup?.() }
+  return {
+    ctx, logs, sections, handlers,
+    close: () => {
+      for (const dispose of effects.reverse()) {
+        try { dispose?.() } catch { /* 已释放 */ }
+      }
+    },
+  }
 }
 
 async function waitFor(fn, timeoutMs = 8000) {

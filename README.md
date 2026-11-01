@@ -39,10 +39,9 @@ flowchart LR
 2. 把"这个人是谁、我现在记得什么、他专门交代过要记住什么"注入提示词
 3. 你没说清楚的地方，**最多问一次**，问过就不再提
 
-它不是"给模型一个 `memory_search` 工具"——工具要模型自己想起来用，
-而记忆的价值恰恰在于**不用想**。
+记忆会自动注入；需要主动查找或删除时，也可以使用下方工具。
 
-### 三层记忆（当前版本 0.5.0）
+### 三层记忆（当前版本 0.6.0）
 
 | 层 | 内容 | 你怎么用 |
 |---|---|---|
@@ -61,7 +60,26 @@ flowchart LR
 **模糊搜索**：`POST /memory/search`，两字词、错一个字都能捞；
 精确检索落空时，自动注入也会降级到模糊匹配。
 
-本仓库保留 0.5.0 发布包中的内核；上表概括了三层记忆。
+本仓库保留 0.6.0 发布包中的内核；上表概括了三层记忆。
+
+**当前这句不会被当成旧事注回去（0.6 修复）**：`/turn` 用 trace_id 挡，`/context` 只拿得到文本、按内容挡（忽略空白与标点）。换成问别的事，旧记忆照常出现。
+
+---
+
+## 主动工具（0.6 新增）
+
+注入是自动的，但**主动回忆**和**删掉记错的东西**需要有手。0.6 给模型注册了三个工具：
+
+| 工具 | 作用 | 副作用 |
+|---|---|---|
+| `memory_search` | 按字面/错字模糊检索原话，返回内容、`trace_id`、权重 | 只读 |
+| `memory_forget` | 删一条记忆（软删：内容清空、FTS 移除、依赖它的事实失效并重算） | 写，`erased_at` 留审计 |
+| `memory_status` | 原话/已删/状态/锚点/未确认计数 + 内核健康 | 只读 |
+
+用户说「忘掉这条」时，模型可以自己搜到 `trace_id` 再删，不需要你手动清库。
+对应内核接口：`POST /memory/search`、`POST /memory/forget`、`POST /memory/stats`。
+
+宿主若没有 `tools` 服务（老版本），这三个工具静默跳过，注入照常。目前尚无编辑记忆工具或图形化记忆管理界面。
 
 ---
 
@@ -79,16 +97,16 @@ dsh plugin --profile <你的profile> add <解压后的 dsh-plugin-xujie-memory �
 # 新开一个会话即可
 ```
 
-也可以通过 npm 包名安装：
+也可以在 DSH 的「添加插件」中输入包名 `dsh-plugin-xujie-memory` 安装，或通过命令安装：
 
 ```bash
 dsh plugin --profile <你的profile> add dsh-plugin-xujie-memory
 ```
 
-或从 GitHub 安装指定版本：
+也可以从 GitHub 安装指定版本：
 
 ```bash
-dsh plugin --profile <你的profile> add github:Shoren-Syi/dsh-plugin-xujie-memory#v0.5.0
+dsh plugin --profile <你的profile> add github:Shoren-Syi/dsh-plugin-xujie-memory#v0.6.0
 ```
 
 不需要 `pip install`，不需要填 `repoPath`，不需要另外起服务：
@@ -213,7 +231,7 @@ curl -s --noproxy '*' -X POST http://127.0.0.1:8765/turn \
 
 ```
 dsh-plugin-xujie-memory/
-├── lib/index.js          # 薄壳：挂 section / 收事件 / 起内核
+├── lib/index.js          # 薄壳：挂 section / 注册工具 / 收事件 / 起内核
 ├── python/xujie_memory   # Python 内核（零第三方依赖）
 ├── python/specs          # 判定规则
 ├── runtime/win32-x64/    # 自带解释器（Windows）
@@ -225,7 +243,7 @@ dsh-plugin-xujie-memory/
 
 ## 开发验证
 
-`npm test` 运行插件与内核的集成冒烟测试，覆盖会话隔离和注入消息过滤；Windows x64 默认使用包内 Python，其他平台需要 Python 3.10+，也可通过 `PYTHON` 环境变量指定解释器。执行 `npm pack` 可打包当前仓库自带的内核。
+`npm test` 运行冒烟、回声、工具及删除后画像对账测试。Windows x64 默认使用包内 Python；其他平台需要 Python 3.10+，也可通过 `PYTHON` 指定解释器。执行 `npm pack` 可打包当前仓库自带的内核。
 
 本仓库由 0.5.0 发布包恢复。原先的回归测试集因之前的沙箱重置而丢失，发布包中也没有包含原来的 `test/kernel_regression.py` 和内核同步脚本。CHANGELOG 中的 31/31 是历史记录，当前仓库无法复现该回归集；冒烟测试不代表这 31 项回归已通过。
 

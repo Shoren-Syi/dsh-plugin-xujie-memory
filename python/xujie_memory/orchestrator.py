@@ -57,6 +57,21 @@ from .recall import Budget as RecallBudget
 from .recall import Recall
 
 
+def _echo_key(text: str) -> str:
+    """比对「是不是同一句」用的键：去掉空白与标点，只留字。
+
+    为什么不能直接比字符串：宿主可能把同一句话分块送来、带换行，
+    或者用户自己重打了一遍标点不同的话——那些都还是「刚说的这句」，
+    不该被当成一件往事喂回去。
+    """
+    keep = []
+    for ch in (text or ""):
+        if ch.isspace() or ch in "，。！？、；：“”‘’（）()[]【】,.!?;:\"'`~…—-":
+            continue
+        keep.append(ch.lower())
+    return "".join(keep)
+
+
 # 澄清类型 → 一句人话。
 #
 # 内核只给数据不给措辞，但材料是**给模型读的**。
@@ -334,6 +349,11 @@ class Orchestrator:
         """
         if budget.max_recall <= 0:
             return []
+        # 回声：当前这句话本身永远不算"旧事"。
+        # `/turn` 靠 exclude（trace_id）挡，`/context` 没有 trace_id 可挡——
+        # 它只拿得到文本，所以这里按内容再挡一次。两条路都走这个函数，
+        # 挡在源头比在两处各挡一次可靠。
+        echo = _echo_key(text)
         result = self.recall.pull(
             scope_id, text, limit=budget.max_recall + 1,
             budget=RecallBudget(max_rounds=1,
@@ -352,7 +372,7 @@ class Orchestrator:
                 "kind": "related",
             }
             for t in result.traces
-            if t["trace_id"] != exclude
+            if t["trace_id"] != exclude and _echo_key(t["content"]) != echo
         ][: budget.max_recall]
         if related:
             return related
@@ -362,10 +382,10 @@ class Orchestrator:
         # 为什么不干脆留空：材料里少一段，主 AI 会以为"这个人没说过别的话"，
         # 而实际是"这句 query 没匹配上"。那是两种完全不同的信息。
         # 也不冒充成"相关的旧事"——最近说的和相关的经常不是一回事。
-        return self._recent(scope_id, exclude, budget.max_recall)
+        return self._recent(scope_id, exclude, budget.max_recall, echo)
 
     def _recent(self, scope_id: str, exclude: str,
-                limit: int) -> list[dict]:
+                limit: int, echo: str = "") -> list[dict]:
         """最近说过的话。**只用来兜底，标签必须是 recent。**
 
         `answer-%` 是澄清回答（"确认"/"是这条"），不是用户说过的事。
@@ -377,13 +397,17 @@ class Orchestrator:
             " WHERE scope_id=? AND trace_id!=? AND erased_at IS NULL"
             " AND source_ref NOT LIKE 'answer-%'"
             " ORDER BY recorded_at DESC LIMIT ?",
-            (scope_id, exclude, limit),
+            (scope_id, exclude, max(limit + 4, limit)),
         ).fetchall()
-        return [
-            {"content": r["content"], "trace_id": r["trace_id"],
-             "priority": None, "anchor": False, "kind": "recent"}
-            for r in rows
-        ]
+        out: list[dict] = []
+        for r in rows:
+            if echo and _echo_key(r["content"]) == echo:
+                continue
+            out.append({"content": r["content"], "trace_id": r["trace_id"],
+                        "priority": None, "anchor": False, "kind": "recent"})
+            if len(out) >= limit:
+                break
+        return out
 
     def _apply_feelings(self, profile: dict, feelings: dict,
                         turn: Turn) -> None:

@@ -212,6 +212,19 @@ class MemoryService:
         return {"ok": True, "session": session,
                 "points": Memory(self.engine).curve(scope, trace_id, points)}
 
+    def memory_forget(self, session: str, trace_id: str, *,
+                      user: str = "user") -> dict[str, Any]:
+        """删一条记忆。主 AI 主动删时用；用户说"忘掉这条"也走这里。"""
+        scope = self.scope_of(session, user)
+        return {"ok": True, "session": session,
+                **Memory(self.engine).forget(scope, trace_id)}
+
+    def memory_stats(self, session: str, *, user: str = "user") -> dict[str, Any]:
+        """库里有多少条记忆、多少条被删过、多少条锚住——透明化用。"""
+        scope = self.scope_of(session, user)
+        return {"ok": True, "session": session,
+                **Memory(self.engine).stats(scope)}
+
     def close(self) -> None:
         self.engine.close()
 
@@ -366,6 +379,17 @@ class _Handler(BaseHTTPRequestHandler):
                     user=user,
                     limit=int(_num_field(body, "limit", 5, 1, 50)),
                 )
+            elif route == "/memory/stats":
+                payload = self.service.memory_stats(session, user=user)
+            elif route == "/memory/forget":
+                trace_id = _str_field(body, "trace_id")
+                if not trace_id:
+                    raise BadRequest("missing_trace_id")
+                try:
+                    payload = self.service.memory_forget(session, trace_id, user=user)
+                except ValueError as exc:
+                    # 库里没有这条 / 不属于这个 scope：调用方参数问题，不是服务端崩了。
+                    raise BadRequest(str(exc)) from exc
             elif route in ("/memory/mark", "/memory/unmark", "/memory/curve"):
                 trace_id = _str_field(body, "trace_id")
                 if not trace_id:

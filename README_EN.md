@@ -39,6 +39,22 @@ This compares common design approaches; individual tool-based systems can differ
 
 Importance scoring affects how slowly memories fade. Explicit requests such as “remember this” pin an anchor. Retrieval does not reset decay. The kernel also exposes `/memory/mark`, `/memory/curve`, and `/memory/search` endpoints.
 
+## Active tools (new in 0.6)
+
+Injection is automatic, but **actively recalling** and **removing what was remembered wrong** need a hand. 0.6 registers three tools:
+
+| Tool | What it does | Side effect |
+|---|---|---|
+| `memory_search` | Literal/fuzzy search over stored wording; returns content, `trace_id`, weight | read-only |
+| `memory_forget` | Deletes one memory (soft delete: content cleared, FTS row removed, dependent facts invalidated and recomputed) | write; `erased_at` kept for audit |
+| `memory_status` | Counts for stored/erased entries, states, anchors, open items, plus kernel health | read-only |
+
+When the user says “forget that”, the model can search for the `trace_id` itself and delete it — no manual database surgery. Kernel endpoints: `POST /memory/search`, `POST /memory/forget`, `POST /memory/stats`.
+
+Hosts without a `tools` service skip registration silently; injection keeps working. Editing memories and a graphical memory-management interface are not yet available.
+
+The current sentence is no longer injected back as a past event (0.6 fix): `/turn` excludes it by `trace_id`, `/context` by content (whitespace and punctuation ignored). Ask about something else and older memories still appear.
+
 ## Installation
 
 The package targets the DSH 0.2 preview bundle mechanism and Node.js `^22.19 || >=24`. Windows x64 includes Python and the kernel; no separate Python installation or pip dependencies are needed. On macOS and Linux it falls back to system Python 3.10 or newer.
@@ -56,7 +72,7 @@ dsh plugin --profile <your-profile> add dsh-plugin-xujie-memory
 Or install the tagged version directly from GitHub:
 
 ```bash
-dsh plugin --profile <your-profile> add github:Shoren-Syi/dsh-plugin-xujie-memory#v0.5.0
+dsh plugin --profile <your-profile> add github:Shoren-Syi/dsh-plugin-xujie-memory#v0.6.0
 ```
 
 Start a new session. The plugin starts the bundled kernel automatically. By default the database is stored at `~/.xujie-memory/memory.db`. Kernel failure skips memory for that turn rather than blocking the conversation.
@@ -86,14 +102,14 @@ Only `user/message` events are ingested. Runtime context and agent-instruction m
 ## Package contents
 
 ```text
-lib/index.js             DSH integration and kernel lifecycle
+lib/index.js             DSH integration, tool registration and kernel lifecycle
 python/xujie_memory/     Python memory kernel
 python/specs/            Interpretation rules
 runtime/win32-x64/       Bundled Windows x64 Python runtime
 cordis.patch.yml         DSH bundle patch
 ```
 
-This repository was reconstructed from the distributed 0.5.0 package. Run `npm test` for the integration smoke test and `npm pack` to package the bundled kernel. Windows x64 uses the bundled Python runtime; other platforms need Python 3.10 or newer. Set `PYTHON` to use a specific interpreter for the smoke test.
+The repository was reconstructed from the 0.5.0 package and updated for 0.6.0. Run `npm test` for the smoke, echo, tools, and deletion projection tests; run `npm pack` to package the bundled kernel. Windows x64 uses the bundled Python runtime; other platforms need Python 3.10 or newer. Set `PYTHON` to select an interpreter.
 
 The original regression suite was lost when the previous sandbox was reset. The distribution did not include `test/kernel_regression.py` or the kernel synchronization script. The 31/31 result in the changelog is historical and cannot be reproduced from this repository; the smoke test does not replace that regression suite.
 
