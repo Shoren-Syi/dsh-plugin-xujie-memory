@@ -1,0 +1,16 @@
+{
+  "relation": "nickname",
+  "version": "1",
+  "risk_tier": "R1",
+  "required_slots": ["subject", "value"],
+  "allowed_modalities": ["asserted"],
+  "writers": ["subject"],
+  "effect_kind": "set",
+  "admission_mode": "auto",
+  "value_type": "string",
+  "allow_negative": false,
+  "confirmation": "implicit",
+  "validity": "permanent",
+  "conflict_policy": "last_write_wins",
+  "note": "称呼属于身份设定。v0.52 起用户明说「叫我X」直接生效（宿主没有确认交互，挂起等于永远记不住）；改口按 last_write_wins 覆盖。"
+}

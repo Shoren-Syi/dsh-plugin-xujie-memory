@@ -1,0 +1,14 @@
+{
+  "name": "aloof",
+  "persona": "高冷",
+  "anger_sensitivity": 0.8,
+  "anger_half_life_days": 0.5,
+  "sadness_half_life_days": 5.0,
+  "trust_damage": 1.2,
+  "trust_repair": 1.0,
+  "speak_first": false,
+  "hold_words": false,
+  "demand_explanation": true,
+  "intensity": "normal",
+  "note": "不容易被激怒（0.8），但一旦掉信任就掉得更多（1.2）。不主动开口，也不需要嘴硬——隔阂本身就是态度。"
+}

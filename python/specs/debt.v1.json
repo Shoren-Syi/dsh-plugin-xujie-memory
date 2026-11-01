@@ -1,0 +1,31 @@
+{
+  "relation": "debt",
+  "version": "1",
+  "risk_tier": "R2",
+  "required_slots": [
+    "debtor",
+    "creditor",
+    "item",
+    "quantity"
+  ],
+  "allowed_modalities": [
+    "asserted",
+    "request"
+  ],
+  "writers": [
+    "debtor",
+    "creditor"
+  ],
+  "effect_kind": "delta",
+  "admission_mode": "assisted",
+  "value_type": "number",
+  "unit": null,
+  "allow_negative": false,
+  "confirmation": "explicit",
+  "validity": "permanent",
+  "conflict_policy": "dispute",
+  "feeds": [],
+  "derived_from": [],
+  "note": "游戏内债务。建立用 set，偿还与免除用 delta(-)。余额不得为负；累计偿付量参与修正校验。unit 不是必填，也不固定在规格里：债务可以是米、书、金币，单位由对话决定（eval 时通过上下文 unit_hint 提供）。口语里「三十」不说单位，把它当必填只会把正常句子挂起。给了但与规格不符时，由内核判 disputed。 允许 request：免除在语用上多是请求（「给我免三碗」），不是陈述事实。请求仍走 explicit 确认。 【准入决策】永久 assisted，不是\"等指标变好再升\"：（1）实测准确率约 48%（EXPERIMENT §36–39），（2）R2 的错误代价不对称——多问一句是打扰，少问一句是记错钱，（3）错误集中在\"承诺 vs 已发生\"和\"疑问句确认\"两类高频语用（XM-21/22），那是能力边界，不是调参能解决的。",
+  "conservation": "repayment"
+}

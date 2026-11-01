@@ -1,0 +1,49 @@
+# 这个 bundle 往配置树里插的一行。
+#
+# `name` 必须是包的**名字**（和 package.json 的 name 一致），
+# `id` 是用户之后覆盖配置时的定位锚点——要稳定，不要和别的插件重名。
+#
+# 注意：DSH 0.2.1-rc.2 要求 patch 文件是**顶层数组**，所以整份内容放在
+# 一个 `- insert:` 列表项里（映射形式会被插件安装校验拒绝）。
+- insert:
+    - id: xujie-memory
+      name: dsh-plugin-xujie-memory
+      config:
+        # Python 内核监听地址；宿主的 section 注入和写记忆都走这条本地 HTTP。
+        endpoint: "http://127.0.0.1:8765"
+
+        # 留空 = 用插件包内自带的 python/ 内核（推荐，装上即用）。
+        # 只有开发时想指向仓库才填绝对路径。
+        repoPath: ""
+
+        # 由插件拉起内核进程。设成 false 就要求你另外手动起服务。
+        autoStart: true
+
+        # 留空 = 用插件包内自带的解释器（runtime/<平台>-<架构>/）。
+        # 只有想换成本机 Python 时才填。
+        pythonPath: ""
+
+        # 留空 = ~/.xujie-memory/memory.db；想换位置或跑测试时填绝对路径。
+        dbPath: ""
+
+        # 一个会话最多主动追问几次。超过之后材料里只剩一句总数。
+        maxAskedTotal: 6
+
+        # 记忆范围（v0.5）：
+        #   user    人物卡/偏好/锚点/账跨会话有效（默认，长期记忆）
+        #   session 每个会话一份、互不相通（0.4 的旧行为）
+        scope: "user"
+
+        # 内核日志；留空 = 与记忆库同目录的 kernel.log（超过 2MB 自动轮转）。
+        logFile: ""
+
+        # 插件与内核共享的鉴权 token 文件；留空 = 与记忆库同目录的 token。
+        tokenFile: ""
+
+        # 宿主若会 await section.text 返回的 Promise，可设为 true：
+        # 组装提示词时最多等 waitMs 毫秒拿这一轮的记忆。宿主不支持就别开。
+        asyncSection: false
+        waitMs: 400
+
+        # 可选诊断文件：宿主 logger 把 info 过滤掉时，用它确认插件挂载/内核就绪。
+        statusFile: ""

@@ -1,0 +1,14 @@
+{
+  "name": "tsundere",
+  "persona": "傲娇",
+  "anger_sensitivity": 1.3,
+  "anger_half_life_days": 0.5,
+  "sadness_half_life_days": 3.0,
+  "trust_damage": 1.0,
+  "trust_repair": 0.8,
+  "speak_first": false,
+  "hold_words": true,
+  "demand_explanation": true,
+  "intensity": "sharp",
+  "note": "气来得快去得也快（半衰期半天），但嘴上不肯先软。信任修得慢——0.8 的修复乘数意味着同样的和解，她只回八成。"
+}

@@ -1,0 +1,34 @@
+{
+  "name": "dsh-plugin-xujie-memory",
+  "version": "0.5.0",
+  "description": "Long-term memory for DeepSeek Harness: facts, anchors, decay and a person card, injected every turn without the model having to ask. Bundles the Python kernel and runtime — install and it works.",
+  "type": "module",
+  "main": "lib/index.js",
+  "license": "MIT",
+  "scripts": {
+    "sync-kernel": "node scripts/sync-kernel.mjs",
+    "prepack": "node scripts/sync-kernel.mjs",
+    "test": "node --test --test-concurrency=1 test/*.test.mjs && python3 test/kernel_regression.py"
+  },
+  "files": [
+    "lib",
+    "python",
+    "runtime",
+    "cordis.patch.yml",
+    "README.md",
+    "CHANGELOG.md"
+  ],
+  "engines": {
+    "node": "^22.19 || >=24"
+  },
+  "keywords": [
+    "dsh-plugin",
+    "deepseek-harness",
+    "agent-memory"
+  ],
+  "dsh": {
+    "bundle": {
+      "patch": "./cordis.patch.yml"
+    }
+  }
+}

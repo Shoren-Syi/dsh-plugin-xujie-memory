@@ -1,0 +1,14 @@
+{
+  "name": "gentle",
+  "persona": "温柔",
+  "anger_sensitivity": 0.5,
+  "anger_half_life_days": 1.0,
+  "sadness_half_life_days": 2.0,
+  "trust_damage": 0.8,
+  "trust_repair": 1.3,
+  "speak_first": true,
+  "hold_words": false,
+  "demand_explanation": false,
+  "intensity": "soft",
+  "note": "同样被冒犯，气只有别人一半（0.5）；修复时回得更多（1.3）。会主动开口把话说开。"
+}
