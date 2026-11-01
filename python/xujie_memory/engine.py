@@ -232,6 +232,25 @@ class Engine:
         Path(self.db_path).parent.mkdir(parents=True, exist_ok=True)
         conn = sqlite3.connect(self.db_path, isolation_level=None)
         try:
+            # Before the first 0.7 schema migration, keep an SQLite-consistent
+            # rollback copy. This backup is private and is NOT erased by forget.
+            tables = {r[0] for r in conn.execute(
+                "SELECT name FROM sqlite_master WHERE type='table'"
+            )}
+            if "traces" in tables and "memory_maintenance" not in tables:
+                import os
+                backup_path = self.db_path + ".pre-0.7.0.bak"
+                try:
+                    fd = os.open(backup_path, os.O_CREAT | os.O_EXCL | os.O_WRONLY, 0o600)
+                except FileExistsError:
+                    pass
+                else:
+                    os.close(fd)
+                    backup = sqlite3.connect(backup_path)
+                    try:
+                        conn.backup(backup)
+                    finally:
+                        backup.close()
             conn.executescript(SCHEMA_PATH.read_text(encoding="utf-8"))
             self._migrate(conn)
         finally:
@@ -417,13 +436,15 @@ class Engine:
 
             c.execute("DELETE FROM traces_fts WHERE trace_id=?", (trace_id,))
             c.execute(
-                "UPDATE traces SET content='', erased_at=? WHERE trace_id=?",
+                "UPDATE traces SET content='', context_ref=NULL, erased_at=? WHERE trace_id=?",
                 (self.now(), trace_id),
             )
             c.execute(
                 "UPDATE observations SET excerpt='', status='archived' WHERE trace_id=?",
                 (trace_id,),
             )
+            from .privacy import purge_derived
+            purge_derived(self, c, trace_id, affected)
 
         # 依赖传播要另开事务（recompute_derived 自己管事务）
         for key in affected:

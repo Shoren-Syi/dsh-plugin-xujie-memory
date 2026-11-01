@@ -1,6 +1,27 @@
-# dsh-plugin-xujie-memory
+# Xujie Memory 0.7.0 · DSH in-app memory workspace
 
 [简体中文](README.md) | English
+
+**Acceptance candidate for DeepSeek Harness 0.2.1-rc.5; not yet verified in a real Windows DSH desktop.**
+
+## New in 0.7
+
+- Native “记忆” page in DSH via the official `sidebar.panellist` and `main` slots; no separate website.
+- A rotating 3D neuronal field with three visible memory layers, fuzzy recall, true person cards, and original-memory edit/forget actions. Decorative fibers are not stored memories or inferred semantic relationships; real evidence edges are distinguished in the legend.
+- Browser management calls use generated Typert Remote contracts and require the authenticated DSH owner. No kernel token or direct kernel URL is exposed to the page.
+- An edit atomically invalidates old evidence and creates a replacement trace, preserving original event time, importance and anchors. Save returns a new trace ID. Dependent facts/person cards and retrieval are recomputed. Conflicting versions are rejected.
+- New `memory_edit` tool: search first to obtain `trace_id` and `content_hash`, then submit `expected_hash` with the correction.
+
+## Upgrade and data boundaries
+
+Use the same profile and `dbPath` as 0.6. Before the first old-schema migration, the kernel creates a consistent private backup named `<dbPath>.pre-0.7.0.bak` without overwriting an existing backup. Previously erased residual summaries/projections are repaired once.
+
+**The migration backup contains pre-upgrade data. Keep it private.** Forgetting is application-level removal, not secure disk erasure; it does not erase DSH chats, exports, old backups or historical disk/WAL contents.
+
+The graph defaults to the latest 250 original traces plus selected derived nodes. Management search covers all active original traces in the selected memory scope; automatic conversational recall retains its latest-800-candidate limit. Derived facts, summaries and clarifications are read-only; follow their evidence to edit original wording. Person cards are derived from actual records, not independent editable profile fields.
+
+Install the supplied local candidate archive/extracted folder with the same method and profile used for 0.6, then restart DSH. Registry and GitHub examples from older releases do not install this unpublished candidate. Preserve your data folder and follow `ACCEPTANCE.md` before relying on the upgrade.
+
 
 Seamless long-term memory built for DeepSeek Harness (DSH).
 
@@ -39,28 +60,29 @@ This compares common design approaches; individual tool-based systems can differ
 
 Importance scoring affects how slowly memories fade. Explicit requests such as “remember this” pin an anchor. Retrieval does not reset decay. The kernel also exposes `/memory/mark`, `/memory/curve`, and `/memory/search` endpoints.
 
-## Active tools (new in 0.6)
+## Active tools (0.7)
 
-Injection is automatic, but **actively recalling** and **removing what was remembered wrong** need a hand. 0.6 registers three tools:
+Injection is automatic, but **actively recalling** and **removing what was remembered wrong** need a hand. 0.7 registers four tools:
 
 | Tool | What it does | Side effect |
 |---|---|---|
-| `memory_search` | Literal/fuzzy search over stored wording; returns content, `trace_id`, weight | read-only |
+| `memory_search` | Literal/fuzzy search over stored wording; returns content, `trace_id`, `content_hash`, weight | read-only |
+| `memory_edit` | Atomic replacement using `trace_id`, content and `expected_hash` | write; new trace ID |
 | `memory_forget` | Deletes one memory (soft delete: content cleared, FTS row removed, dependent facts invalidated and recomputed) | write; `erased_at` kept for audit |
 | `memory_status` | Counts for stored/erased entries, states, anchors, open items, plus kernel health | read-only |
 
 When the user says “forget that”, the model can search for the `trace_id` itself and delete it — no manual database surgery. Kernel endpoints: `POST /memory/search`, `POST /memory/forget`, `POST /memory/stats`.
 
-Hosts without a `tools` service skip registration silently; injection keeps working. Editing memories and a graphical memory-management interface are not yet available.
+Hosts without a `tools` service skip registration silently; injection keeps working. 0.7 includes the native graphical page and memory editing.
 
 The current sentence is no longer injected back as a past event (0.6 fix): `/turn` excludes it by `trace_id`, `/context` by content (whitespace and punctuation ignored). Ask about something else and older memories still appear.
 
 ## Installation
 
-The package targets the DSH 0.2 preview bundle mechanism and Node.js `^22.19 || >=24`. Windows x64 includes Python and the kernel; no separate Python installation or pip dependencies are needed. On macOS and Linux it falls back to system Python 3.10 or newer.
+This candidate targets the DSH 0.2.1-rc.5 bundle/client mechanism and Node.js `^22.19 || >=24`. Windows x64 includes Python and the kernel; no separate Python installation or pip dependencies are needed. On macOS and Linux it falls back to system Python 3.10 or newer.
 
 ```bash
-dsh plugin --profile <your-profile> add <path-to-extracted-dsh-plugin-xujie-memory>
+dsh plugin --profile <your-profile> add <extracted-package-folder-containing-package.json>
 ```
 
 Install by package name from npm:
@@ -72,6 +94,7 @@ dsh plugin --profile <your-profile> add dsh-plugin-xujie-memory
 Or install the tagged version directly from GitHub:
 
 ```bash
+# Historical 0.6 command only; NOT this unpublished 0.7 candidate:
 dsh plugin --profile <your-profile> add github:Shoren-Syi/dsh-plugin-xujie-memory#v0.6.0
 ```
 
@@ -109,7 +132,7 @@ runtime/win32-x64/       Bundled Windows x64 Python runtime
 cordis.patch.yml         DSH bundle patch
 ```
 
-The repository was reconstructed from the 0.5.0 package and updated for 0.6.0. Run `npm test` for the smoke, echo, tools, and deletion projection tests; run `npm pack` to package the bundled kernel. Windows x64 uses the bundled Python runtime; other platforms need Python 3.10 or newer. Set `PYTHON` to select an interpreter.
+This upgrade is based on the supplied 0.6.0 archive. After installing development dependencies, run `npm run build` and `npm test`: the new suite exercises real temporary SQLite/HTTP and a Cordis DI test double. Browser QA uses a simulated main slot with the built client factory and real temporary kernel, not the real DSH desktop. Run `npm pack` to package built artifacts. Windows x64 uses the bundled Python runtime; other platforms need Python 3.10 or newer. Set `PYTHON` to select an interpreter.
 
-The original regression suite was lost when the previous sandbox was reset. The distribution did not include `test/kernel_regression.py` or the kernel synchronization script. The 31/31 result in the changelog is historical and cannot be reproduced from this repository; the smoke test does not replace that regression suite.
+The supplied baseline did not contain its historical regression suite. The distribution did not include `test/kernel_regression.py` or the kernel synchronization script. The 31/31 result in the changelog is historical and cannot be reproduced from this repository; the smoke test does not replace that regression suite.
 

@@ -1,0 +1,53 @@
+{
+  "package": "dsh-plugin-xujie-memory",
+  "version": "0.7.0",
+  "status": "acceptance-candidate-not-desktop-certified",
+  "baseline_sha256": "1e5bbc74cd3208be1066c164ecd8560d60a02e8a8be7a042aa4500a0e7b7c410",
+  "target_dsh": "0.2.1-rc.5",
+  "official_source": "https://github.com/deepseek-ai/deepseek-harness",
+  "official_tag": "dsh-v0.2.1-rc.5",
+  "official_commit": "b830ec950faba0a46dda564be3e2d854afed94f1",
+  "remote_contract_generator": "official rc.5 WorkspaceTypertGenerator; minimal SDK declaration fixture for build; concrete DTO schemas generated and tested",
+  "runtime_rpc": "generated strict descriptors, copied MIT protocol helpers; host-shared Cordis peer",
+  "test_boundary": "real temporary SQLite and HTTP; Node DI test double; not a desktop launcher test",
+  "windows_runtime": "preserved from supplied 0.6.0; not executed on Linux",
+  "frontend": {
+    "implementation": "Opus 5.5 delegated frontend rewrite",
+    "rendering": "3D coordinate projection; soma/dendrites/axon, depth, pulsing light; decorative morphology is not memory data",
+    "validation": "built CJS module-loader factory; simulated DSH main/slots with shared React and actual temporary Python kernel; visual states and motion/drag/zoom/reduced-motion checked",
+    "desktop_certification": false,
+    "final_integration_fixes": [
+      "native scroll in stacked/narrow layout and touch gesture arbitration",
+      "no stale detail mutation during selection/loading; save/delete selection lock",
+      "same-trace alias selection reload",
+      "screen-space three-layer caption collision avoidance"
+    ],
+    "final_parent_qa": {
+      "real_factory": true,
+      "real_temporary_kernel_save_delete": true,
+      "selection_race": true,
+      "same_trace_alias": true,
+      "unload_cleanup": true,
+      "mobile_wheel_scroll": true,
+      "reduced_motion": true,
+      "caption_layouts": 24,
+      "console_errors": 0
+    }
+  },
+  "regression_results": {
+    "python_unittests": 17,
+    "node_bridge_checks": 13,
+    "actual_supplied_060_database_upgrade": "passed with temporary database; consistent backup, active data retention, residual summary repair and subsequent edit",
+    "real_user_data_accessed": false,
+    "windows_runtime_bytes": "identical to supplied baseline"
+  },
+  "stress_verification": {
+    "windows_isolated_dsh_web": true,
+    "synthetic_active_traces": 2000,
+    "old_and_new_search_checks": "8/8",
+    "concurrent_http_requests": 100,
+    "concurrent_workers": 10,
+    "desktop_client_certified": false,
+    "description": "Management search scans all active traces in the selected scope; automatic recall remains capped at 800 candidates."
+  }
+}

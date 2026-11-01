@@ -1,24 +1,34 @@
 {
   "name": "dsh-plugin-xujie-memory",
-  "version": "0.6.0",
-  "description": "Long-term memory for DeepSeek Harness: facts, anchors, decay and a person card, injected every turn without the model having to ask. Bundles the Python kernel and runtime — install and it works.",
+  "version": "0.7.0",
+  "description": "DeepSeek Harness in-app memory workspace: three-layer neural graph, fuzzy recall, atomic memory editing and a person card.",
   "type": "module",
   "main": "lib/index.js",
   "license": "MIT",
   "scripts": {
-    "test": "node --test --test-concurrency=1 test/*.test.mjs"
+    "build": "node scripts/build.mjs",
+    "test": "node scripts/test-all.mjs",
+    "test:node": "node scripts/test-node.mjs",
+    "prepack": "node scripts/prepack.mjs"
   },
   "files": [
     "lib",
     "python",
     "runtime",
+    "src",
+    "scripts",
+    "test",
+    "vendor",
     "cordis.patch.yml",
     "README.md",
     "README_EN.md",
-    "CHANGELOG.md"
+    "CHANGELOG.md",
+    "BUILD-PROVENANCE.json",
+    "ACCEPTANCE.md"
   ],
   "engines": {
-    "node": "^22.19 || >=24"
+    "node": "^22.19 || >=24",
+    "dsh": "0.2.1-rc.5"
   },
   "keywords": [
     "dsh-plugin",
@@ -28,6 +38,40 @@
   "dsh": {
     "bundle": {
       "patch": "./cordis.patch.yml"
+    },
+    "client": {
+      "platform": "web",
+      "inject": [
+        "@deepseek-ai/dsh-api-remotes",
+        "@deepseek-ai/dsh-client-ui-layout",
+        "@deepseek-ai/dsh-client-ui-sidebar"
+      ]
     }
+  },
+  "exports": {
+    ".": "./lib/index.js",
+    "./client": "./lib/client.js",
+    "./types": {
+      "types": "./lib/types.d.ts",
+      "default": "./lib/types.js"
+    },
+    "./typert": {
+      "types": "./lib/typert.host.d.ts",
+      "default": "./lib/typert.host.js"
+    },
+    "./remote": {
+      "types": "./lib/typert.remote-client.d.ts",
+      "default": "./lib/typert.remote-client.js"
+    },
+    "./package.json": "./package.json"
+  },
+  "peerDependencies": {
+    "@deepseek-ai/cordis": "^4.0.5"
+  },
+  "devDependencies": {
+    "esbuild": "^0.25.0",
+    "zod": "4.4.3",
+    "typescript": "6.0.3",
+    "@jridgewell/gen-mapping": "^0.3.13"
   }
 }

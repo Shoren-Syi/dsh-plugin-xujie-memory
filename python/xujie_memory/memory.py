@@ -80,18 +80,21 @@ class FuzzySearch:
         self.engine = engine
 
     def search(self, scope_id: str, query: str, *, limit: int = 5,
-               candidates: int = 800) -> list[dict[str, Any]]:
+               candidates: int | None = 800) -> list[dict[str, Any]]:
         query = (query or "").strip()
         if not query:
             return []
-        rows = self.engine._conn().execute(
-            "SELECT trace_id, content, recorded_at FROM traces"
+        sql = (
+            "SELECT trace_id, content, content_hash, recorded_at FROM traces"
             " WHERE scope_id=? AND erased_at IS NULL"
-            " ORDER BY recorded_at DESC LIMIT ?",
-            (scope_id, max(1, int(candidates))),
-        ).fetchall()
-        # v0.52：查询只预处理一次；内容的二元组按文本缓存（进程内 LRU）。
-        # 每轮 800 条候选，旧版每条都重新规范化查询，单轮约 20ms。
+            " ORDER BY recorded_at DESC"
+        )
+        params = (scope_id,)
+        if candidates is not None:
+            sql += " LIMIT ?"
+            params += (max(1, int(candidates)),)
+        rows = self.engine._conn().execute(sql, params)
+        # 自动召回保持候选上限，管理界面可显式搜索全部有效原话。
         q = _normalize(query)
         if not q:
             return []
@@ -124,6 +127,7 @@ class FuzzySearch:
             out.append({
                 "trace_id": row["trace_id"],
                 "content": row["content"],
+                "content_hash": row["content_hash"],
                 "score": round(float(score), 4),
                 "priority": w.get("priority"),
                 "anchor": bool(w.get("anchor")),
@@ -228,17 +232,18 @@ class Memory:
         trace = self.engine.get_trace(trace_id)
         if trace is None or trace.get("scope_id") != scope_id:
             raise ValueError("trace_not_found")
-        already_erased = bool(trace.get("erased_at"))
-        result = {"state_keys": []} if already_erased else self.engine.erase_trace(trace_id)
-
-        # 状态重算后重新对账画像，避免已删除的事实继续出现在提示词中。
-        from .profile import ProfileStore
-        profiles = ProfileStore(self.engine)
-        accounts = self.engine._conn().execute(
-            "SELECT account_id FROM person_profiles WHERE scope_id=?", (scope_id,)
-        ).fetchall()
-        for account in accounts:
-            profiles.derive_from_memory(scope_id, account["account_id"])
+        # One outer transaction covers evidence, summaries AND the person card.
+        # Nested Engine transactions use savepoints.
+        with self.engine._tx():
+            already_erased = bool(trace.get("erased_at"))
+            result = {"state_keys": []} if already_erased else self.engine.erase_trace(trace_id)
+            from .profile import ProfileStore
+            profiles = ProfileStore(self.engine)
+            accounts = self.engine._conn().execute(
+                "SELECT account_id FROM person_profiles WHERE scope_id=?", (scope_id,)
+            ).fetchall()
+            for account in accounts:
+                profiles.derive_from_memory(scope_id, account["account_id"])
         return {"trace_id": trace_id, "erased": True, "already_erased": already_erased,
                 "state_keys": result["state_keys"]}
 
@@ -273,5 +278,6 @@ class Memory:
         }
 
     # ------------------------------------------------------------ 搜索
-    def search(self, scope_id: str, query: str, *, limit: int = 5) -> list[dict]:
-        return self.fuzzy.search(scope_id, query, limit=limit)
+    def search(self, scope_id: str, query: str, *, limit: int = 5,
+               candidates: int | None = 800) -> list[dict]:
+        return self.fuzzy.search(scope_id, query, limit=limit, candidates=candidates)

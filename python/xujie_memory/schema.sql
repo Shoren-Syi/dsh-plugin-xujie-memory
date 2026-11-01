@@ -477,4 +477,16 @@ CREATE INDEX IF NOT EXISTS idx_grievances_open
 CREATE INDEX IF NOT EXISTS idx_traces_scope_time ON traces(scope_id, recorded_at);
 CREATE INDEX IF NOT EXISTS idx_tags_lookup ON person_tags(profile_id, kind, value, status);
 CREATE INDEX IF NOT EXISTS idx_states_scope ON states(scope_id, status);
+-- 0.7 edits replace immutable traces. No plaintext copy of old content here.
+CREATE TABLE IF NOT EXISTS memory_edits (
+    edit_id TEXT PRIMARY KEY,
+    scope_id TEXT NOT NULL REFERENCES scopes(scope_id),
+    old_trace_id TEXT NOT NULL REFERENCES traces(trace_id),
+    new_trace_id TEXT NOT NULL REFERENCES traces(trace_id),
+    edited_at TEXT NOT NULL
+);
+CREATE TABLE IF NOT EXISTS memory_maintenance (
+    name TEXT PRIMARY KEY,
+    completed_at TEXT NOT NULL
+);
 CREATE INDEX IF NOT EXISTS idx_lifecycle_anchor ON lifecycle(scope_id, ref_type, anchor);

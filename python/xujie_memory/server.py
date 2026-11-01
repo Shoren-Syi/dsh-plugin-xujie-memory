@@ -53,6 +53,7 @@ from . import __version__
 from .encoder import RuleEncoder
 from .engine import Engine, SpecRegistry
 from .memory import Memory
+from .management import Management, ManagementError
 from .orchestrator import Orchestrator, TurnBudget
 from .profile import ProfileStore
 
@@ -95,6 +96,8 @@ class MemoryService:
         self.db_path = str(db_path)
         self.engine = Engine(Path(db_path), SpecRegistry.from_dir(Path(specs_dir)))
         self.profiles = ProfileStore(self.engine)
+        from .privacy import repair_legacy
+        repair_legacy(self.engine, self.profiles)
         self.orchestrator = Orchestrator(
             self.engine,
             profiles=self.profiles,
@@ -106,6 +109,9 @@ class MemoryService:
         # `INSERT OR IGNORE` 兜住了，这里只是避免无谓的重复计算。
         self._scopes: dict[str, str] = {}
         self._lock = threading.Lock()
+        # Serialize HTTP writes with reads of dependent projections. In
+        # particular, a /turn cannot republish a half-edited graph.
+        self.request_lock = threading.RLock()
 
     # ------------------------------------------------------------ scope
     def scope_of(self, session: str, user: str = "user") -> str:
@@ -342,7 +348,12 @@ class _Handler(BaseHTTPRequestHandler):
             self._json(400, {"ok": False, "error": f"bad_json: {exc}"})
             return
 
+        self.service.request_lock.acquire()
         try:
+            if route.startswith("/manage/"):
+                payload = self._manage(route, body)
+                self._json(200, payload)
+                return
             session = _str_field(body, "session")
             if not session:
                 self._json(400, {"ok": False, "error": "missing_session"})
@@ -390,6 +401,13 @@ class _Handler(BaseHTTPRequestHandler):
                 except ValueError as exc:
                     # 库里没有这条 / 不属于这个 scope：调用方参数问题，不是服务端崩了。
                     raise BadRequest(str(exc)) from exc
+            elif route == "/memory/edit":
+                payload = Management(self.service).edit(
+                    self.service.scope_of(session, user),
+                    _str_field(body, "trace_id"),
+                    _str_field(body, "content", limit=MAX_TEXT_CHARS),
+                    _str_field(body, "expected_hash"),
+                )
             elif route in ("/memory/mark", "/memory/unmark", "/memory/curve"):
                 trace_id = _str_field(body, "trace_id")
                 if not trace_id:
@@ -410,6 +428,12 @@ class _Handler(BaseHTTPRequestHandler):
             else:
                 self._json(404, {"ok": False, "error": "not_found"})
                 return
+        except ManagementError as exc:
+            status = 409 if exc.code == "version_conflict" else (
+                404 if exc.code.endswith("_not_found") else 400
+            )
+            self._json(status, {"ok": False, "error": exc.code})
+            return
         except BadRequest as exc:
             self._json(400, {"ok": False, "error": "bad_request", "detail": str(exc)})
             return
@@ -422,8 +446,36 @@ class _Handler(BaseHTTPRequestHandler):
             self._json(500, {"ok": False, "error": type(exc).__name__,
                              "detail": str(exc)[:300]})
             return
+        finally:
+            self.service.request_lock.release()
 
         self._json(200, payload)
+
+    def _manage(self, route: str, body: dict[str, Any]) -> dict[str, Any]:
+        manager = Management(self.service)
+        if route == "/manage/catalog":
+            return manager.catalog()
+        scope = _str_field(body, "scope_id")
+        if not scope:
+            raise BadRequest("missing_scope_id")
+        if route == "/manage/snapshot":
+            return manager.snapshot(scope, int(_num_field(body, "limit", 250, 1, 500)))
+        if route == "/manage/search":
+            return manager.search(
+                scope, _str_field(body, "query", limit=MAX_TEXT_CHARS),
+                int(_num_field(body, "limit", 30, 1, 50)),
+            )
+        trace = _str_field(body, "trace_id")
+        if route == "/manage/detail":
+            return manager.detail(scope, trace)
+        expected = _str_field(body, "expected_hash")
+        if route == "/manage/edit":
+            return manager.edit(
+                scope, trace, _str_field(body, "content", limit=MAX_TEXT_CHARS), expected
+            )
+        if route == "/manage/forget":
+            return manager.forget(scope, trace, expected)
+        raise ManagementError("route_not_found")
 
     # ---------------------------------------------------------- 工具
     def _read_json(self) -> dict[str, Any]:

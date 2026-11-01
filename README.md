@@ -1,3 +1,36 @@
+# Xujie Memory 0.7.0 · DSH 应用内记忆工作台
+
+**目标版本：DeepSeek Harness 0.2.1-rc.5。当前为开发验收构建，尚未在用户的 Windows 桌面宿主上完成真机验收。**
+
+## 0.7 新增
+
+- 通过正式 `dsh.client`、`sidebar.panellist` / `main` 插槽提供应用内部的「记忆」页，不另开网站。
+- 三层神经网络界面、原话模糊搜索、人设卡和记忆正文编辑/删除；可见范围来自真实 SQLite 库。
+- 所有管理 Remote 仅允许经过 DSH 验证的 owner 调用。浏览器不持有内核 token，也不直连内核端口。
+- 编辑并非覆盖不可变原话：一次 SQLite 事务中失效旧依据、写入替代原话并重新编码、重算事实与画像、刷新检索。返回的新 trace_id 会替代旧节点。发生时间保留，编辑时间单独留审计。
+- 新增 `memory_edit` 工具。先用 `memory_search` 获取 trace_id 与 content_hash，再带 expected_hash 纠正，冲突时拒绝覆盖。
+- 图中结构性纤维仅作视觉骨架；事实连线来自 evidence、摘要来源、锚点和工作记忆投影，不声称推断出了真实神经/语义关系。
+
+## 数据与升级边界
+
+继续使用原来的 dbPath；默认 `~/.xujie-memory/memory.db`。首次迁移旧库前，会生成 SQLite 一致性备份 `<dbPath>.pre-0.7.0.bak`（不覆盖已有备份）。随后修复旧版遗忘操作可能留下的摘要等派生残留。
+
+**备份含迁移前数据，应私密保存。**「遗忘」清理应用记忆库及依赖投影，不等于安全擦除磁盘，不会删除 DSH 聊天记录、外部导出、旧备份或磁盘/WAL 历史。
+
+所有编辑/删除必须等内核成功响应后才视为保存。失败或版本冲突时不显示假成功；版本冲突需要重新加载。图形默认仅展示最近 250 条原话及部分派生节点，超出范围会标明；管理界面搜索覆盖当前记忆库全部有效原话。对话中的自动召回仍使用最近 800 条候选的上限。
+
+## 验收与开发
+
+按安装 0.6.0 时同一 profile 和方式安装本包/解压目录，然后重启 DSH。不要删除记忆数据目录。侧栏应出现「记忆」。逐项验收见 `ACCEPTANCE.md`。
+
+`npm install` 安装开发依赖后，`npm run build` 构建浏览器 factory 与 Host 控制器，`npm test` 运行真实临时 SQLite/HTTP 回归及使用 DI 测试替身的 Host 桥接检查。Windows 默认使用包内 Python；其他平台用 python3，或设置 PYTHON。测试不会读取用户实际记忆库。使用正式 rpc 生成物；变更 Remote 签名必须重新运行与 rc.5 对应的 Typert 生成流程，不能只改客户端。
+
+本包保留原 0.6.0 的 Windows x64 Python 运行时；本次 Linux 环境未执行该 Windows 运行时。官方接口取自 `dsh-v0.2.1-rc.5`，commit `b830ec950faba0a46dda564be3e2d854afed94f1`。详细构建来源见 `BUILD-PROVENANCE.json`。
+
+---
+
+## 原有内核使用说明（已更新到 0.7）
+
 # dsh-plugin-xujie-memory
 
 [English](README_EN.md) | 简体中文
@@ -41,7 +74,7 @@ flowchart LR
 
 记忆会自动注入；需要主动查找或删除时，也可以使用下方工具。
 
-### 三层记忆（当前版本 0.6.0）
+### 三层记忆（0.7.0）
 
 | 层 | 内容 | 你怎么用 |
 |---|---|---|
@@ -60,54 +93,46 @@ flowchart LR
 **模糊搜索**：`POST /memory/search`，两字词、错一个字都能捞；
 精确检索落空时，自动注入也会降级到模糊匹配。
 
-本仓库保留 0.6.0 发布包中的内核；上表概括了三层记忆。
+0.7 以内核 0.52.0 为基线扩展管理接口与一致性逻辑；上表概括了三层记忆。
 
 **当前这句不会被当成旧事注回去（0.6 修复）**：`/turn` 用 trace_id 挡，`/context` 只拿得到文本、按内容挡（忽略空白与标点）。换成问别的事，旧记忆照常出现。
 
 ---
 
-## 主动工具（0.6 新增）
+## 主动工具（0.7）
 
-注入是自动的，但**主动回忆**和**删掉记错的东西**需要有手。0.6 给模型注册了三个工具：
+注入是自动的，但**主动回忆**和**删掉记错的东西**需要有手。0.7 给模型注册了四个工具：
 
 | 工具 | 作用 | 副作用 |
 |---|---|---|
-| `memory_search` | 按字面/错字模糊检索原话，返回内容、`trace_id`、权重 | 只读 |
+| `memory_search` | 按字面/错字模糊检索原话，返回内容、`trace_id`、`content_hash`、权重 | 只读 |
+| `memory_edit` | 以 `trace_id`、正文和 `expected_hash` 原子纠正原话 | 写，返回新 trace_id |
 | `memory_forget` | 删一条记忆（软删：内容清空、FTS 移除、依赖它的事实失效并重算） | 写，`erased_at` 留审计 |
 | `memory_status` | 原话/已删/状态/锚点/未确认计数 + 内核健康 | 只读 |
 
 用户说「忘掉这条」时，模型可以自己搜到 `trace_id` 再删，不需要你手动清库。
 对应内核接口：`POST /memory/search`、`POST /memory/forget`、`POST /memory/stats`。
 
-宿主若没有 `tools` 服务（老版本），这三个工具静默跳过，注入照常。目前尚无编辑记忆工具或图形化记忆管理界面。
+宿主若没有 `tools` 服务（老版本），这些工具静默跳过，注入照常。0.7 新增 memory_edit 工具和应用内图形化管理页，详见本文开头。
 
 ---
 
-## 装上就能用（用户零动作）
+## 安装本地 0.7 验收包
 
 | | |
 |---|---|
-| DSH | 0.2 预览版（`dsh.bundle` 机制） |
+| DSH | **0.2.1-rc.5**（官方 bundle + client 插件机制） |
 | Node | `^22.19 \|\| >=24` |
-| Python | **不用装**：Windows x64 包里自带解释器 |
-| 内核 | **不用装**：Python 内核（`python/xujie_memory`）在包里 |
+| Python | Windows x64 包内自带；macOS/Linux 需系统 Python 3.10+ |
+
+先备份原包与记忆库，退出 DSH，将本地验收包解压后，按 0.6 使用的原 profile 安装：
 
 ```bash
-dsh plugin --profile <你的profile> add <解压后的 dsh-plugin-xujie-memory 目录>
-# 新开一个会话即可
+dsh plugin --profile <你的profile> add <tgz 解压后含 package.json 的 package 目录>
+# 然后重启 DSH，检查左侧「记忆」入口
 ```
 
-也可以在 DSH 的「添加插件」中输入包名 `dsh-plugin-xujie-memory` 安装，或通过命令安装：
-
-```bash
-dsh plugin --profile <你的profile> add dsh-plugin-xujie-memory
-```
-
-也可以从 GitHub 安装指定版本：
-
-```bash
-dsh plugin --profile <你的profile> add github:Shoren-Syi/dsh-plugin-xujie-memory#v0.6.0
-```
+**本次交付未发布 npm/GitHub 0.7 标签。** 不要用注册表包名或旧 GitHub v0.6.0 命令替代本地验收包；它们可能装回旧版。不要删除原数据目录。安装失败时保留日志，按 `ACCEPTANCE.md` 回滚。
 
 不需要 `pip install`，不需要填 `repoPath`，不需要另外起服务：
 
@@ -243,7 +268,7 @@ dsh-plugin-xujie-memory/
 
 ## 开发验证
 
-`npm test` 运行冒烟、回声、工具及删除后画像对账测试。Windows x64 默认使用包内 Python；其他平台需要 Python 3.10+，也可通过 `PYTHON` 指定解释器。执行 `npm pack` 可打包当前仓库自带的内核。
+`npm test` 运行新增的管理、事务、隔离、持久化回归和使用 DI 测试替身的 Host 桥接检查。Windows x64 默认使用包内 Python；其他平台需要 Python 3.10+，也可通过 `PYTHON` 指定解释器。执行 `npm pack` 可打包当前仓库自带的内核。
 
 本仓库由 0.5.0 发布包恢复。原先的回归测试集因之前的沙箱重置而丢失，发布包中也没有包含原来的 `test/kernel_regression.py` 和内核同步脚本。CHANGELOG 中的 31/31 是历史记录，当前仓库无法复现该回归集；冒烟测试不代表这 31 项回归已通过。
 
