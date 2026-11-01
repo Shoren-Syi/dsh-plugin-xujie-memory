@@ -2,7 +2,9 @@
 
 [简体中文](README.md) | English
 
-Long-term memory for DeepSeek Harness (DSH). The plugin processes user messages, stores relevant information locally, and automatically supplies memory context to the prompt. The model does not have to decide to call a memory tool.
+Seamless long-term memory built for DeepSeek Harness (DSH).
+
+**The value of memory is not having to think about it.** Xujie-Memory records relevant information locally, assembles memory context, and injects it into the prompt without asking the model to decide whether to call a memory tool. The Windows x64 package includes a runtime and generally requires no extra configuration after installation.
 
 ## Architecture
 
