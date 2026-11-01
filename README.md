@@ -79,6 +79,12 @@ dsh plugin --profile <你的profile> add <解压后的 dsh-plugin-xujie-memory �
 # 新开一个会话即可
 ```
 
+仓库公开后，也可以从 GitHub 安装指定版本：
+
+```bash
+dsh plugin --profile <你的profile> add github:Shoren-Syi/dsh-plugin-xujie-memory#v0.5.0
+```
+
 不需要 `pip install`，不需要填 `repoPath`，不需要另外起服务：
 
 - 插件用**包内解释器**（`runtime/win32-x64/python.exe`）拉起**包内内核**
@@ -215,4 +221,5 @@ dsh-plugin-xujie-memory/
 
 `npm test` 运行插件与内核的集成冒烟测试，覆盖会话隔离和注入消息过滤；Windows x64 默认使用包内 Python，其他平台需要 Python 3.10+，也可通过 `PYTHON` 环境变量指定解释器。执行 `npm pack` 可打包当前仓库自带的内核。
 
-本仓库由 0.5.0 发布包恢复，原来的 `test/kernel_regression.py` 和内核同步脚本未包含在发布包中。CHANGELOG 中的 31/31 是历史记录，当前仓库无法复现该回归集；冒烟测试不代表这 31 项回归已通过。
+本仓库由 0.5.0 发布包恢复。原先的回归测试集因之前的沙箱重置而丢失，发布包中也没有包含原来的 `test/kernel_regression.py` 和内核同步脚本。CHANGELOG 中的 31/31 是历史记录，当前仓库无法复现该回归集；冒烟测试不代表这 31 项回归已通过。
+
