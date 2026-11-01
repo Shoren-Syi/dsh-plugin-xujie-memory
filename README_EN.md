@@ -47,6 +47,12 @@ The package targets the DSH 0.2 preview bundle mechanism and Node.js `^22.19 || 
 dsh plugin --profile <your-profile> add <path-to-extracted-dsh-plugin-xujie-memory>
 ```
 
+When the repository is public, install the tagged version directly from GitHub:
+
+```bash
+dsh plugin --profile <your-profile> add github:Shoren-Syi/dsh-plugin-xujie-memory#v0.5.0
+```
+
 Start a new session. The plugin starts the bundled kernel automatically. By default the database is stored at `~/.xujie-memory/memory.db`. Kernel failure skips memory for that turn rather than blocking the conversation.
 
 Optional profile configuration:
@@ -83,4 +89,5 @@ cordis.patch.yml         DSH bundle patch
 
 This repository was reconstructed from the distributed 0.5.0 package. Run `npm test` for the integration smoke test and `npm pack` to package the bundled kernel. Windows x64 uses the bundled Python runtime; other platforms need Python 3.10 or newer. Set `PYTHON` to use a specific interpreter for the smoke test.
 
-The original `test/kernel_regression.py` and kernel synchronization script were not included in the distribution. The 31/31 result in the changelog is historical and cannot be reproduced from this repository; the smoke test does not replace that regression suite.
+The original regression suite was lost when the previous sandbox was reset. The distribution did not include `test/kernel_regression.py` or the kernel synchronization script. The 31/31 result in the changelog is historical and cannot be reproduced from this repository; the smoke test does not replace that regression suite.
+
