@@ -79,7 +79,13 @@ dsh plugin --profile <你的profile> add <解压后的 dsh-plugin-xujie-memory �
 # 新开一个会话即可
 ```
 
-仓库公开后，也可以从 GitHub 安装指定版本：
+也可以通过 npm 包名安装：
+
+```bash
+dsh plugin --profile <你的profile> add dsh-plugin-xujie-memory
+```
+
+或从 GitHub 安装指定版本：
 
 ```bash
 dsh plugin --profile <你的profile> add github:Shoren-Syi/dsh-plugin-xujie-memory#v0.5.0
