@@ -47,7 +47,13 @@ The package targets the DSH 0.2 preview bundle mechanism and Node.js `^22.19 || 
 dsh plugin --profile <your-profile> add <path-to-extracted-dsh-plugin-xujie-memory>
 ```
 
-When the repository is public, install the tagged version directly from GitHub:
+Install by package name from npm:
+
+```bash
+dsh plugin --profile <your-profile> add dsh-plugin-xujie-memory
+```
+
+Or install the tagged version directly from GitHub:
 
 ```bash
 dsh plugin --profile <your-profile> add github:Shoren-Syi/dsh-plugin-xujie-memory#v0.5.0
