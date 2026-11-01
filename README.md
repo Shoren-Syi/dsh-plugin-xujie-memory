@@ -42,7 +42,7 @@ flowchart LR
 它不是"给模型一个 `memory_search` 工具"——工具要模型自己想起来用，
 而记忆的价值恰恰在于**不用想**。
 
-### 三层记忆（v0.3）
+### 三层记忆（当前版本 0.5.0）
 
 | 层 | 内容 | 你怎么用 |
 |---|---|---|
@@ -61,7 +61,7 @@ flowchart LR
 **模糊搜索**：`POST /memory/search`，两字词、错一个字都能捞；
 精确检索落空时，自动注入也会降级到模糊匹配。
 
-详见内核仓库的 `MEMORY-LAYERS.md`。
+本仓库保留 0.5.0 发布包中的内核；上表概括了三层记忆。
 
 ---
 
@@ -135,7 +135,7 @@ dsh plugin --profile <你的profile> add <解压后的 dsh-plugin-xujie-memory �
 
 ---
 
-## 记忆范围（v0.5）
+## 记忆范围
 
 默认 `scope: user`：人物卡、偏好、锚点、账**跨会话有效**——新开会话也认识你。
 「最多追问几次」的熔断仍按会话算。
@@ -147,7 +147,7 @@ dsh plugin --profile <你的profile> add <解压后的 dsh-plugin-xujie-memory �
 宿主如果在 `/turn` 返回前就拼提示词，本轮用的是上一轮的材料（单轮内核耗时通常 <15ms）。
 宿主支持异步 section 时可开 `asyncSection: true`。
 
-## 可靠性（v0.5）
+## 可靠性
 
 - 看门狗每 5 秒查一次内核，挂了按退避自动拉起；日志在 `~/.xujie-memory/kernel.log`。
 - `/health` 返回版本、库路径；端口上是旧版或别的服务就自动换端口。
@@ -211,3 +211,8 @@ dsh-plugin-xujie-memory/
 逻辑全在 Python 侧，插件只是个薄壳——DSH 还是预览版，API 会变，
 把不稳定的部分做薄。
 
+## 开发验证
+
+`npm test` 运行插件与内核的集成冒烟测试，覆盖会话隔离和注入消息过滤；Windows x64 默认使用包内 Python，其他平台需要 Python 3.10+，也可通过 `PYTHON` 环境变量指定解释器。执行 `npm pack` 可打包当前仓库自带的内核。
+
+本仓库由 0.5.0 发布包恢复，原来的 `test/kernel_regression.py` 和内核同步脚本未包含在发布包中。CHANGELOG 中的 31/31 是历史记录，当前仓库无法复现该回归集；冒烟测试不代表这 31 项回归已通过。

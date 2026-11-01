@@ -6,9 +6,7 @@
   "main": "lib/index.js",
   "license": "MIT",
   "scripts": {
-    "sync-kernel": "node scripts/sync-kernel.mjs",
-    "prepack": "node scripts/sync-kernel.mjs",
-    "test": "node --test --test-concurrency=1 test/*.test.mjs && python3 test/kernel_regression.py"
+    "test": "node --test --test-concurrency=1 test/*.test.mjs"
   },
   "files": [
     "lib",
@@ -16,6 +14,7 @@
     "runtime",
     "cordis.patch.yml",
     "README.md",
+    "README_EN.md",
     "CHANGELOG.md"
   ],
   "engines": {
