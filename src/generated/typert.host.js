@@ -68,6 +68,22 @@ const dsh_plugin_xujie_memory_xujieMemory_forget_result$schema = () => (dsh_plug
   'already_erased': z.boolean(),
   'state_keys': z.array(z.string()),
 }))
+let dsh_plugin_xujie_memory_xujieMemory_manage_parameter_0$schema$value
+const dsh_plugin_xujie_memory_xujieMemory_manage_parameter_0$schema = () => (dsh_plugin_xujie_memory_xujieMemory_manage_parameter_0$schema$value ??= z.string())
+let dsh_plugin_xujie_memory_xujieMemory_manage_parameter_1$schema$value
+const dsh_plugin_xujie_memory_xujieMemory_manage_parameter_1$schema = () => (dsh_plugin_xujie_memory_xujieMemory_manage_parameter_1$schema$value ??= z.string())
+let dsh_plugin_xujie_memory_xujieMemory_manage_parameter_2$schema$value
+const dsh_plugin_xujie_memory_xujieMemory_manage_parameter_2$schema = () => (dsh_plugin_xujie_memory_xujieMemory_manage_parameter_2$schema$value ??= z.string())
+let dsh_plugin_xujie_memory_xujieMemory_manage_parameter_3$schema$value
+const dsh_plugin_xujie_memory_xujieMemory_manage_parameter_3$schema = () => (dsh_plugin_xujie_memory_xujieMemory_manage_parameter_3$schema$value ??= z.string())
+let dsh_plugin_xujie_memory_xujieMemory_manage_parameter_4$schema$value
+const dsh_plugin_xujie_memory_xujieMemory_manage_parameter_4$schema = () => (dsh_plugin_xujie_memory_xujieMemory_manage_parameter_4$schema$value ??= z.string())
+let dsh_plugin_xujie_memory_xujieMemory_manage_parameter_5$schema$value
+const dsh_plugin_xujie_memory_xujieMemory_manage_parameter_5$schema = () => (dsh_plugin_xujie_memory_xujieMemory_manage_parameter_5$schema$value ??= z.string())
+let dsh_plugin_xujie_memory_xujieMemory_manage_parameter_6$schema$value
+const dsh_plugin_xujie_memory_xujieMemory_manage_parameter_6$schema = () => (dsh_plugin_xujie_memory_xujieMemory_manage_parameter_6$schema$value ??= z.string())
+let dsh_plugin_xujie_memory_xujieMemory_manage_result$schema$value
+const dsh_plugin_xujie_memory_xujieMemory_manage_result$schema = () => (dsh_plugin_xujie_memory_xujieMemory_manage_result$schema$value ??= z.boolean())
 let dsh_plugin_xujie_memory_xujieMemory_search_parameter_0$schema$value
 const dsh_plugin_xujie_memory_xujieMemory_search_parameter_0$schema = () => (dsh_plugin_xujie_memory_xujieMemory_search_parameter_0$schema$value ??= z.string())
 let dsh_plugin_xujie_memory_xujieMemory_search_parameter_1$schema$value
@@ -131,6 +147,10 @@ const dsh_plugin_xujie_memory_xujieMemory_snapshot_result$schema = () => (dsh_pl
   'clarifications_open': z.number(),
   'summaries': z.number(),
 }),
+  'emotions': z.array(z.object({
+  'name': z.string(),
+  'intensity': z.number(),
+})),
   'truncated': z.boolean(),
   'limit': z.number(),
 }))
@@ -152,6 +172,20 @@ let dsh_plugin_xujie_memory_xujieMemory_forget_parameter_1_strict$schema$value
 const dsh_plugin_xujie_memory_xujieMemory_forget_parameter_1_strict$schema = () => (dsh_plugin_xujie_memory_xujieMemory_forget_parameter_1_strict$schema$value ??= z.string())
 let dsh_plugin_xujie_memory_xujieMemory_forget_parameter_2_strict$schema$value
 const dsh_plugin_xujie_memory_xujieMemory_forget_parameter_2_strict$schema = () => (dsh_plugin_xujie_memory_xujieMemory_forget_parameter_2_strict$schema$value ??= z.string())
+let dsh_plugin_xujie_memory_xujieMemory_manage_parameter_0_strict$schema$value
+const dsh_plugin_xujie_memory_xujieMemory_manage_parameter_0_strict$schema = () => (dsh_plugin_xujie_memory_xujieMemory_manage_parameter_0_strict$schema$value ??= z.string())
+let dsh_plugin_xujie_memory_xujieMemory_manage_parameter_1_strict$schema$value
+const dsh_plugin_xujie_memory_xujieMemory_manage_parameter_1_strict$schema = () => (dsh_plugin_xujie_memory_xujieMemory_manage_parameter_1_strict$schema$value ??= z.string())
+let dsh_plugin_xujie_memory_xujieMemory_manage_parameter_2_strict$schema$value
+const dsh_plugin_xujie_memory_xujieMemory_manage_parameter_2_strict$schema = () => (dsh_plugin_xujie_memory_xujieMemory_manage_parameter_2_strict$schema$value ??= z.string())
+let dsh_plugin_xujie_memory_xujieMemory_manage_parameter_3_strict$schema$value
+const dsh_plugin_xujie_memory_xujieMemory_manage_parameter_3_strict$schema = () => (dsh_plugin_xujie_memory_xujieMemory_manage_parameter_3_strict$schema$value ??= z.string())
+let dsh_plugin_xujie_memory_xujieMemory_manage_parameter_4_strict$schema$value
+const dsh_plugin_xujie_memory_xujieMemory_manage_parameter_4_strict$schema = () => (dsh_plugin_xujie_memory_xujieMemory_manage_parameter_4_strict$schema$value ??= z.string())
+let dsh_plugin_xujie_memory_xujieMemory_manage_parameter_5_strict$schema$value
+const dsh_plugin_xujie_memory_xujieMemory_manage_parameter_5_strict$schema = () => (dsh_plugin_xujie_memory_xujieMemory_manage_parameter_5_strict$schema$value ??= z.string())
+let dsh_plugin_xujie_memory_xujieMemory_manage_parameter_6_strict$schema$value
+const dsh_plugin_xujie_memory_xujieMemory_manage_parameter_6_strict$schema = () => (dsh_plugin_xujie_memory_xujieMemory_manage_parameter_6_strict$schema$value ??= z.string())
 let dsh_plugin_xujie_memory_xujieMemory_search_parameter_0_strict$schema$value
 const dsh_plugin_xujie_memory_xujieMemory_search_parameter_0_strict$schema = () => (dsh_plugin_xujie_memory_xujieMemory_search_parameter_0_strict$schema$value ??= z.string())
 let dsh_plugin_xujie_memory_xujieMemory_search_parameter_1_strict$schema$value
@@ -173,7 +207,7 @@ const $remote = createTypertRemoteInfo({
         create: dsh_plugin_xujie_memory_xujieMemory_catalog_result$schema,
         jsonSchema: {"type":"object","properties":{"scope_mode":{"type":"string"},"scopes":{"type":"array","items":{"type":"object","properties":{"scope_id":{"type":"string"},"agent_id":{"type":"string"},"traces":{"type":"number"}},"required":["scope_id","agent_id","traces"],"additionalProperties":true}}},"required":["scope_mode","scopes"],"additionalProperties":true},
       },
-      sourceLocation: {"file":"packages/memory/src/controller.ts","line":40,"column":9},
+      sourceLocation: {"file":"packages/memory/src/controller.ts","line":44,"column":9},
     },
     'xujieMemory/detail': {
       service: 'xujieMemory',
@@ -218,7 +252,7 @@ const $remote = createTypertRemoteInfo({
         create: dsh_plugin_xujie_memory_xujieMemory_detail_result$schema,
         jsonSchema: {"type":"object","properties":{"id":{"type":"string"},"trace_id":{"type":"string"},"scope_id":{"type":"string"},"content":{"type":"string"},"content_hash":{"type":"string"},"recorded_at":{"type":"string"},"source_kind":{"type":"string"},"importance":{"type":"number"},"anchor":{"type":"boolean"},"priority":{"type":"number"}},"required":["id","trace_id","scope_id","content","content_hash","recorded_at","source_kind","importance","anchor","priority"],"additionalProperties":true},
       },
-      sourceLocation: {"file":"packages/memory/src/controller.ts","line":62,"column":9},
+      sourceLocation: {"file":"packages/memory/src/controller.ts","line":66,"column":9},
     },
     'xujieMemory/edit': {
       service: 'xujieMemory',
@@ -295,7 +329,7 @@ const $remote = createTypertRemoteInfo({
         create: dsh_plugin_xujie_memory_xujieMemory_edit_result$schema,
         jsonSchema: {"type":"object","properties":{"changed":{"type":"boolean"},"trace":{"type":"object","properties":{"id":{"type":"string"},"trace_id":{"type":"string"},"scope_id":{"type":"string"},"content":{"type":"string"},"content_hash":{"type":"string"},"recorded_at":{"type":"string"},"source_kind":{"type":"string"},"importance":{"type":"number"},"anchor":{"type":"boolean"},"priority":{"type":"number"}},"required":["id","trace_id","scope_id","content","content_hash","recorded_at","source_kind","importance","anchor","priority"],"additionalProperties":true},"replaced_trace_id":{"type":"string"},"pending":{"type":"number"}},"required":["changed","trace"],"additionalProperties":true},
       },
-      sourceLocation: {"file":"packages/memory/src/controller.ts","line":77,"column":9},
+      sourceLocation: {"file":"packages/memory/src/controller.ts","line":81,"column":9},
     },
     'xujieMemory/forget': {
       service: 'xujieMemory',
@@ -356,7 +390,132 @@ const $remote = createTypertRemoteInfo({
         create: dsh_plugin_xujie_memory_xujieMemory_forget_result$schema,
         jsonSchema: {"type":"object","properties":{"trace_id":{"type":"string"},"erased":{"type":"boolean"},"already_erased":{"type":"boolean"},"state_keys":{"type":"array","items":{"type":"string"}}},"required":["trace_id","erased","already_erased","state_keys"],"additionalProperties":true},
       },
-      sourceLocation: {"file":"packages/memory/src/controller.ts","line":84,"column":9},
+      sourceLocation: {"file":"packages/memory/src/controller.ts","line":88,"column":9},
+    },
+    'xujieMemory/manage': {
+      service: 'xujieMemory',
+      invocation: { kind: 'direct' },
+      parameters: [
+        {
+          name: 'scopeId',
+          source: 'json',
+          codec: {
+            mode: 'strict',
+            typeSymbol: 'dsh-plugin-xujie-memory#xujieMemory/manage:scopeId',
+            create: dsh_plugin_xujie_memory_xujieMemory_manage_parameter_0$schema,
+            jsonSchema: {"type":"string"},
+          },
+          strictCodec: {
+            mode: 'strict',
+            typeSymbol: 'dsh-plugin-xujie-memory#xujieMemory/manage:scopeId',
+            create: dsh_plugin_xujie_memory_xujieMemory_manage_parameter_0_strict$schema,
+            jsonSchema: {"type":"string"},
+          },
+        },
+        {
+          name: 'action',
+          source: 'json',
+          codec: {
+            mode: 'strict',
+            typeSymbol: 'dsh-plugin-xujie-memory#xujieMemory/manage:action',
+            create: dsh_plugin_xujie_memory_xujieMemory_manage_parameter_1$schema,
+            jsonSchema: {"type":"string"},
+          },
+          strictCodec: {
+            mode: 'strict',
+            typeSymbol: 'dsh-plugin-xujie-memory#xujieMemory/manage:action',
+            create: dsh_plugin_xujie_memory_xujieMemory_manage_parameter_1_strict$schema,
+            jsonSchema: {"type":"string"},
+          },
+        },
+        {
+          name: 'accountId',
+          source: 'json',
+          codec: {
+            mode: 'strict',
+            typeSymbol: 'dsh-plugin-xujie-memory#xujieMemory/manage:accountId',
+            create: dsh_plugin_xujie_memory_xujieMemory_manage_parameter_2$schema,
+            jsonSchema: {"type":"string"},
+          },
+          strictCodec: {
+            mode: 'strict',
+            typeSymbol: 'dsh-plugin-xujie-memory#xujieMemory/manage:accountId',
+            create: dsh_plugin_xujie_memory_xujieMemory_manage_parameter_2_strict$schema,
+            jsonSchema: {"type":"string"},
+          },
+        },
+        {
+          name: 'targetId',
+          source: 'json',
+          codec: {
+            mode: 'strict',
+            typeSymbol: 'dsh-plugin-xujie-memory#xujieMemory/manage:targetId',
+            create: dsh_plugin_xujie_memory_xujieMemory_manage_parameter_3$schema,
+            jsonSchema: {"type":"string"},
+          },
+          strictCodec: {
+            mode: 'strict',
+            typeSymbol: 'dsh-plugin-xujie-memory#xujieMemory/manage:targetId',
+            create: dsh_plugin_xujie_memory_xujieMemory_manage_parameter_3_strict$schema,
+            jsonSchema: {"type":"string"},
+          },
+        },
+        {
+          name: 'value',
+          source: 'json',
+          codec: {
+            mode: 'strict',
+            typeSymbol: 'dsh-plugin-xujie-memory#xujieMemory/manage:value',
+            create: dsh_plugin_xujie_memory_xujieMemory_manage_parameter_4$schema,
+            jsonSchema: {"type":"string"},
+          },
+          strictCodec: {
+            mode: 'strict',
+            typeSymbol: 'dsh-plugin-xujie-memory#xujieMemory/manage:value',
+            create: dsh_plugin_xujie_memory_xujieMemory_manage_parameter_4_strict$schema,
+            jsonSchema: {"type":"string"},
+          },
+        },
+        {
+          name: 'kind',
+          source: 'json',
+          codec: {
+            mode: 'strict',
+            typeSymbol: 'dsh-plugin-xujie-memory#xujieMemory/manage:kind',
+            create: dsh_plugin_xujie_memory_xujieMemory_manage_parameter_5$schema,
+            jsonSchema: {"type":"string"},
+          },
+          strictCodec: {
+            mode: 'strict',
+            typeSymbol: 'dsh-plugin-xujie-memory#xujieMemory/manage:kind',
+            create: dsh_plugin_xujie_memory_xujieMemory_manage_parameter_5_strict$schema,
+            jsonSchema: {"type":"string"},
+          },
+        },
+        {
+          name: 'expected',
+          source: 'json',
+          codec: {
+            mode: 'strict',
+            typeSymbol: 'dsh-plugin-xujie-memory#xujieMemory/manage:expected',
+            create: dsh_plugin_xujie_memory_xujieMemory_manage_parameter_6$schema,
+            jsonSchema: {"type":"string"},
+          },
+          strictCodec: {
+            mode: 'strict',
+            typeSymbol: 'dsh-plugin-xujie-memory#xujieMemory/manage:expected',
+            create: dsh_plugin_xujie_memory_xujieMemory_manage_parameter_6_strict$schema,
+            jsonSchema: {"type":"string"},
+          },
+        },
+      ],
+      result: {
+        mode: 'strict',
+        typeSymbol: 'dsh-plugin-xujie-memory#xujieMemory/manage:result',
+        create: dsh_plugin_xujie_memory_xujieMemory_manage_result$schema,
+        jsonSchema: {"type":"boolean"},
+      },
+      sourceLocation: {"file":"packages/memory/src/controller.ts","line":94,"column":9},
     },
     'xujieMemory/search': {
       service: 'xujieMemory',
@@ -401,7 +560,7 @@ const $remote = createTypertRemoteInfo({
         create: dsh_plugin_xujie_memory_xujieMemory_search_result$schema,
         jsonSchema: {"type":"array","items":{"type":"object","properties":{"trace_id":{"type":"string"},"content":{"type":"string"},"content_hash":{"type":"string"},"score":{"type":"number"},"priority":{"type":"number"},"anchor":{"type":"boolean"},"importance":{"type":"number"},"recorded_at":{"type":"string"},"layer":{"type":"string"}},"required":["trace_id","content","content_hash","score","priority","anchor","importance","recorded_at","layer"],"additionalProperties":true}},
       },
-      sourceLocation: {"file":"packages/memory/src/controller.ts","line":67,"column":9},
+      sourceLocation: {"file":"packages/memory/src/controller.ts","line":71,"column":9},
     },
     'xujieMemory/snapshot': {
       service: 'xujieMemory',
@@ -428,9 +587,9 @@ const $remote = createTypertRemoteInfo({
         mode: 'strict',
         typeSymbol: 'dsh-plugin-xujie-memory/types#Snapshot',
         create: dsh_plugin_xujie_memory_xujieMemory_snapshot_result$schema,
-        jsonSchema: {"type":"object","properties":{"scope_id":{"type":"string"},"scope_mode":{"type":"string"},"nodes":{"type":"array","items":{"type":"object","properties":{"id":{"type":"string"},"layer":{"type":"string"},"kind":{"type":"string"},"content":{"type":"string"},"editable":{"type":"boolean"},"trace_id":{"type":"string"},"content_hash":{"type":"string"},"recorded_at":{"type":"string"},"importance":{"type":"number"},"priority":{"type":"number"},"anchor":{"type":"boolean","enum":[false,true]},"status":{"type":"string"},"evidence":{"type":"array","items":{"type":"string"}}},"required":["id","layer","kind","content","editable"],"additionalProperties":true}},"edges":{"type":"array","items":{"type":"object","properties":{"source":{"type":"string"},"target":{"type":"string"},"kind":{"type":"string"}},"required":["source","target","kind"],"additionalProperties":true}},"cards":{"type":"array","items":{"type":"object","properties":{"account_id":{"type":"string"},"display_name":{"type":"string"},"status":{"type":"string"},"tags":{"type":"array","items":{"type":"object","properties":{"tag_id":{"type":"string"},"kind":{"type":"string"},"value":{"type":"string"},"source":{"type":"string"},"confidence":{"type":"number"}},"required":["tag_id","kind","value","source","confidence"],"additionalProperties":true}}},"required":["account_id","display_name","status","tags"],"additionalProperties":true}},"stats":{"type":"object","properties":{"traces":{"type":"number"},"traces_erased":{"type":"number"},"events":{"type":"number"},"states":{"type":"number"},"anchors":{"type":"number"},"clarifications_open":{"type":"number"},"summaries":{"type":"number"}},"required":["traces","traces_erased","events","states","anchors","clarifications_open","summaries"],"additionalProperties":true},"truncated":{"type":"boolean"},"limit":{"type":"number"}},"required":["scope_id","scope_mode","nodes","edges","cards","stats","truncated","limit"],"additionalProperties":true},
+        jsonSchema: {"type":"object","properties":{"scope_id":{"type":"string"},"scope_mode":{"type":"string"},"nodes":{"type":"array","items":{"type":"object","properties":{"id":{"type":"string"},"layer":{"type":"string"},"kind":{"type":"string"},"content":{"type":"string"},"editable":{"type":"boolean"},"trace_id":{"type":"string"},"content_hash":{"type":"string"},"recorded_at":{"type":"string"},"importance":{"type":"number"},"priority":{"type":"number"},"anchor":{"type":"boolean","enum":[false,true]},"status":{"type":"string"},"evidence":{"type":"array","items":{"type":"string"}}},"required":["id","layer","kind","content","editable"],"additionalProperties":true}},"edges":{"type":"array","items":{"type":"object","properties":{"source":{"type":"string"},"target":{"type":"string"},"kind":{"type":"string"}},"required":["source","target","kind"],"additionalProperties":true}},"cards":{"type":"array","items":{"type":"object","properties":{"account_id":{"type":"string"},"display_name":{"type":"string"},"status":{"type":"string"},"tags":{"type":"array","items":{"type":"object","properties":{"tag_id":{"type":"string"},"kind":{"type":"string"},"value":{"type":"string"},"source":{"type":"string"},"confidence":{"type":"number"}},"required":["tag_id","kind","value","source","confidence"],"additionalProperties":true}}},"required":["account_id","display_name","status","tags"],"additionalProperties":true}},"stats":{"type":"object","properties":{"traces":{"type":"number"},"traces_erased":{"type":"number"},"events":{"type":"number"},"states":{"type":"number"},"anchors":{"type":"number"},"clarifications_open":{"type":"number"},"summaries":{"type":"number"}},"required":["traces","traces_erased","events","states","anchors","clarifications_open","summaries"],"additionalProperties":true},"emotions":{"type":"array","items":{"type":"object","properties":{"name":{"type":"string"},"intensity":{"type":"number"}},"required":["name","intensity"],"additionalProperties":true}},"truncated":{"type":"boolean"},"limit":{"type":"number"}},"required":["scope_id","scope_mode","nodes","edges","cards","stats","emotions","truncated","limit"],"additionalProperties":true},
       },
-      sourceLocation: {"file":"packages/memory/src/controller.ts","line":46,"column":9},
+      sourceLocation: {"file":"packages/memory/src/controller.ts","line":50,"column":9},
     },
   },
 }, z)
@@ -442,7 +601,107 @@ export const TYPERT = {
   ],
   get invocations() { return $remote.descriptors },
   model: {
-    "services": [],
+    "services": [
+      {
+        "description": "Memory management is private to the authenticated DSH owner, not shared sessions.",
+        "summary": "Memory management is private to the authenticated DSH owner, not shared sessions.",
+        "tags": [],
+        "jsDoc": "/** Memory management is private to the authenticated DSH owner, not shared sessions. */",
+        "key": "xujieMemory",
+        "exportName": "MemoryController",
+        "members": [
+          {
+            "kind": "method",
+            "name": "catalog",
+            "signature": "@Remote async catalog(): Promise<Catalog>"
+          },
+          {
+            "kind": "method",
+            "name": "snapshot",
+            "signature": "@Remote async snapshot(scopeId: string): Promise<Snapshot>"
+          },
+          {
+            "kind": "method",
+            "name": "detail",
+            "signature": "@Remote async detail(scopeId: string, traceId: string): Promise<Trace>"
+          },
+          {
+            "kind": "method",
+            "name": "search",
+            "signature": "@Remote async search(scopeId: string, query: string): Promise<SearchHit[]>"
+          },
+          {
+            "kind": "method",
+            "name": "edit",
+            "signature": "@Remote async edit(scopeId: string, traceId: string, content: string, expectedHash: string): Promise<EditResult>"
+          },
+          {
+            "kind": "method",
+            "name": "forget",
+            "signature": "@Remote async forget(scopeId: string, traceId: string, expectedHash: string): Promise<ForgetResult>"
+          },
+          {
+            "kind": "method",
+            "name": "manage",
+            "signature": "@Remote async manage(scopeId: string, action: string, accountId: string, targetId: string, value: string, kind: string, expected: string): Promise<boolean>"
+          }
+        ],
+        "types": [
+          {
+            "name": "Catalog",
+            "declaration": "export interface Catalog {\n    scope_mode: string;\n    scopes: ScopeRow[];\n}"
+          },
+          {
+            "name": "Edge",
+            "declaration": "export interface Edge {\n    source: string;\n    target: string;\n    kind: string;\n}"
+          },
+          {
+            "name": "EditResult",
+            "declaration": "export interface EditResult {\n    changed: boolean;\n    trace: Trace;\n    replaced_trace_id?: string;\n    pending?: number;\n}"
+          },
+          {
+            "name": "EmotionSetting",
+            "declaration": "export interface EmotionSetting {\n    name: string;\n    intensity: number;\n}"
+          },
+          {
+            "name": "ForgetResult",
+            "declaration": "export interface ForgetResult {\n    trace_id: string;\n    erased: boolean;\n    already_erased: boolean;\n    state_keys: string[];\n}"
+          },
+          {
+            "name": "Node",
+            "declaration": "export interface Node {\n    id: string;\n    layer: string;\n    kind: string;\n    content: string;\n    editable: boolean;\n    trace_id?: string;\n    content_hash?: string;\n    recorded_at?: string;\n    importance?: number;\n    priority?: number;\n    anchor?: boolean;\n    status?: string;\n    evidence?: string[];\n}"
+          },
+          {
+            "name": "PersonCard",
+            "declaration": "export interface PersonCard {\n    account_id: string;\n    display_name: string;\n    status: string;\n    tags: PersonTag[];\n}"
+          },
+          {
+            "name": "PersonTag",
+            "declaration": "export interface PersonTag {\n    tag_id: string;\n    kind: string;\n    value: string;\n    source: string;\n    confidence: number;\n}"
+          },
+          {
+            "name": "ScopeRow",
+            "declaration": "export interface ScopeRow {\n    scope_id: string;\n    agent_id: string;\n    traces: number;\n}"
+          },
+          {
+            "name": "SearchHit",
+            "declaration": "export interface SearchHit {\n    trace_id: string;\n    content: string;\n    content_hash: string;\n    score: number;\n    priority: number;\n    anchor: boolean;\n    importance: number;\n    recorded_at: string;\n    layer: string;\n}"
+          },
+          {
+            "name": "Snapshot",
+            "declaration": "export interface Snapshot {\n    scope_id: string;\n    scope_mode: string;\n    nodes: Node[];\n    edges: Edge[];\n    cards: PersonCard[];\n    stats: Stats;\n    emotions: EmotionSetting[];\n    truncated: boolean;\n    limit: number;\n}"
+          },
+          {
+            "name": "Stats",
+            "declaration": "export interface Stats {\n    traces: number;\n    traces_erased: number;\n    events: number;\n    states: number;\n    anchors: number;\n    clarifications_open: number;\n    summaries: number;\n}"
+          },
+          {
+            "name": "Trace",
+            "declaration": "export interface Trace {\n    id: string;\n    trace_id: string;\n    scope_id: string;\n    content: string;\n    content_hash: string;\n    recorded_at: string;\n    source_kind: string;\n    importance: number;\n    anchor: boolean;\n    priority: number;\n}"
+          }
+        ]
+      }
+    ],
     "events": [],
     "objects": []
   },

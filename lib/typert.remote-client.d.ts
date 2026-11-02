@@ -12,6 +12,7 @@ declare module '@deepseek-ai/dsh-typert-protocol' {
     detail: (scopeId: string, traceId: string) => Promise<RemoteResult<Trace>>
     edit: (scopeId: string, traceId: string, content: string, expectedHash: string) => Promise<RemoteResult<EditResult>>
     forget: (scopeId: string, traceId: string, expectedHash: string) => Promise<RemoteResult<ForgetResult>>
+    manage: (scopeId: string, action: string, accountId: string, targetId: string, value: string, kind: string, expected: string) => Promise<RemoteResult<boolean>>
     search: (scopeId: string, query: string) => Promise<RemoteResult<SearchHit[]>>
     snapshot: (scopeId: string) => Promise<RemoteResult<Snapshot>>
   }
@@ -20,6 +21,7 @@ declare module '@deepseek-ai/dsh-typert-protocol' {
     'xujieMemory/detail': (scopeId: string, traceId: string) => Promise<RemoteResult<Trace>>
     'xujieMemory/edit': (scopeId: string, traceId: string, content: string, expectedHash: string) => Promise<RemoteResult<EditResult>>
     'xujieMemory/forget': (scopeId: string, traceId: string, expectedHash: string) => Promise<RemoteResult<ForgetResult>>
+    'xujieMemory/manage': (scopeId: string, action: string, accountId: string, targetId: string, value: string, kind: string, expected: string) => Promise<RemoteResult<boolean>>
     'xujieMemory/search': (scopeId: string, query: string) => Promise<RemoteResult<SearchHit[]>>
     'xujieMemory/snapshot': (scopeId: string) => Promise<RemoteResult<Snapshot>>
   }
@@ -33,6 +35,7 @@ export declare const TYPERT_REMOTE: TypertRemoteInfo<{
   readonly 'xujieMemory/detail': TypertRemoteMethod<{ readonly 'scopeId': string; readonly 'traceId': string }, Trace>
   readonly 'xujieMemory/edit': TypertRemoteMethod<{ readonly 'scopeId': string; readonly 'traceId': string; readonly 'content': string; readonly 'expectedHash': string }, EditResult>
   readonly 'xujieMemory/forget': TypertRemoteMethod<{ readonly 'scopeId': string; readonly 'traceId': string; readonly 'expectedHash': string }, ForgetResult>
+  readonly 'xujieMemory/manage': TypertRemoteMethod<{ readonly 'scopeId': string; readonly 'action': string; readonly 'accountId': string; readonly 'targetId': string; readonly 'value': string; readonly 'kind': string; readonly 'expected': string }, boolean>
   readonly 'xujieMemory/search': TypertRemoteMethod<{ readonly 'scopeId': string; readonly 'query': string }, SearchHit[]>
   readonly 'xujieMemory/snapshot': TypertRemoteMethod<{ readonly 'scopeId': string }, Snapshot>
 }>

@@ -10,13 +10,27 @@ import json
 import uuid
 
 from .memory import Memory
-from .profile import ProfileStore
+from .profile import ProfileStore, TAG_KINDS, _override_key
 
 
 class ManagementError(ValueError):
     def __init__(self, code: str):
         self.code = code
         super().__init__(code)
+
+
+def _clarification_text(kind, detail):
+    if kind == "missing_slot":
+        names = {"object": "具体对象", "subject": "涉及的人", "quantity": "数量",
+                 "unit": "单位", "value": "具体内容", "creditor": "债权人", "debtor": "债务人"}
+        missing = detail.get("missing")
+        fields = [names.get(str(item), "必要信息") for item in missing] if isinstance(missing, list) else []
+        return "这条记忆还缺少" + "、".join(dict.fromkeys(fields or ["必要信息"])) + "，暂时不能作为确定事实。"
+    if kind == "conflict":
+        return "这条记忆与已有信息存在分歧，需要进一步确认。"
+    if kind == "unconfirmed":
+        return "这条记忆还没有确认，暂时不能作为确定事实。"
+    return "这条记忆的含义还不明确，需要结合原话确认。"
 
 
 class Management:
@@ -102,9 +116,18 @@ class Management:
                     " ORDER BY v.trace_id", (r["state_key"],),
                 ).fetchall()
                 parts = r["state_key"].split("|")
-                label = " · ".join(parts[1:4])
+                relation = parts[2] if len(parts) > 2 else ""
+                subject = parts[3] if len(parts) > 3 else ""
+                label = {"preference": "偏好", "nickname": "称呼", "debt": "往来"}.get(relation, "记忆状态")
+                if subject and subject != "-":
+                    label += " · " + subject
+                try:
+                    value = json.loads(r["value_json"] or "null")
+                except (TypeError, ValueError):
+                    value = None
+                value = str(value) if isinstance(value, (str, int, float)) and not isinstance(value, bool) else "请查看关联原话"
                 nodes.append({"id": r["state_key"], "layer": "semantic", "kind": "state",
-                              "content": label + "： " + (r["value_json"] or "未知"),
+                              "content": label + "：" + value,
                               "status": r["status"], "editable": False,
                               "evidence": [e["trace_id"] for e in evidence]})
                 for e in evidence:
@@ -129,27 +152,163 @@ class Management:
                         edges.append({"source": ref, "target": r["summary_id"],
                                       "kind": "summary_input"})
             pending = conn.execute(
-                "SELECT request_id,kind,detail_json FROM clarifications"
+                "SELECT request_id,kind,detail_json,interpretation_ids_json,created_at FROM clarifications"
                 " WHERE scope_id=? AND status='open' ORDER BY created_at DESC LIMIT 50",
                 (scope_id,),
             ).fetchall()
             for r in pending:
+                try:
+                    detail = json.loads(r["detail_json"] or "{}")
+                    ids = json.loads(r["interpretation_ids_json"] or "[]")
+                except (TypeError, ValueError):
+                    detail, ids = {}, []
+                detail = detail if isinstance(detail, dict) else {}
+                ids = [item for item in ids if isinstance(item, str)] if isinstance(ids, list) else []
+                evidence = []
+                original = ""
+                if ids:
+                    placeholders = ",".join("?" for _ in ids)
+                    sources = conn.execute(
+                        "SELECT DISTINCT t.trace_id,t.content FROM interpretations i JOIN traces t ON t.trace_id=i.trace_id"
+                        f" WHERE i.interpretation_id IN ({placeholders}) AND t.scope_id=? AND t.erased_at IS NULL",
+                        (*ids, scope_id),
+                    ).fetchall()
+                    evidence = [row["trace_id"] for row in sources]
+                    if sources:
+                        original = sources[0]["content"]
+                description = _clarification_text(r["kind"], detail)
+                if original:
+                    description += " 原话：" + original[:120] + ("…" if len(original) > 120 else "")
                 nodes.append({"id": r["request_id"], "layer": "working",
                               "kind": "clarification", "editable": False,
-                              "content": r["kind"] + "：" + (r["detail_json"] or "")})
+                              "content": description,
+                              "recorded_at": r["created_at"], "evidence": evidence})
+                for trace_id in evidence:
+                    if trace_id in visible:
+                        edges.append({"source": trace_id, "target": r["request_id"],
+                                      "kind": "clarification_evidence"})
             cards = []
             store = ProfileStore(self.engine)
             for row in store.profiles(scope_id):
                 cards.append(store.card(scope_id, row["account_id"], limit=50))
             stats = self.memory.stats(scope_id)
+            emotions = [dict(r) for r in conn.execute(
+                "SELECT name,intensity FROM ai_emotion_settings WHERE scope_id=? ORDER BY updated_at,name",
+                (scope_id,),
+            ).fetchall()]
         return {"ok": True, "scope_id": scope_id, "scope_mode": self.service.scope_mode,
-                "nodes": nodes, "edges": edges, "cards": cards, "stats": stats,
+                "nodes": nodes, "edges": edges, "cards": cards, "stats": stats, "emotions": emotions,
                 "truncated": stats["traces"] > len(rows),
                 "limit": limit, "render_links_are_not_semantic_inference": True}
 
     def search(self, scope_id, query, limit=30):
         self.scope(scope_id)
         return {"ok": True, "hits": self.memory.search(scope_id, query, limit=limit, candidates=None)}
+
+    def action(self, scope_id, action, account_id, target_id, value, kind, expected):
+        self.scope(scope_id)
+        if action in ("tag_add", "tag_edit", "tag_delete"):
+            return self._tag_action(scope_id, action, account_id, target_id, value, kind, expected)
+        if action in ("clarify", "archive"):
+            return self._clarification_action(scope_id, action, target_id, value)
+        if action in ("emotion_set", "emotion_delete"):
+            return self._emotion_action(scope_id, action, target_id, value)
+        raise ManagementError("unknown_action")
+
+    def _emotion_action(self, scope_id, action, name, value):
+        name = name.strip()
+        if not name or len(name) > 20 or any(ord(ch) < 32 for ch in name):
+            raise ManagementError("invalid_emotion_name")
+        with self.engine._tx() as conn:
+            if action == "emotion_delete":
+                result = conn.execute("DELETE FROM ai_emotion_settings WHERE scope_id=? AND name=?", (scope_id, name))
+                if not result.rowcount:
+                    raise ManagementError("emotion_not_found")
+            else:
+                try:
+                    intensity = int(value)
+                except ValueError as error:
+                    raise ManagementError("invalid_emotion_intensity") from error
+                if not 0 <= intensity <= 100:
+                    raise ManagementError("invalid_emotion_intensity")
+                exists = conn.execute("SELECT 1 FROM ai_emotion_settings WHERE scope_id=? AND name=?", (scope_id, name)).fetchone()
+                count = conn.execute("SELECT COUNT(*) FROM ai_emotion_settings WHERE scope_id=?", (scope_id,)).fetchone()[0]
+                if not exists and count >= 20:
+                    raise ManagementError("emotion_limit")
+                conn.execute(
+                    "INSERT INTO ai_emotion_settings(scope_id,name,intensity,updated_at) VALUES (?,?,?,?)"
+                    " ON CONFLICT(scope_id,name) DO UPDATE SET intensity=excluded.intensity,updated_at=excluded.updated_at",
+                    (scope_id, name, intensity, self.engine.now()),
+                )
+        return {"ok": True}
+
+    def _tag_action(self, scope_id, action, account_id, target_id, value, kind, expected):
+        store = ProfileStore(self.engine)
+        profile = store.get(scope_id, account_id)
+        if not profile:
+            raise ManagementError("profile_not_found")
+        value = value.strip()
+        if action != "tag_delete" and (not value or len(value) > 120):
+            raise ManagementError("invalid_content_length")
+        with self.engine._tx() as conn:
+            if action == "tag_add":
+                if kind not in TAG_KINDS:
+                    raise ManagementError("invalid_tag_kind")
+            else:
+                tag = next((item for item in store.tags(scope_id, account_id)
+                            if item["tag_id"] == target_id), None)
+                if tag is None:
+                    raise ManagementError("tag_not_found")
+                if tag["value"] != expected:
+                    raise ManagementError("version_conflict")
+                kind = tag["kind"]
+                if target_id.startswith("manual:"):
+                    conn.execute("DELETE FROM person_tag_overrides WHERE profile_id=? AND kind=? AND target_key=?",
+                                 (profile["profile_id"], kind, target_id))
+                else:
+                    conn.execute(
+                        "INSERT OR REPLACE INTO person_tag_overrides(profile_id,scope_id,kind,target_key,value,updated_at)"
+                        " VALUES (?,?,?,?,NULL,?)",
+                        (profile["profile_id"], scope_id, kind, _override_key(tag), self.engine.now()),
+                    )
+            if action != "tag_delete":
+                conn.execute(
+                    "INSERT INTO person_tag_overrides(profile_id,scope_id,kind,target_key,value,updated_at)"
+                    " VALUES (?,?,?,?,?,?)",
+                    (profile["profile_id"], scope_id, kind, "manual:" + uuid.uuid4().hex, value, self.engine.now()),
+                )
+        return {"ok": True}
+
+    def _clarification_action(self, scope_id, action, request_id, value):
+        value = value.strip()
+        if action == "clarify" and (not value or len(value) > 2000):
+            raise ManagementError("invalid_content_length")
+        with self.engine._tx() as conn:
+            row = conn.execute(
+                "SELECT * FROM clarifications WHERE scope_id=? AND request_id=? AND status='open'",
+                (scope_id, request_id),
+            ).fetchone()
+            if row is None:
+                raise ManagementError("clarification_not_found")
+            if action == "clarify":
+                ids = json.loads(row["interpretation_ids_json"] or "[]")
+                actor = None
+                if ids:
+                    original = conn.execute(
+                        "SELECT t.actor_id FROM interpretations i JOIN traces t ON t.trace_id=i.trace_id"
+                        " WHERE i.interpretation_id=? AND t.scope_id=?", (ids[0], scope_id),
+                    ).fetchone()
+                    actor = original["actor_id"] if original else None
+                if not actor:
+                    raise ManagementError("clarification_source_not_found")
+                self.service.orchestrator.ingest.ingest(
+                    scope_id, "clarify:" + request_id + ":" + uuid.uuid4().hex,
+                    actor, "user_statement", value, context={"peer_id": "assistant"},
+                    confirmed=True, pattern_escalation=False,
+                )
+            conn.execute("UPDATE clarifications SET status=? WHERE scope_id=? AND request_id=?",
+                         ("answered" if action == "clarify" else "dismissed", scope_id, request_id))
+        return {"ok": True}
 
     def edit(self, scope_id, trace_id, content, expected_hash):
         self.scope(scope_id)

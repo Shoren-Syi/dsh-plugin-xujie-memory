@@ -6,6 +6,7 @@ export interface NeuralFieldHandle {
   zoomOut(): void
   reset(): void
   setAutoRotate(on: boolean): void
+  fadeNode(id: string): Promise<void>
 }
 
 export interface NeuralFieldProps {
@@ -77,6 +78,7 @@ export const NeuralField = forwardRef<NeuralFieldHandle, NeuralFieldProps>(funct
     zoomOut: () => engineRef.current?.zoomBy(1 / 1.2),
     reset: () => engineRef.current?.resetView(),
     setAutoRotate: on => engineRef.current?.setAutoRotate(on),
+    fadeNode: id => engineRef.current?.fadeNode(id) ?? Promise.resolve(),
   }), [])
 
   return <div className="xjm-field" ref={wrapRef}>

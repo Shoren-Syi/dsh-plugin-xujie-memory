@@ -571,6 +571,13 @@ class Orchestrator:
         """
         blocks: list[str] = []
 
+        emotions = self.engine._conn().execute(
+            "SELECT name,intensity FROM ai_emotion_settings WHERE scope_id=? ORDER BY name", (scope_id,)
+        ).fetchall()
+        if emotions:
+            lines = "、".join(f"{row['name']} {row['intensity']}/100" for row in emotions)
+            blocks.append("## 用户设置的 AI 情绪倾向\n" + lines + "\n请把这些数值作为表达风格参考。")
+
         # 1. 这个人
         card = self.profiles.render(scope_id, account_id)
         blocks.append("## 关于这个人\n" + card)

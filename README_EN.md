@@ -1,4 +1,6 @@
-# Xujie Memory 0.7.0 · DSH in-app memory workspace
+# Xujie Memory 0.7.1 · DSH in-app memory workspace
+
+Version 0.7.1 adds editable profile tags, manual clarification or archiving, and configurable AI emotion tendencies. Tag edits do not change original memories. Emotion values are suggestions for response style, not a guarantee of model behavior.
 
 [简体中文](README.md) | English
 
@@ -18,9 +20,9 @@ Use the same profile and `dbPath` as 0.6. Before the first old-schema migration,
 
 **The migration backup contains pre-upgrade data. Keep it private.** Forgetting is application-level removal, not secure disk erasure; it does not erase DSH chats, exports, old backups or historical disk/WAL contents.
 
-The graph defaults to the latest 250 original traces plus selected derived nodes. Management search covers all active original traces in the selected memory scope; automatic conversational recall retains its latest-800-candidate limit. Derived facts, summaries and clarifications are read-only; follow their evidence to edit original wording. Person cards are derived from actual records, not independent editable profile fields.
+The graph defaults to the latest 250 original traces plus selected derived nodes. Management search covers all active original traces in the selected memory scope; automatic conversational recall retains its latest-800-candidate limit. Derived facts and summaries are read-only; clarification items can be supplemented or archived. Profile tags can be managed independently of their original evidence.
 
-Install the supplied local candidate archive/extracted folder with the same method and profile used for 0.6, then restart DSH. Registry and GitHub examples from older releases do not install this unpublished candidate. Preserve your data folder and follow `ACCEPTANCE.md` before relying on the upgrade.
+Install the package with the same method and profile used for the previous version, then restart DSH. Preserve your data folder and follow `ACCEPTANCE.md` before relying on the upgrade.
 
 
 Seamless long-term memory built for DeepSeek Harness (DSH).

@@ -35,7 +35,7 @@
   line-height: 1.5;
   -webkit-font-smoothing: antialiased;
 }
-body[data-ds-dark-theme] .xjm-root { --xjm-sem: #8aaeff; --xjm-epi: #efc683; --xjm-work: #62dcc8; --xjm-danger-ink: var(--xjm-danger); }
+body[data-ds-dark-theme] .xjm-root { --xjm-sem: #8aaeff; --xjm-epi: #efc683; --xjm-work: #62dcc8; --xjm-danger-ink: var(--xjm-danger); --xjm-fg3: #c5ccda; }
 .xjm-root *, .xjm-root *::before, .xjm-root *::after { box-sizing: border-box; }
 :where(.xjm-root) :where(button, input, select, textarea) { font: inherit; color: inherit; }
 .xjm-root :focus-visible { outline: var(--dsw-focus-ring-width, 2px) solid var(--dsw-focus-ring-color, #4c8dff); outline-offset: 2px; }
@@ -131,11 +131,11 @@ body[data-ds-dark-theme] .xjm-root { --xjm-sem: #8aaeff; --xjm-epi: #efc683; --x
   position: absolute; left: 22px; bottom: 16px; z-index: 2;
   display: flex; flex-wrap: wrap; align-items: center; gap: 6px 16px;
   max-width: calc(100% - 44px);
-  font-size: 14px; color: rgba(214, 222, 236, 0.86);
+  font-size: 14px; color: #d6deec;
   pointer-events: none;
 }
 .xjm-legend span { display: inline-flex; align-items: center; gap: 7px; white-space: nowrap; }
-.xjm-legend .xjm-legend-quiet { color: rgba(190, 202, 224, 0.76); white-space: normal; }
+.xjm-legend .xjm-legend-quiet { color: #c4cddd; white-space: normal; }
 .xjm-g-dot { width: 7px; height: 7px; border-radius: 50%; background: #e4eaf7; box-shadow: 0 0 6px rgba(200, 215, 255, 0.7); }
 .xjm-g-diamond { width: 7px; height: 7px; transform: rotate(45deg); box-shadow: inset 0 0 0 1.5px #e4eaf7; }
 .xjm-g-link { width: 18px; height: 1.5px; border-radius: 1px; background: linear-gradient(90deg, #efc683, #8aaeff); }
@@ -214,6 +214,8 @@ body[data-ds-dark-theme] .xjm-root { --xjm-sem: #8aaeff; --xjm-epi: #efc683; --x
 .xjm-stats > div { padding: 8px 10px; background: var(--xjm-bg); }
 .xjm-stats dt { font-size: 14px; color: var(--xjm-fg3); }
 .xjm-stats dd { margin: 0; font-size: 16px; font-weight: 600; font-variant-numeric: tabular-nums; }
+.xjm-stat-button { padding: 0; border: 0; background: transparent; color: var(--xjm-fg); cursor: pointer; font: inherit; text-align: left; }
+.xjm-stat-button:hover { text-decoration: underline; }
 
 .xjm-list { display: flex; flex-direction: column; gap: 2px; margin: 0; padding: 0; list-style: none; }
 .xjm-row { display: flex; flex-direction: column; gap: 3px; width: 100%; min-height: 44px; padding: 10px 10px; border: 0; border-radius: 8px; background: transparent; text-align: left; cursor: pointer; }
@@ -300,8 +302,19 @@ body[data-ds-dark-theme] .xjm-root { --xjm-sem: #8aaeff; --xjm-epi: #efc683; --x
 .xjm-card-status { margin-left: auto; font-size: 14px; color: var(--xjm-fg3); white-space: nowrap; }
 .xjm-tag-group { display: grid; grid-template-columns: 40px minmax(0, 1fr); gap: 8px; margin-top: 10px; align-items: start; }
 .xjm-tag-kind { padding-top: 2px; font-size: 14px; color: var(--xjm-fg3); }
-.xjm-tags { display: flex; flex-wrap: wrap; gap: 4px; }
-.xjm-tag { padding: 2px 8px; border-radius: 6px; background: color-mix(in srgb, var(--xjm-fg) 6%, transparent); font-size: 14px; line-height: 1.5; word-break: break-word; }
+.xjm-tags { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 6px; }
+.xjm-tag { min-width: 0; padding: 6px 8px; border-radius: 6px; background: color-mix(in srgb, var(--xjm-fg) 6%, transparent); font-size: 14px; line-height: 1.5; word-break: break-word; }
+.xjm-tag-value { display: block; }
+.xjm-tag button { padding: 2px 6px 2px 0; border: 0; background: transparent; color: var(--xjm-fg2); cursor: pointer; font-size: 12px; }
+.xjm-tag button:hover { text-decoration: underline; }
+.xjm-add-tag { margin-top: 10px; }
+.xjm-tag-editor, .xjm-emotion-add { display: grid; gap: 8px; margin: 12px 0; }
+.xjm-tag-editor label, .xjm-emotion-add label, .xjm-clarify-label { display: grid; gap: 4px; color: var(--xjm-fg2); }
+.xjm-input { width: 100%; min-width: 0; padding: 8px; border: 1px solid var(--xjm-line); border-radius: 6px; background: var(--xjm-bg); color: var(--xjm-fg); }
+.xjm-emotions { display: grid; gap: 10px; padding: 0; list-style: none; }
+.xjm-emotions li { padding: 12px; border: 1px solid var(--xjm-line); border-radius: 8px; }
+.xjm-emotions input[type="range"] { width: 100%; }
+.xjm-emotion-head { display: flex; justify-content: space-between; gap: 12px; }
 
 .xjm-skeleton { padding: 4px 0; }
 .xjm-skeleton i { display: block; height: 12px; margin: 12px 0; border-radius: 6px; background: var(--dsw-alias-bg-skeleton, color-mix(in srgb, var(--xjm-fg) 8%, transparent)); animation: xjm-pulse 1.6s ease-in-out infinite; }

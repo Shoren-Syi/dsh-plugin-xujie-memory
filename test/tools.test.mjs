@@ -83,10 +83,10 @@ test('tools: search / forget / status work against a real kernel', async (t) => 
   )
   assert.equal(ready, true, `kernel not ready; logs=${JSON.stringify(harness.logs)}`)
 
-  // 1) 三个工具都注册了，名字对得上
+  // 1) 四个工具都注册了，名字对得上
   assert.deepEqual(
     harness.tools.map((tool) => tool.name).sort(),
-    ['memory_forget', 'memory_search', 'memory_status'],
+    ['memory_edit', 'memory_forget', 'memory_search', 'memory_status'],
   )
   const byName = Object.fromEntries(harness.tools.map((tool) => [tool.name, tool]))
 

@@ -13,9 +13,10 @@ export interface XujieMemoryRemote {
   search(scopeId: string, query: string): Promise<Result<SearchHit[]>>
   edit(scopeId: string, traceId: string, content: string, expectedHash: string): Promise<Result<EditResult>>
   forget(scopeId: string, traceId: string, expectedHash: string): Promise<Result<ForgetResult>>
+  manage(scopeId: string, action: string, accountId: string, targetId: string, value: string, kind: string, expected: string): Promise<Result<boolean>>
 }
 
-export type FailureKind = 'owner' | 'conflict' | 'not_found' | 'scope' | 'invalid' | 'unavailable' | 'unknown'
+export type FailureKind = 'owner' | 'conflict' | 'not_found' | 'scope' | 'invalid' | 'emotion_limit' | 'unavailable' | 'unknown'
 
 export class MemoryFailure extends Error {
   readonly code: string
@@ -32,6 +33,8 @@ export class MemoryFailure extends Error {
       : /version_conflict/.test(reason) ? 'conflict'
       : /trace_not_found/.test(reason) ? 'not_found'
       : /scope_not_found/.test(reason) ? 'scope'
+      : /emotion_limit/.test(reason) ? 'emotion_limit'
+      : /invalid_emotion/.test(reason) ? 'invalid'
       : /invalid_content_length/.test(reason) ? 'invalid'
       : code === 'xujie-memory/rejected' ? 'unavailable' : 'unknown'
   }
@@ -63,5 +66,8 @@ export class MemoryAdapter {
   }
   async forget(scopeId: string, traceId: string, expectedHash: string): Promise<ForgetResult> {
     return unwrap(await this.remote.forget(scopeId, traceId, expectedHash))
+  }
+  async manage(scopeId: string, action: string, accountId = '', targetId = '', value = '', kind = '', expected = ''): Promise<boolean> {
+    return unwrap(await this.remote.manage(scopeId, action, accountId, targetId, value, kind, expected))
   }
 }

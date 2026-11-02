@@ -110,6 +110,8 @@ export class NeuralEngine {
   private visible = true
   private selected = -1
   private hover = -1
+  private fading = -1
+  private fadeUntil = 0
   private highlight: Set<number> | null = null
   private dimmed = false
   private readonly pointers = new Map<number, { x: number; y: number }>()
@@ -156,6 +158,7 @@ export class NeuralEngine {
     const selectedId = this.selected >= 0 ? this.nodes[this.selected]?.id : undefined
     const hl = this.highlight ? [...this.highlight].map(i => this.nodes[i]?.id).filter(Boolean) as string[] : null
     this.nodes = nodes
+    this.hover = -1; this.fading = -1; this.fadeUntil = 0
     this.nodeIndex = new Map(nodes.map((nd, i) => [nd.id, i]))
     const count = nodes.length
     this.nodeVertex = new Int32Array(count)
@@ -209,6 +212,16 @@ export class NeuralEngine {
   }
 
   setDimmed(dimmed: boolean): void { this.dimmed = dimmed; this.invalidate() }
+  async fadeNode(id: string): Promise<void> {
+    const index = this.nodeIndex.get(id)
+    if (index === undefined || this.opts.reducedMotion) return
+    this.fading = index
+    this.fadeUntil = performance.now() + 300
+    this.invalidate()
+    await new Promise<void>(resolve => setTimeout(resolve, 300))
+    this.fading = -1
+    this.invalidate()
+  }
   setAutoRotate(on: boolean): void { this.autoRotate = on && !this.opts.reducedMotion; this.invalidate() }
   get isAutoRotating(): boolean { return this.autoRotate }
   zoomBy(k: number): void { this.zoomAt(this.width / 2, this.height / 2, k) }
@@ -317,10 +330,11 @@ export class NeuralEngine {
 
   private refreshNeighbours(): void {
     this.neighbours = new Set()
-    if (this.selected < 0) return
+    const focus = this.hover >= 0 ? this.hover : this.selected
+    if (focus < 0) return
     for (const e of this.edges) {
-      if (e.s === this.selected) this.neighbours.add(e.t)
-      if (e.t === this.selected) this.neighbours.add(e.s)
+      if (e.s === focus) this.neighbours.add(e.t)
+      if (e.t === focus) this.neighbours.add(e.s)
     }
   }
 
@@ -430,7 +444,7 @@ export class NeuralEngine {
     }
     on(c, 'pointerup', end)
     on(c, 'pointercancel', end)
-    on(c, 'pointerleave', () => { if (!this.press) { this.hover = -1; this.hideTooltip(); this.invalidate() } })
+    on(c, 'pointerleave', () => { if (!this.press) { this.hover = -1; this.refreshNeighbours(); this.hideTooltip(); this.invalidate() } })
     on(c, 'contextmenu', e => e.preventDefault())
     on(c, 'wheel', e => {
       // In the narrow/stacked layout the canvas is pan-y: a plain wheel scrolls the panel instead of
@@ -483,7 +497,7 @@ export class NeuralEngine {
 
   private updateHover(x: number, y: number): void {
     const hit = this.pick(x, y)
-    if (hit !== this.hover) { this.hover = hit; this.invalidate() }
+    if (hit !== this.hover) { this.hover = hit; this.refreshNeighbours(); this.invalidate() }
     this.canvas.style.cursor = hit >= 0 ? 'pointer' : 'grab'
     if (hit < 0) { this.hideTooltip(); return }
     const node = this.nodes[hit]!
@@ -697,9 +711,9 @@ export class NeuralEngine {
   private drawEdgeBand(bd: number, band: (z: number) => number, fog: number, zoomW: number): void {
     if (!this.edges.length) return
     const { ctx } = this
-    const sel = this.selected
+    const sel = this.hover >= 0 ? this.hover : this.selected
     ctx.lineCap = 'round'
-    for (let pass = 0; pass < 2; pass++) {
+    for (let pass = 0; pass < 3; pass++) {
       for (let layer = 0; layer < 3; layer++) {
         ctx.beginPath()
         let any = false
@@ -708,7 +722,8 @@ export class NeuralEngine {
           if (edge.layer !== layer) continue
           const active = sel >= 0 && (edge.s === sel || edge.t === sel)
           const hl = this.highlight !== null && (this.highlight.has(edge.s) || this.highlight.has(edge.t))
-          if ((pass === 1) !== (active || hl)) continue
+          const fading = this.fading >= 0 && (edge.s === this.fading || edge.t === this.fading)
+          if ((fading ? 2 : active || hl ? 1 : 0) !== pass) continue
           let pen = false
           for (let j = 0; j < EDGE_SAMPLES - 1; j++) {
             const o = (e * EDGE_SAMPLES + j) * 3
@@ -722,7 +737,8 @@ export class NeuralEngine {
         if (!any) continue
         const rgb = LAYER_RGB[layer]!
         const quiet = sel >= 0 || this.highlight !== null
-        const alpha = pass === 1 ? 0.9 : quiet ? 0.1 : 0.27
+        const fade = Math.max(0, Math.min(1, (this.fadeUntil - performance.now()) / 300))
+        const alpha = pass === 2 ? 0.9 * fade : pass === 1 ? 0.9 : quiet ? 0.1 : 0.27
         ctx.globalCompositeOperation = 'lighter'
         ctx.strokeStyle = `rgba(${rgb[0]},${rgb[1]},${rgb[2]},${(alpha * fog * 0.35).toFixed(3)})`
         ctx.lineWidth = (pass === 1 ? 5 : 3) * zoomW
@@ -743,9 +759,11 @@ export class NeuralEngine {
     if (alpha <= 0) return
     const focusSet = this.highlight
     const isSel = i === this.selected, isHover = i === this.hover
-    const related = isSel || this.neighbours.has(i)
+    const focus = this.hover >= 0 ? this.hover : this.selected
+    const related = i === focus || this.neighbours.has(i)
     if (focusSet && !focusSet.has(i)) alpha *= 0.22
-    else if (this.selected >= 0 && !related) alpha *= 0.45
+    else if (focus >= 0 && !related) alpha *= 0.3
+    if (i === this.fading) alpha *= Math.max(0, Math.min(1, (this.fadeUntil - performance.now()) / 300))
     alpha *= dim
     const r = this.nodeRadius(i) * (isHover || isSel ? 1.35 : 1)
     const fl = this.flash[i]!

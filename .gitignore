@@ -1,0 +1,10 @@
+node_modules/
+__pycache__/
+*.py[cod]
+*.db
+*.db-wal
+*.db-shm
+*.sqlite
+*.sqlite3
+*.log
+.env

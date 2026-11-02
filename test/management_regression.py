@@ -2,6 +2,7 @@ import json
 import sys
 import tempfile
 import threading
+import time
 import unittest
 import urllib.request
 import urllib.error
@@ -42,6 +43,131 @@ class ManagementRegression(unittest.TestCase):
         self.assertEqual(self.m.search(other,'吃辣')['hits'],[])
     def test_cross_session_user_scope(self):
         self.assertEqual(self.scope,self.svc.scope_of('two','owner'))
+    def test_preference_labels_do_not_create_spurious_clarifications(self):
+        sentences = ['我偏爱简洁清爽的界面风格，设计偏好编号0022',
+                     '我希望别人讨论问题时先说结论，沟通偏好编号0025',
+                     '我希望工作时先处理待办清单，工作安排编号0038',
+                     '我偏好咖啡']
+        for text in sentences:
+            self.svc.turn('preference', text, user='owner', context={'peer_id':'assistant'})
+        count = self.svc.engine._conn().execute(
+            "SELECT COUNT(*) FROM clarifications WHERE scope_id=? AND status='open'", (self.scope,)
+        ).fetchone()[0]
+        self.assertEqual(count, 0)
+        self.assertTrue(self.m.search(self.scope, '偏爱简洁清爽')['hits'])
+        self.svc.turn('preference', '我偏爱柔和留白的界面风格', user='owner', context={'peer_id':'assistant'})
+        states = self.svc.engine._conn().execute("SELECT state_key FROM states WHERE scope_id=? AND state_key LIKE '%|preference|%'", (self.scope,)).fetchall()
+        self.assertTrue(any('柔和留白' in row['state_key'] for row in states))
+
+    def test_routine_topics_and_numbers_do_not_create_debts(self):
+        for text in ['我常用文档整理自己的任务，工具记录编号11994',
+                     '今年我想在毕业纪念日给朋友写卡片，节日计划编号11989',
+                     '我计划读完一本关于植物的书，阅读目标编号11980',
+                     '我想做一个会记日程的机器人（并发测试第75次）']:
+            self.svc.turn('one', text, user='owner', context={'peer_id':'assistant'})
+        conn = self.svc.engine._conn()
+        self.assertEqual(conn.execute("SELECT COUNT(*) FROM events WHERE scope_id=? AND state_key LIKE ? AND void=0", (self.scope, '%|debt|%')).fetchone()[0], 0)
+        self.svc.turn('one', '我欠你五十元', user='owner', context={'peer_id':'assistant'})
+        sql = "SELECT COUNT(*) FROM events WHERE scope_id=? AND state_key LIKE ? AND void=0"
+        before = conn.execute(sql, (self.scope, '%|debt|%')).fetchone()[0]
+        self.assertGreater(before, 0)
+        self.svc.turn('one', '今年我想在毕业纪念日给朋友写卡片，节日计划编号11989', user='owner', context={'peer_id':'assistant'})
+        self.svc.turn('one', '我计划读完一本关于植物的书，阅读目标编号11980', user='owner', context={'peer_id':'assistant'})
+        self.assertEqual(conn.execute(sql, (self.scope, '%|debt|%')).fetchone()[0], before)
+
+    def test_attributive_liked_photo_is_not_an_invented_preference(self):
+        self.svc.turn('one', '我曾经在西湖边拍过一张很喜欢的照片，经历编号0006', user='owner', context={'peer_id':'assistant'})
+        states = self.svc.engine._conn().execute("SELECT state_key FROM states WHERE scope_id=? AND state_key LIKE '%|preference|%'", (self.scope,)).fetchall()
+        self.assertFalse(any('的照片' in row['state_key'] for row in states))
+        self.assertTrue(self.m.search(self.scope, '西湖边')['hits'])
+
+    def test_clarification_uses_readable_text_and_links_its_evidence(self):
+        self.svc.turn('preference', '我喜欢', user='owner', context={'peer_id':'assistant'})
+        nodes = [node for node in self.m.snapshot(self.scope)['nodes'] if node['kind'] == 'clarification']
+        self.assertTrue(nodes)
+        node = nodes[0]
+        self.assertIn('具体对象', node['content'])
+        self.assertNotIn('missing_slot', node['content'])
+        self.assertTrue(node['evidence'])
+        self.assertEqual(self.m.detail(self.scope, node['evidence'][0])['trace']['content'], '我喜欢')
+
+    def test_persona_tags_can_be_edited_deleted_and_added_persistently(self):
+        store = ProfileStore(self.svc.engine)
+        derived = next(tag for tag in store.card(self.scope, 'owner')['tags'] if '辣' in tag['value'])
+        self.m.action(self.scope, 'tag_edit', 'owner', derived['tag_id'], '喜欢清淡', '', derived['value'])
+        self.m.action(self.scope, 'tag_add', 'owner', '', '喜欢散步', 'habit', '')
+        store.derive_from_memory(self.scope, 'owner')
+        tags = store.card(self.scope, 'owner', limit=50)['tags']
+        self.assertTrue(any(t['value'] == '喜欢清淡' for t in tags))
+        self.assertTrue(any(t['value'] == '喜欢散步' for t in tags))
+        self.assertFalse(any(t['value'] == derived['value'] for t in tags))
+        manual = next(t for t in tags if t['value'] == '喜欢散步')
+        with self.assertRaisesRegex(ManagementError, 'version_conflict'):
+            self.m.action(self.scope, 'tag_delete', 'owner', manual['tag_id'], '', '', '过时内容')
+        self.m.action(self.scope, 'tag_delete', 'owner', manual['tag_id'], '', '', manual['value'])
+        self.svc.close()
+        self.svc = MemoryService(self.db, ROOT/'python/specs')
+        self.m = Management(self.svc)
+        values = [t['value'] for t in ProfileStore(self.svc.engine).card(self.scope, 'owner', limit=50)['tags']]
+        self.assertIn('喜欢清淡', values)
+        self.assertNotIn('喜欢散步', values)
+        self.assertNotIn(derived['value'], values)
+        self.assertIn('喜欢清淡', self.svc.context('one', user='owner')['context'])
+
+    def test_clarification_can_be_answered_or_archived(self):
+        self.svc.turn('one', '我喜欢', user='owner', context={'peer_id':'assistant'})
+        pending = next(n for n in self.m.snapshot(self.scope)['nodes'] if n['kind'] == 'clarification')
+        self.m.action(self.scope, 'clarify', '', pending['id'], '我喜欢茉莉花茶', '', '')
+        self.assertTrue(self.m.search(self.scope, '我喜欢茉莉花茶')['hits'])
+        status = self.svc.engine._conn().execute('SELECT status FROM clarifications WHERE request_id=?', (pending['id'],)).fetchone()[0]
+        self.assertEqual(status, 'answered')
+        self.svc.turn('one', '我讨厌', user='owner', context={'peer_id':'assistant'})
+        pending = next(n for n in self.m.snapshot(self.scope)['nodes'] if n['kind'] == 'clarification')
+        self.m.action(self.scope, 'archive', '', pending['id'], '', '', '')
+        self.assertEqual(self.svc.engine._conn().execute('SELECT status FROM clarifications WHERE request_id=?', (pending['id'],)).fetchone()[0], 'dismissed')
+
+    def test_emotion_settings_persist_and_reach_prompt(self):
+        self.m.action(self.scope, 'emotion_set', '', '嫉妒', '35', '', '')
+        self.m.action(self.scope, 'emotion_set', '', '开心', '80', '', '')
+        with self.assertRaisesRegex(ManagementError, 'invalid_emotion_intensity'):
+            self.m.action(self.scope, 'emotion_set', '', '开心', '101', '', '')
+        self.svc.close()
+        self.svc = MemoryService(self.db, ROOT/'python/specs')
+        self.m = Management(self.svc)
+        self.assertEqual({e['name']: e['intensity'] for e in self.m.snapshot(self.scope)['emotions']}, {'嫉妒': 35, '开心': 80})
+        context = self.svc.context('one', user='owner')['context']
+        self.assertIn('开心 80/100', context)
+        self.assertIn('嫉妒 35/100', context)
+        self.m.action(self.scope, 'emotion_delete', '', '嫉妒', '', '', '')
+        self.assertNotIn('嫉妒', self.svc.context('one', user='owner')['context'])
+
+    def test_manual_profile_and_emotions_do_not_leak_to_other_users(self):
+        self.m.action(self.scope, 'tag_add', 'owner', '', '只属于甲的标签', 'habit', '')
+        self.m.action(self.scope, 'emotion_set', '', '甲的开心', '80', '', '')
+        self.svc.turn('other', '我喜欢苹果', user='another', context={'peer_id':'assistant'})
+        other_scope = self.svc.scope_of('other', 'another')
+        self.assertNotEqual(self.scope, other_scope)
+        other = self.svc.context('other', user='another')['context']
+        self.assertNotIn('只属于甲的标签', other)
+        self.assertNotIn('甲的开心', other)
+        with self.assertRaisesRegex(ManagementError, 'profile_not_found'):
+            self.m.action(other_scope, 'tag_add', 'owner', '', '错误用户', 'habit', '')
+        self.assertEqual(self.m.snapshot(other_scope)['emotions'], [])
+
+    def test_new_database_starts_without_example_memories(self):
+        with tempfile.TemporaryDirectory() as fresh_dir:
+            fresh = MemoryService(Path(fresh_dir)/'empty.db', ROOT/'python/specs')
+            try:
+                self.assertEqual(Management(fresh).catalog()['scopes'], [])
+                scope = fresh.scope_of('new-session', 'new-user')
+                snapshot = Management(fresh).snapshot(scope)
+                self.assertEqual(snapshot['stats']['traces'], 0)
+                self.assertEqual(snapshot['nodes'], [])
+                self.assertEqual(snapshot['cards'], [])
+                self.assertEqual(snapshot['emotions'], [])
+                self.assertNotIn('管家', fresh.context('new-session', user='new-user')['context'])
+            finally:
+                fresh.close()
     def test_management_search_finds_old_records_after_2000_new_traces(self):
         engine = self.svc.engine
         with engine._tx() as conn:
@@ -157,6 +283,26 @@ class ManagementRegression(unittest.TestCase):
         self.assertEqual(sorted(outcomes),[False,True])
 
 class HttpRegression(unittest.TestCase):
+    def test_http_connections_are_released_after_requests(self):
+        with tempfile.TemporaryDirectory() as d:
+            h = serve(Path(d)/'m.db', ROOT/'python/specs', port=0, token='test-token-only')
+            thread = threading.Thread(target=h.serve_forever, daemon=True)
+            thread.start()
+            try:
+                for _ in range(150):
+                    request = urllib.request.Request(
+                        f'http://127.0.0.1:{h.server_port}/manage/catalog', b'{}',
+                        headers={'Content-Type': 'application/json', 'X-Xujie-Token': 'test-token-only'},
+                    )
+                    with urllib.request.urlopen(request) as response:
+                        self.assertEqual(response.status, 200)
+                deadline = time.monotonic() + 3
+                while len(h.service.engine._conns) > 1 and time.monotonic() < deadline:
+                    time.sleep(0.01)
+                self.assertLessEqual(len(h.service.engine._conns), 1)
+            finally:
+                h.shutdown(); h.server_close(); h.service.close(); thread.join()
+
     def test_http_auth_read_write_conflict_and_no_cors(self):
         with tempfile.TemporaryDirectory() as d:
             h = serve(Path(d)/'m.db',ROOT/'python/specs',port=0,token='test-token-only')

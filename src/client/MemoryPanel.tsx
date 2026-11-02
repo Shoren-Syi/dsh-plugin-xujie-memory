@@ -8,9 +8,10 @@ import { IconAlert, IconArrow, IconBack, IconClose, IconEdit, IconForget, IconLo
 export interface MemoryPanelProps { remote: XujieMemoryRemote }
 
 type Target = { nodeId: string } | { traceId: string }
-type Tab = 'overview' | 'persona'
+type Tab = 'overview' | 'persona' | 'emotion'
+type TagEditor = { account: string; id: string; kind: string; original: string; value: string }
 
-const TAG_KIND: Record<string, string> = { preference: '偏好', nickname: '称呼', debt: '往来', identity: '身份', relation: '关系' }
+const TAG_KIND: Record<string, string> = { preference: '偏好', address: '称呼', habit: '习惯', style: '风格', topic: '话题', relation: '关系', nickname: '称呼', debt: '往来', identity: '身份' }
 const MAX_CONTENT = 2000
 
 function usePrefersReducedMotion(): boolean {
@@ -69,6 +70,7 @@ export function MemoryPanel({ remote }: MemoryPanelProps) {
   const [searchNonce, setSearchNonce] = useState(0)
 
   const [tab, setTab] = useState<Tab>('overview')
+  const [showPending, setShowPending] = useState(false)
   const [layerFocus, setLayerFocus] = useState<number | null>(null)
   const [autoRotate, setAutoRotate] = useState(true)
 
@@ -78,13 +80,19 @@ export function MemoryPanel({ remote }: MemoryPanelProps) {
   const [detailFailure, setDetailFailure] = useState<MemoryFailure | null>(null)
   const [editing, setEditing] = useState(false)
   const [draft, setDraft] = useState('')
-  const [busy, setBusy] = useState<'save' | 'forget' | null>(null)
+  const [busy, setBusy] = useState<'save' | 'forget' | 'manage' | null>(null)
   const busyRef = useRef<typeof busy>(null)
   busyRef.current = busy
   const [actionFailure, setActionFailure] = useState<MemoryFailure | null>(null)
   const [confirmForget, setConfirmForget] = useState(false)
   const [toast, setToast] = useState<string | null>(null)
   const [detailNonce, setDetailNonce] = useState(0)
+  const [manageFailure, setManageFailure] = useState<MemoryFailure | null>(null)
+  const [tagEditor, setTagEditor] = useState<TagEditor | null>(null)
+  const [clarificationDraft, setClarificationDraft] = useState('')
+  const [emotionName, setEmotionName] = useState('')
+  const [emotionLevel, setEmotionLevel] = useState(50)
+  const [emotionDrafts, setEmotionDrafts] = useState<Record<string, number>>({})
 
   // ---- catalog ----
   useEffect(() => {
@@ -187,7 +195,7 @@ export function MemoryPanel({ remote }: MemoryPanelProps) {
   // same render so no frame shows the old trace's actions under the new node's header.
   const selectTarget = useCallback((next: Target | null) => {
     if (busyRef.current) return
-    setTrace(null); setEditing(false); setConfirmForget(false); setActionFailure(null)
+    setTrace(null); setEditing(false); setConfirmForget(false); setActionFailure(null); setClarificationDraft(''); setManageFailure(null)
     setDetailLoading(next !== null)
     setTarget(next)
   }, [])
@@ -229,6 +237,7 @@ export function MemoryPanel({ remote }: MemoryPanelProps) {
     setBusy('forget'); setActionFailure(null)
     try {
       await adapter.forget(scopeId, trace.trace_id, trace.content_hash)
+      if (selectedGraphId) await fieldRef.current?.fadeNode(selectedGraphId)
       setTarget(null); setTrace(null); setConfirmForget(false)
       setToast('已忘记这条记忆，相关摘要与人设已重新推导')
       await loadSnapshot(scopeId, true)
@@ -241,9 +250,27 @@ export function MemoryPanel({ remote }: MemoryPanelProps) {
 
   const reloadLatest = () => { setActionFailure(null); setDetailNonce(n => n + 1); if (scopeId) void loadSnapshot(scopeId, true) }
 
+  const manage = async (action: string, account = '', id = '', value = '', kind = '', expected = '') => {
+    if (!scopeId || busyRef.current) return false
+    setBusy('manage'); setManageFailure(null)
+    try {
+      await adapter.manage(scopeId, action, account, id, value, kind, expected)
+      await loadSnapshot(scopeId, true)
+      refreshCatalog()
+      setToast(action === 'archive' ? '已归档这条待澄清记录' : action === 'clarify' ? '已保存补充并归档原问题' : '已保存')
+      return true
+    } catch (error) {
+      setManageFailure(asFailure(error))
+      return false
+    } finally { setBusy(null) }
+  }
+
   // ---- render helpers ----
   const scopes = catalog?.scopes ?? []
   const stats = snapshot?.stats
+  const pendingNodes = snapshot?.nodes.filter(n => n.kind === 'clarification') ?? []
+  const visibleStates = snapshot?.nodes.filter(n => n.kind === 'state').length ?? 0
+  const visibleAnchors = snapshot?.nodes.filter(n => n.kind === 'anchor').length ?? 0
   const pageFailure = failure
   const isEmpty = !loading && !pageFailure && (scopes.length === 0 || (snapshot !== null && snapshot.nodes.length === 0))
   const showDetail = target !== null
@@ -287,13 +314,23 @@ export function MemoryPanel({ remote }: MemoryPanelProps) {
     {stats && <section className="xjm-section" aria-label="统计">
       <dl className="xjm-stats">
         <div><dt>原话</dt><dd>{stats.traces}</dd></div>
-        <div><dt>状态</dt><dd>{stats.states}</dd></div>
+        <div><dt>状态 · 图中/全部</dt><dd>{visibleStates} / {stats.states}</dd></div>
         <div><dt>锚点</dt><dd>{stats.anchors}</dd></div>
         <div><dt>摘要</dt><dd>{stats.summaries}</dd></div>
-        <div><dt>待澄清</dt><dd>{stats.clarifications_open}</dd></div>
+        <div><dt>待澄清</dt><dd><button type="button" className="xjm-stat-button" aria-expanded={showPending} onClick={() => setShowPending(value => !value)}>{stats.clarifications_open} · {showPending ? '收起' : '查看'}</button></dd></div>
         <div><dt>已忘记</dt><dd>{stats.traces_erased}</dd></div>
       </dl>
+      <p className="xjm-note">语义记忆的 {counts[0]} 个节点包括 {visibleStates} 个图中状态和 {visibleAnchors} 个锚点。全部状态还包含未展示的状态。</p>
       {snapshot?.truncated && <p className="xjm-note">图中显示最近 {snapshot.limit} 条原话，共 {stats.traces} 条。更早的记录可通过搜索查看与编辑。</p>}
+    </section>}
+    {showPending && stats && <section className="xjm-section" aria-label="待澄清列表">
+      <h2 className="xjm-h2">待澄清 · {stats.clarifications_open}</h2>
+      <p className="xjm-note">这里显示最近 {pendingNodes.length} 条。这些记录不一定会触发主动提问。</p>
+      {pendingNodes.length === 0 ? <p className="xjm-empty-line">当前没有待澄清的记录。</p> : <ul className="xjm-list">
+        {pendingNodes.map(n => <li key={n.id}><button type="button" className="xjm-row" onClick={() => selectTarget({ nodeId: n.id })}>
+          <span className="xjm-row-text">{n.content}</span><span className="xjm-row-meta">{formatTime(n.recorded_at)}<IconArrow /></span>
+        </button></li>)}
+      </ul>}
     </section>}
     {snapshot && snapshot.nodes.some(n => n.kind === 'trace') && <section className="xjm-section" aria-label="最近原话">
       <h2 className="xjm-h2">最近原话</h2>
@@ -311,7 +348,7 @@ export function MemoryPanel({ remote }: MemoryPanelProps) {
   const renderPersona = (cards: PersonCard[]) => cards.length === 0
     ? <p className="xjm-empty-line">还没有人设卡。对话中出现称呼、偏好等信息后会自动推导。</p>
     : <>
-      <p className="xjm-note">人设卡由原话推导，只读。编辑或忘记原话后会重新推导。</p>
+      <p className="xjm-note">标签可手动调整；修改标签不会更改原话。已删除的派生标签不会因重新推导而自动出现。</p>
       {cards.map(card => {
         const groups = new Map<string, typeof card.tags>()
         for (const t of card.tags) groups.set(t.kind, [...(groups.get(t.kind) ?? []), t])
@@ -321,13 +358,47 @@ export function MemoryPanel({ remote }: MemoryPanelProps) {
             <span className="xjm-card-name">{card.display_name}</span>
             <span className="xjm-card-status">{STATUS_LABEL[card.status] ?? card.status}</span>
           </header>
+          <button type="button" className="xjm-btn xjm-add-tag" disabled={busy !== null} onClick={() => setTagEditor({account:card.account_id,id:'',kind:'preference',original:'',value:''})}>添加标签</button>
+          {tagEditor?.account === card.account_id && <div className="xjm-tag-editor">
+            {!tagEditor.id && <label>类别 <select className="xjm-select" value={tagEditor.kind} onChange={e => setTagEditor({...tagEditor,kind:e.target.value})}>
+              {['preference','address','habit','style','topic','relation'].map(kind => <option key={kind} value={kind}>{TAG_KIND[kind]}</option>)}
+            </select></label>}
+            <label>标签内容 <input className="xjm-input" maxLength={120} value={tagEditor.value} onChange={e => setTagEditor({...tagEditor,value:e.target.value})} /></label>
+            <div className="xjm-actions"><button type="button" className="xjm-btn" onClick={() => setTagEditor(null)}>取消</button>
+              <button type="button" className="xjm-btn xjm-btn-primary" disabled={busy !== null || !tagEditor.value.trim()} onClick={() => void (async () => {
+                if (await manage(tagEditor.id ? 'tag_edit' : 'tag_add', card.account_id, tagEditor.id, tagEditor.value, tagEditor.kind, tagEditor.original)) setTagEditor(null)
+              })()}>保存</button></div>
+          </div>}
           {card.tags.length === 0 ? <p className="xjm-empty-line">暂无标签</p> : [...groups].map(([kind, tags]) => <div key={kind} className="xjm-tag-group">
             <span className="xjm-tag-kind">{TAG_KIND[kind] ?? kind}</span>
-            <span className="xjm-tags">{tags.map(t => <span key={t.tag_id} className="xjm-tag" title={`来源 ${t.source} · 置信 ${Math.round(t.confidence * 100)}%`}>{t.value}</span>)}</span>
+            <span className="xjm-tags">{tags.map(t => <span key={t.tag_id} className="xjm-tag">
+              <span className="xjm-tag-value">{t.value}</span>
+              <button type="button" aria-label={`编辑标签 ${t.value}`} disabled={busy !== null} onClick={() => setTagEditor({account:card.account_id,id:t.tag_id,kind:t.kind,original:t.value,value:t.value})}>编辑</button>
+              <button type="button" aria-label={`删除标签 ${t.value}`} disabled={busy !== null} onClick={() => void manage('tag_delete', card.account_id, t.tag_id, '', t.kind, t.value)}>删除</button>
+            </span>)}</span>
           </div>)}
         </article>
       })}
     </>
+
+  const renderEmotion = () => <section className="xjm-section" aria-label="AI 情绪设置">
+    <h2 className="xjm-h2">AI 情绪设置</h2>
+    <p className="xjm-note">最多设置 20 种情绪，强度为 0–100。这些数值会作为后续回复的表达参考，实际表现仍由模型决定。</p>
+    <div className="xjm-emotion-add"><label>情绪名称 <input className="xjm-input" value={emotionName} maxLength={20} placeholder="例如：开心、愤怒、嫉妒" onChange={e => setEmotionName(e.target.value)} /></label>
+      <label>初始强度 <input type="number" className="xjm-input" min={0} max={100} value={emotionLevel} onChange={e => setEmotionLevel(Number(e.target.value))} /></label>
+      <button type="button" className="xjm-btn xjm-btn-primary" disabled={busy !== null || !emotionName.trim() || emotionLevel < 0 || emotionLevel > 100} onClick={() => void (async () => {
+        if (await manage('emotion_set', '', emotionName.trim(), String(emotionLevel))) { setEmotionName(''); setEmotionLevel(50) }
+      })()}>添加或更新</button></div>
+    {(snapshot?.emotions ?? []).length === 0 ? <p className="xjm-empty-line">还没有设置情绪。</p> : <ul className="xjm-emotions">
+      {snapshot!.emotions.map(emotion => { const level = emotionDrafts[emotion.name] ?? emotion.intensity; return <li key={emotion.name}>
+        <div className="xjm-emotion-head"><strong>{emotion.name}</strong><span>{level} / 100</span></div>
+        <input type="range" min={0} max={100} aria-label={`${emotion.name}强度`} value={level} onChange={e => setEmotionDrafts(d => ({...d,[emotion.name]:Number(e.target.value)}))} />
+        <div className="xjm-actions"><button type="button" className="xjm-btn" disabled={busy !== null || level === emotion.intensity} onClick={() => void (async () => {
+          if (await manage('emotion_set', '', emotion.name, String(level))) setEmotionDrafts(d => { const next = {...d}; delete next[emotion.name]; return next })
+        })()}>保存强度</button><button type="button" className="xjm-btn xjm-btn-danger-quiet" disabled={busy !== null} onClick={() => void manage('emotion_delete', '', emotion.name)}>删除</button></div>
+      </li> })}
+    </ul>}
+  </section>
 
   const renderHits = () => {
     if (searchFailure) { const t = FAILURE_TEXT[searchFailure.kind]; return <p className="xjm-inline-error" role="alert">{t.title}。{t.body}</p> }
@@ -372,12 +443,19 @@ export function MemoryPanel({ remote }: MemoryPanelProps) {
         <dl className="xjm-meta">
           {node.status && <div><dt>状态</dt><dd>{STATUS_LABEL[node.status] ?? node.status}</dd></div>}
           {node.recorded_at && <div><dt>生成时间</dt><dd>{formatTime(node.recorded_at)}</dd></div>}
-          <div><dt>标识</dt><dd className="xjm-mono" title={node.id}>{shortId(node.id)}</dd></div>
+          {node.kind !== 'clarification' && <div><dt>标识</dt><dd className="xjm-mono" title={node.id}>{shortId(node.id)}</dd></div>}
         </dl>
         <p className="xjm-note">派生记忆不能直接编辑。要更正它，请编辑或忘记下面的证据原话。</p>
-        {node.kind === 'clarification'
-          ? <p className="xjm-empty-line">待澄清问题会在后续对话中由智能体向你确认。</p>
-          : <section className="xjm-section" aria-label="证据原话">
+        {node.kind === 'clarification' && <>
+          <p className="xjm-note">填写完整的补充说明后，它会作为新记忆保存，原问题将归档。</p>
+          <label className="xjm-clarify-label">补充说明<textarea className="xjm-textarea" value={clarificationDraft} maxLength={MAX_CONTENT} onChange={e => setClarificationDraft(e.target.value)} placeholder="例如：我喜欢茉莉花茶" /></label>
+          <div className="xjm-actions"><button type="button" className="xjm-btn xjm-btn-primary" disabled={busy !== null || !clarificationDraft.trim()} onClick={() => void (async () => {
+            if (await manage('clarify', '', node.id, clarificationDraft)) { setTarget(null); setClarificationDraft('') }
+          })()}>保存补充</button><button type="button" className="xjm-btn" disabled={busy !== null} onClick={() => void (async () => {
+            if (await manage('archive', '', node.id)) setTarget(null)
+          })()}>不予澄清 · 归档</button></div>
+        </>}
+        <section className="xjm-section" aria-label="证据原话">
             <h2 className="xjm-h2">证据原话 · {evidence.length}</h2>
             {evidence.length === 0 ? <p className="xjm-empty-line">没有仍然有效的证据。</p> : <ul className="xjm-list">
               {evidence.map(id => { const ev = nodeById.get(id); return <li key={id}>
@@ -387,7 +465,7 @@ export function MemoryPanel({ remote }: MemoryPanelProps) {
                 </button>
               </li> })}
             </ul>}
-          </section>}
+          </section>
       </div>
     }
 
@@ -517,9 +595,11 @@ export function MemoryPanel({ remote }: MemoryPanelProps) {
           {!showDetail && !query.trim() && <div className="xjm-tabs" role="tablist" aria-label="检查器视图">
             <button type="button" role="tab" aria-selected={tab === 'overview'} className="xjm-tab" onClick={() => setTab('overview')}>概览</button>
             <button type="button" role="tab" aria-selected={tab === 'persona'} className="xjm-tab" onClick={() => setTab('persona')}>人设卡{snapshot?.cards.length ? <span className="xjm-tab-count">{snapshot.cards.length}</span> : null}</button>
+            <button type="button" role="tab" aria-selected={tab === 'emotion'} className="xjm-tab" onClick={() => setTab('emotion')}>AI 情绪</button>
           </div>}
         </div>
         <div className="xjm-insp-body">
+          {manageFailure && <p className="xjm-inline-error" role="alert">{FAILURE_TEXT[manageFailure.kind].title}。{FAILURE_TEXT[manageFailure.kind].body}</p>}
           {pageFailure ? <StatusBlock icon={pageFailure.kind === 'owner' ? <IconLock /> : <IconAlert />} title={FAILURE_TEXT[pageFailure.kind].title} body={FAILURE_TEXT[pageFailure.kind].body}
               action={pageFailure.kind !== 'owner' ? <button type="button" className="xjm-btn" onClick={() => setReloadKey(k => k + 1)}>重试</button> : undefined} />
             : loading && !snapshot ? <div className="xjm-skeleton" aria-hidden="true"><i /><i /><i /><i /></div>
@@ -527,6 +607,7 @@ export function MemoryPanel({ remote }: MemoryPanelProps) {
             : query.trim() ? renderHits()
             : isEmpty ? <p className="xjm-empty-line">暂无可管理的记忆。</p>
             : tab === 'persona' ? renderPersona(snapshot?.cards ?? [])
+            : tab === 'emotion' ? renderEmotion()
             : renderOverview()}
         </div>
         <div className="xjm-toast-slot" aria-live="polite">{toast && <div className="xjm-toast">{toast}</div>}</div>

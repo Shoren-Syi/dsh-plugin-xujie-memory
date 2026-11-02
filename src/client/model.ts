@@ -64,7 +64,8 @@ export const FAILURE_TEXT: Record<FailureKind, { title: string; body: string }> 
   conflict: { title: '这条记忆已在别处更新', body: '版本不一致，保存或忘记已被拒绝。载入最新内容后再操作。' },
   not_found: { title: '记录不存在', body: '它可能已被编辑替换或已被忘记。' },
   scope: { title: '记忆范围不存在', body: '该范围可能已被移除，请重新选择。' },
-  invalid: { title: '内容长度无效', body: '记忆内容需为 1–2000 个字符。' },
+  invalid: { title: '输入内容无效', body: '请检查内容长度和情绪强度后重试。' },
+  emotion_limit: { title: '情绪数量已达上限', body: '最多设置 20 种情绪，请先删除不需要的项目。' },
   unavailable: { title: '记忆内核暂不可用', body: '内核可能正在启动或重启。稍后重试。' },
   unknown: { title: '操作未完成', body: '记忆库没有返回结果。稍后重试。' },
 }

@@ -2,6 +2,10 @@ import type { Context } from '@deepseek-ai/cordis'
 import { Remote, RemoteError, TypertRemoteService } from '@deepseek-ai/dsh-typert-protocol'
 import type { Catalog, Snapshot, Trace, SearchHit, EditResult, ForgetResult, PersonCard } from './types.ts'
 
+declare module '@deepseek-ai/cordis' {
+  interface Context { xujieMemory: MemoryController }
+}
+
 /** Trusted Node-only bridge; it is never exported to the browser. */
 export interface KernelBridge {
   request(path: string, body: Record<string, string | number>): Promise<any>
@@ -51,10 +55,10 @@ export class MemoryController extends TypertRemoteService {
         tag_id: t.tag_id, kind: t.kind, value: t.value, source: t.source, confidence: t.confidence,
       })),
     }))
-    const { scope_id, scope_mode, nodes, edges, truncated, limit } = r
+    const { scope_id, scope_mode, nodes, edges, emotions, truncated, limit } = r
     // Lifecycle statistics may carry an internal scope key; do not copy it to DTO.
     const { traces, traces_erased, events, states, anchors, clarifications_open, summaries } = r.stats
-    return { scope_id, scope_mode, nodes, edges, cards, truncated, limit,
+    return { scope_id, scope_mode, nodes, edges, cards, emotions, truncated, limit,
       stats: { traces, traces_erased, events, states, anchors, clarifications_open, summaries } }
   }
 
@@ -84,5 +88,13 @@ export class MemoryController extends TypertRemoteService {
   async forget(scopeId: string, traceId: string, expectedHash: string): Promise<ForgetResult> {
     const r = await this.call('/manage/forget', { scope_id: scopeId, trace_id: traceId, expected_hash: expectedHash })
     return { trace_id: r.trace_id, erased: r.erased, already_erased: r.already_erased, state_keys: r.state_keys }
+  }
+
+  @Remote
+  async manage(scopeId: string, action: string, accountId: string, targetId: string,
+               value: string, kind: string, expected: string): Promise<boolean> {
+    await this.call('/manage/action', { scope_id: scopeId, action, account_id: accountId,
+      target_id: targetId, value, kind, expected })
+    return true
   }
 }

@@ -88,6 +88,10 @@ def _row_to_dict(row) -> dict:
     return dict(row) if row is not None else {}
 
 
+def _override_key(tag: dict) -> str:
+    return "slot:" + tag["slot"] if tag.get("slot") else "value:" + tag["value"]
+
+
 class ProfileStore:
     """人物画像的读写。不改记忆，不改账，只管"我对这个人的看法"。"""
 
@@ -272,11 +276,21 @@ class ProfileStore:
             args.append(kind)
         # 可信度高的在前，同等可信度按被看见的次数排——这就是"印象的强度"。
         sql += " ORDER BY confidence DESC, seen_count DESC, created_at DESC"
-        if limit is not None:
-            sql += " LIMIT ?"
-            args.append(int(limit))
-        return [_row_to_dict(r) for r in
-                self.engine._conn().execute(sql, args).fetchall()]
+        rows = [_row_to_dict(r) for r in self.engine._conn().execute(sql, args).fetchall()]
+        if TAG_ACTIVE in statuses:
+            overrides = self.engine._conn().execute(
+                "SELECT kind,target_key,value FROM person_tag_overrides WHERE profile_id=?",
+                (profile["profile_id"],),
+            ).fetchall()
+            hidden = {(r["kind"], r["target_key"]) for r in overrides if r["value"] is None}
+            rows = [r for r in rows if (r["kind"], _override_key(r)) not in hidden]
+            manual = [{"tag_id": r["target_key"], "profile_id": profile["profile_id"],
+                       "scope_id": scope_id, "kind": r["kind"], "value": r["value"],
+                       "source": SOURCE_CONFIRMED, "confidence": 1.0, "status": TAG_ACTIVE}
+                      for r in overrides if r["value"] is not None and r["target_key"].startswith("manual:")
+                      and (kind is None or r["kind"] == kind)]
+            rows = manual + rows
+        return rows[:int(limit)] if limit is not None else rows
 
     def _tag_by_id(self, tag_id: str) -> dict | None:
         row = self.engine._conn().execute(

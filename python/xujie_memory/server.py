@@ -291,6 +291,12 @@ class _Handler(BaseHTTPRequestHandler):
     server_version = f"xujie-memory/{__version__}"
     protocol_version = "HTTP/1.1"
 
+    def finish(self) -> None:
+        try:
+            super().finish()
+        finally:
+            self.service.engine.close_thread_connection()
+
     # 单行日志太吵：DSH 每轮都会打一条，讲的东西信息量比 print 还少。
     def log_message(self, fmt: str, *args: Any) -> None:  # noqa: D401
         return
@@ -464,6 +470,12 @@ class _Handler(BaseHTTPRequestHandler):
             return manager.search(
                 scope, _str_field(body, "query", limit=MAX_TEXT_CHARS),
                 int(_num_field(body, "limit", 30, 1, 50)),
+            )
+        if route == "/manage/action":
+            return manager.action(
+                scope, _str_field(body, "action"), _str_field(body, "account_id"),
+                _str_field(body, "target_id"), _str_field(body, "value", limit=MAX_TEXT_CHARS),
+                _str_field(body, "kind"), _str_field(body, "expected", limit=MAX_TEXT_CHARS),
             )
         trace = _str_field(body, "trace_id")
         if route == "/manage/detail":

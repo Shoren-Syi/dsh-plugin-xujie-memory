@@ -33,6 +33,14 @@ try {
   const catalog=await controller.catalog(),scope=catalog.scopes[0].scope_id
   const snapshot=await controller.snapshot(scope)
   check('generated snapshot codec accepts real projected DTO',()=>assert.ok(TYPERT_REMOTE.methods['xujieMemory/snapshot'].result.create().safeParse(snapshot).success))
+  const account=snapshot.cards[0].account_id
+  const managed=await controller.manage(scope,'tag_add',account,'','喜欢探索','habit','')
+  check('generated management codec accepts result',()=>assert.ok(TYPERT_REMOTE.methods['xujieMemory/manage'].result.create().safeParse(managed).success))
+  const withTag=await controller.snapshot(scope)
+  check('manual profile tag persists',()=>assert.ok(withTag.cards[0].tags.some(t=>t.value==='喜欢探索')))
+  await controller.manage(scope,'emotion_set','','开心','80','','')
+  const withEmotion=await controller.snapshot(scope)
+  check('emotion survives strict snapshot codec',()=>assert.ok(TYPERT_REMOTE.methods['xujieMemory/snapshot'].result.create().safeParse(withEmotion).success && withEmotion.emotions.some(e=>e.name==='开心'&&e.intensity===80)))
   const node=snapshot.nodes.find(n=>n.kind==='trace')
   const saved=await controller.edit(scope,node.trace_id,'我喜欢咖啡',node.content_hash)
   check('generated edit codec accepts actual result',()=>assert.ok(TYPERT_REMOTE.methods['xujieMemory/edit'].result.create().safeParse(saved).success))

@@ -379,6 +379,26 @@ CREATE INDEX IF NOT EXISTS idx_tags_profile
 CREATE INDEX IF NOT EXISTS idx_tags_evidence
     ON person_tags(evidence_trace_id);
 
+-- 用户对人设卡的修改独立保存，避免画像重新推导时覆盖。
+CREATE TABLE IF NOT EXISTS person_tag_overrides (
+    profile_id TEXT NOT NULL REFERENCES person_profiles(profile_id),
+    scope_id TEXT NOT NULL REFERENCES scopes(scope_id),
+    kind TEXT NOT NULL,
+    target_key TEXT NOT NULL,
+    value TEXT,
+    updated_at TEXT NOT NULL,
+    PRIMARY KEY (profile_id, kind, target_key)
+);
+
+-- 用户为 AI 指定的情绪强度，独立于会自行衰减的情绪事件。
+CREATE TABLE IF NOT EXISTS ai_emotion_settings (
+    scope_id TEXT NOT NULL REFERENCES scopes(scope_id),
+    name TEXT NOT NULL,
+    intensity INTEGER NOT NULL CHECK(intensity BETWEEN 0 AND 100),
+    updated_at TEXT NOT NULL,
+    PRIMARY KEY (scope_id, name)
+);
+
 -- 认知异常：轻量模型只出**线索**，不下身份结论（4.5）。
 CREATE TABLE IF NOT EXISTS profile_alerts (
     alert_id    TEXT PRIMARY KEY,

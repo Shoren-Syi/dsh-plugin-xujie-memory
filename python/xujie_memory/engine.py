@@ -207,6 +207,18 @@ class Engine:
         """当前时间。全库只通过这里取时间，方便模拟"过了很久"。"""
         return self._clock()
 
+    def close_thread_connection(self) -> None:
+        """请求线程结束时释放它的连接，避免常驻服务累积句柄。"""
+        conn = getattr(self._local, "conn", None)
+        if conn is None:
+            return
+        self._local.conn = None
+        with self._conns_lock:
+            if conn not in self._conns:
+                return
+            self._conns.remove(conn)
+        conn.close()
+
     def close(self) -> None:
         with self._conns_lock:
             conns, self._conns = self._conns, []

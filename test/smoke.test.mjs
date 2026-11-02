@@ -33,8 +33,8 @@ function createHarness() {
       effects.push(dispose)
       return dispose
     },
-    inject(_deps, cb) {
-      cb({ get: () => ({ section: (spec) => sections.push(spec) }) })
+    inject(deps, cb) {
+      if (deps.includes('systemPrompt')) cb({ get: () => ({ section: (spec) => sections.push(spec) }) })
     },
     on(event, cb) {
       handlers.set(event, cb)

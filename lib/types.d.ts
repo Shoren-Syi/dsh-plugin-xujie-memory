@@ -7,7 +7,8 @@ export interface PersonTag { tag_id: string; kind: string; value: string; source
 export interface PersonCard { account_id: string; display_name: string; status: string; tags: PersonTag[] }
 export interface Stats { traces: number; traces_erased: number; events: number; states: number; anchors: number; clarifications_open: number; summaries: number }
 export interface Catalog { scope_mode: string; scopes: ScopeRow[] }
-export interface Snapshot { scope_id: string; scope_mode: string; nodes: Node[]; edges: Edge[]; cards: PersonCard[]; stats: Stats; truncated: boolean; limit: number }
+export interface EmotionSetting { name: string; intensity: number }
+export interface Snapshot { scope_id: string; scope_mode: string; nodes: Node[]; edges: Edge[]; cards: PersonCard[]; stats: Stats; emotions: EmotionSetting[]; truncated: boolean; limit: number }
 export interface SearchHit { trace_id: string; content: string; content_hash: string; score: number; priority: number; anchor: boolean; importance: number; recorded_at: string; layer: string }
 export interface EditResult { changed: boolean; trace: Trace; replaced_trace_id?: string; pending?: number }
 export interface ForgetResult { trace_id: string; erased: boolean; already_erased: boolean; state_keys: string[] }

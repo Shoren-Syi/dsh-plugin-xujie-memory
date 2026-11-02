@@ -237,7 +237,7 @@ class RuleEncoder:
         # 走 preference 自己的槽位与准入流程。
         if (relation == "preference"
                 and not context.get("relation")
-                and not any(w in content for w in _PREFERENCE_WORDS)):
+                and not _has_preference_evidence(content)):
             signals["relation_guessed"] = True
 
         # 「你以后就叫我小鲸」「我以后不喝咖啡了」——
@@ -418,19 +418,19 @@ class RuleEncoder:
             last = (context or {}).get("last_relation")
             if last:
                 return last
-        # 有数量 + 有交易动词 → 这就是一笔账，不管标的是什么。
-        # 「今天给你五个鸡蛋」里的"蛋"不在词表里，此前被判成偏好，
-        # 于是要求补 object，永远提交不了（c05 规则版 1/10 的主因）。
-        # 「先给你一千」没有量词，但"一千"是数量——has_amount 两者都认。
-        # v0.52：日期/时刻里的数字不是数量（「周五前把报告发给张总」）。
+        # 交易动词和数量须相邻；“记日程”“给朋友写卡片”不应与编号拼成欠账。
         plain = strip_time_words(content)
-        if has_amount(plain) and trade_verb(plain):
+        transaction = re.search(
+            r"(?:给|还|补|赔|退|记上|记账)(?:给)?(?:你|我|他|她)?(?:了|上)?\s*"
+            r"(?:\d|[零一二两三四五六七八九十百千万])", plain
+        )
+        if transaction:
             return "debt"
 
         # 「刚才那三尺是两尺」——句子里没有一个领域词，却有两个数量。
         # 这是对账句（在改一笔旧账），不是报一笔新账。脱离上下文不可解，
         # 所以继承上一句的关系；判成 preference 会让整笔账记到另一个键上。
-        if quantity_count(content) >= 2:
+        if quantity_count(content) >= 2 and len(re.sub(r"\s+", "", content)) <= 18:
             last = (context or {}).get("last_relation")
             if last:
                 return last
@@ -452,7 +452,7 @@ class RuleEncoder:
                 "债", "账", "还钱", "还款", "还清", "还了", "还你", "还他",
                 "还她", "两清")):
             return "debt"
-        if has_amount(plain) and any(w in plain for w in
+        if (context or {}).get("last_relation") == "debt" and len(plain) <= 12 and has_amount(plain) and any(w in plain for w in
                ("碗", "袋", "坛", "枚", "本", "瓶", "粮", "免")):
             return "debt"
         if any(w in content for w in ("叫我", "喊我", "称呼", "名字")) or (
@@ -475,7 +475,7 @@ class RuleEncoder:
         # 这种句子没有可继承的关系，返回 None 让调用方按"跟账无关"处理。
         if orphan:
             return None
-        if any(w in content for w in _PREFERENCE_WORDS):
+        if _has_preference_evidence(content):
             return "preference"
         # 纯寒暄/天气：没有偏好词，也没有领域词，属于"与账无关"。
         # 以前会落到兜底的 preference，虽然闸门会打 relation_guessed 不追问，
@@ -486,7 +486,7 @@ class RuleEncoder:
         # 才继承上文关系；「哈哈」「我女朋友叫小美」不再被当成偏好/账。
         # 这些话照样进情节记忆（原文可检索），只是不生成事实。
         last = (context or {}).get("last_relation")
-        if last and has_amount(plain):
+        if last and len(re.sub(r"\s+", "", plain)) <= 12 and has_amount(plain):
             return last
         return None
 
@@ -513,18 +513,11 @@ class RuleEncoder:
                 return slots
             m = re.search(
                 r"(不讨厌|不怕|不再讨厌|不再怕|挺能吃|很能吃|能吃|开始喜欢|爱上了?|"
-                r"不喜欢|不再喜欢|不想吃|最喜欢|最爱|喜欢|讨厌|爱吃|爱喝|怕|习惯|"
+                r"不喜欢|不再喜欢|不想吃|最喜欢|最爱|喜欢|偏爱|偏好|讨厌|爱吃|爱喝|怕|习惯|"
                 r"不吃|不喝|不爱吃|不爱喝|受不了|不爱|忌口)"
                 r"\s*([^\s，。！？,.!?]{1,10})",
                 content,
             )
-            if m:
-                value = m.group(1).replace("爱上了", "爱上")
-                obj = _clean_pref_object(m.group(2))
-                if obj:
-                    slots["value"] = value
-                    slots["object"] = obj
-            return slots
             if m:
                 value = m.group(1).replace("爱上了", "爱上")
                 obj = _clean_pref_object(m.group(2))
@@ -782,11 +775,18 @@ RELATION_HINTS = {
 # 偏好关系的**判定**证据（比 RELATION_HINTS 宽一点：提示词只是收窄候选）。
 # 没有这些词，一句话就不该被判成"在说喜好"——见 `_guess_relation`。
 _PREFERENCE_WORDS = (
-    "喜欢", "讨厌", "爱吃", "爱喝", "受不了", "习惯", "偏好", "最爱", "不爱", "想吃",
+    "喜欢", "讨厌", "爱吃", "爱喝", "受不了", "习惯", "偏爱", "最爱", "不爱", "想吃",
     # 否定形式是最常见的一类（「我不吃辣」），
     # 少了它，这句话会继承上一句的关系——上一句是称呼，它就变成改称呼。
     "不吃", "不喝", "不爱吃", "不爱喝", "怕吃", "忌口", "过敏",
 )
+
+
+def _has_preference_evidence(content: str) -> bool:
+    # “设计偏好编号”是话题标签，不是“我偏好某物”的陈述。
+    if any(re.search(re.escape(word) + r"(?!的)", content) for word in _PREFERENCE_WORDS):
+        return True
+    return bool(re.search(r"(?:^|[，。！？,.!?]|我|本人|自己|更|较|比较)\s*偏好", content))
 
 
 def candidate_relations(content: str, context: dict[str, Any], registry) -> list[str]:
@@ -1199,7 +1199,7 @@ def _clean_pref_object(obj: str) -> str:
     """偏好对象去掉尾巴：「辣了」→「辣」，「喝奶茶」→「奶茶」。"""
     obj = (obj or "").strip()
     # 对象到下一个主语/连词为止：「不吃辣我不吃辣」→「辣」，「猫但是怕狗」→「猫」
-    obj = re.split(r"我|你|他|她|但|因为|所以|而且|不过|可是|也|就|都|还是|和", obj, maxsplit=1)[0]
+    obj = re.split(r"但|因为|所以|而且|不过|可是|(?:我|你|他|她|也|就|都|还是)(?=喜欢|讨厌|不)", obj, maxsplit=1)[0]
     obj = re.sub(r"[了的啊呀呢吧哦啦嘛]+$", "", obj)
     obj = re.sub(r"^(吃|喝|看|玩|听|用|去)(?=..)", "", obj)
     return obj
