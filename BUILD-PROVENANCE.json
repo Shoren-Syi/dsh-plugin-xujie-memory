@@ -1,6 +1,6 @@
 {
   "package": "dsh-plugin-xujie-memory",
-  "version": "0.7.1",
+  "version": "0.7.2",
   "status": "acceptance-candidate-not-desktop-certified",
   "baseline_sha256": "1e5bbc74cd3208be1066c164ecd8560d60a02e8a8be7a042aa4500a0e7b7c410",
   "target_dsh": "0.2.1-rc.5",

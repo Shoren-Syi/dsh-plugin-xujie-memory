@@ -11,6 +11,7 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import test from 'node:test'
 import { apply } from '../lib/index.js'
+import { freePort } from './free-port.mjs'
 
 const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms))
 
@@ -71,7 +72,7 @@ function caller(port, token) {
 
 test('echo: current sentence is never injected back as memory', async (t) => {
   const harness = createHarness()
-  const port = 8793
+  const port = await freePort()
   const dataDir = mkdtempSync(join(tmpdir(), 'xujie-echo-test-'))
   const dbPath = join(dataDir, 'memory.db')
   apply(harness.ctx, {

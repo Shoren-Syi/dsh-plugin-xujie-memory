@@ -101,6 +101,7 @@ export class NeuralEngine {
   private panX = 0
   private panY = 0
   private yawTarget: number | null = null
+  private focusTarget: number | null = null
   private autoRotate = true
   private time = 0
   private last = 0
@@ -190,9 +191,12 @@ export class NeuralEngine {
     this.refreshNeighbours()
     if (idx >= 0 && focus) {
       const target = Math.atan2(-this.nx[idx]!, -this.nz[idx]!)
+      this.autoRotate = false
+      this.yawVel = this.pitchVel = 0
+      this.focusTarget = idx
       if (this.opts.reducedMotion) { this.yaw = target; this.yawTarget = null } else this.yawTarget = target
       this.flash[idx] = 1
-    }
+    } else if (idx < 0) this.focusTarget = null
     this.invalidate()
   }
 
@@ -225,7 +229,7 @@ export class NeuralEngine {
   setAutoRotate(on: boolean): void { this.autoRotate = on && !this.opts.reducedMotion; this.invalidate() }
   get isAutoRotating(): boolean { return this.autoRotate }
   zoomBy(k: number): void { this.zoomAt(this.width / 2, this.height / 2, k) }
-  resetView(): void { this.yaw = 0.55; this.pitch = 0.34; this.zoom = 1; this.panX = 0; this.panY = 0; this.yawTarget = null; this.yawVel = this.pitchVel = 0; this.invalidate() }
+  resetView(): void { this.yaw = 0.55; this.pitch = 0.34; this.zoom = 1; this.panX = 0; this.panY = 0; this.yawTarget = null; this.focusTarget = null; this.yawVel = this.pitchVel = 0; this.invalidate() }
 
   resize(width: number, height: number): void {
     this.dpr = Math.min(2, window.devicePixelRatio || 1)
@@ -401,6 +405,7 @@ export class NeuralEngine {
       }
       this.press = { x: p.x, y: p.y, t: performance.now(), moved: false, button: e.button, shift: e.shiftKey }
       this.yawTarget = null
+      this.focusTarget = null
       this.yawVel = this.pitchVel = 0
     })
     on(c, 'pointermove', e => {
@@ -447,9 +452,6 @@ export class NeuralEngine {
     on(c, 'pointerleave', () => { if (!this.press) { this.hover = -1; this.refreshNeighbours(); this.hideTooltip(); this.invalidate() } })
     on(c, 'contextmenu', e => e.preventDefault())
     on(c, 'wheel', e => {
-      // In the narrow/stacked layout the canvas is pan-y: a plain wheel scrolls the panel instead of
-      // trapping it; pinch (ctrl+wheel) and the toolbar still zoom.
-      if (!e.ctrlKey && getComputedStyle(c).touchAction === 'pan-y') return
       e.preventDefault()
       const p = local(e)
       this.zoomAt(p.x, p.y, Math.exp(-e.deltaY * (e.ctrlKey ? 0.01 : 0.0014)))
@@ -541,6 +543,22 @@ export class NeuralEngine {
         this.yawVel *= decay; this.pitchVel *= decay
       }
       if (this.autoRotate) this.yaw += dt * 0.085
+    }
+    if (this.focusTarget !== null && !dragging) {
+      const i = this.focusTarget
+      const rate = this.opts.reducedMotion ? 1 : Math.min(1, dt * 4.5)
+      const desiredZoom = Math.max(this.zoom, 1.65)
+      this.zoom += (desiredZoom - this.zoom) * rate
+      const cyaw = Math.cos(this.yaw), syaw = Math.sin(this.yaw)
+      const x = this.nx[i]! * cyaw - this.nz[i]! * syaw
+      const z = this.nx[i]! * syaw + this.nz[i]! * cyaw
+      const y = this.ny[i]! * Math.cos(this.pitch) - z * Math.sin(this.pitch)
+      const depth = this.ny[i]! * Math.sin(this.pitch) + z * Math.cos(this.pitch)
+      const scale = this.fBase * this.zoom * 1500 / (1500 + depth)
+      const nextX = -x * scale, nextY = -y * scale
+      this.panX += (nextX - this.panX) * rate
+      this.panY += (nextY - this.panY) * rate
+      if (this.yawTarget === null && Math.abs(desiredZoom - this.zoom) < 0.002 && Math.abs(nextX - this.panX) < 0.5 && Math.abs(nextY - this.panY) < 0.5) this.focusTarget = null
     }
     if (this.opts.reducedMotion) return
     for (let i = 0; i < this.flash.length; i++) if (this.flash[i]! > 0) this.flash[i] = Math.max(0, this.flash[i]! - dt * 1.4)

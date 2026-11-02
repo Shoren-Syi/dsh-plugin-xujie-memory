@@ -1,4 +1,6 @@
-# Xujie Memory 0.7.1 · DSH in-app memory workspace
+# Xujie Memory 0.7.2 · DSH in-app memory workspace
+
+Version 0.7.2 fits the graph into the space available beside the fixed management panel. Selecting a node pauses rotation, zooms toward it, and displays a short preview.
 
 Version 0.7.1 adds editable profile tags, manual clarification or archiving, and configurable AI emotion tendencies. Tag edits do not change original memories. Emotion values are suggestions for response style, not a guarantee of model behavior.
 
@@ -20,7 +22,7 @@ Use the same profile and `dbPath` as 0.6. Before the first old-schema migration,
 
 **The migration backup contains pre-upgrade data. Keep it private.** Forgetting is application-level removal, not secure disk erasure; it does not erase DSH chats, exports, old backups or historical disk/WAL contents.
 
-The graph defaults to the latest 250 original traces plus selected derived nodes. Management search covers all active original traces in the selected memory scope; automatic conversational recall retains its latest-800-candidate limit. Derived facts and summaries are read-only; clarification items can be supplemented or archived. Profile tags can be managed independently of their original evidence.
+The graph defaults to at most 250 original traces, sampling both recent traces and evidence for semantic states, plus selected derived nodes. Management search covers all active original traces in the selected memory scope; automatic conversational recall retains its latest-800-candidate limit. Derived facts and summaries are read-only; clarification items can be supplemented or archived. Profile tags can be managed independently of their original evidence.
 
 Install the package with the same method and profile used for the previous version, then restart DSH. Preserve your data folder and follow `ACCEPTANCE.md` before relying on the upgrade.
 

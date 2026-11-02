@@ -10,6 +10,7 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import test from 'node:test'
 import { apply } from '../lib/index.js'
+import { freePort } from './free-port.mjs'
 
 const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms))
 
@@ -64,7 +65,7 @@ async function waitFor(fn, timeoutMs = 10000) {
 
 test('tools: search / forget / status work against a real kernel', async (t) => {
   const harness = createHarness()
-  const port = 8792
+  const port = await freePort()
   const dataDir = mkdtempSync(join(tmpdir(), 'xujie-tools-test-'))
   const dbPath = join(dataDir, 'memory.db')
   apply(harness.ctx, {

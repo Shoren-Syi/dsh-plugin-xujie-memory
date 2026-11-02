@@ -11,6 +11,7 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import test from 'node:test'
 import { apply } from '../lib/index.js'
+import { freePort } from './free-port.mjs'
 
 const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms))
 
@@ -61,7 +62,7 @@ async function waitFor(fn, timeoutMs = 8000) {
 
 test('bundled kernel injects per-session memory and ignores injected context', async (t) => {
   const harness = createHarness()
-  const port = 8791
+  const port = await freePort()
   const dataDir = mkdtempSync(join(tmpdir(), 'xujie-plugin-test-'))
   const dbPath = join(dataDir, 'memory.db')
   apply(harness.ctx, { endpoint: `http://127.0.0.1:${port}`, dbPath, scope: 'session', pythonPath: process.env.PYTHON })

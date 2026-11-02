@@ -80,6 +80,22 @@ class ManagementRegression(unittest.TestCase):
         states = self.svc.engine._conn().execute("SELECT state_key FROM states WHERE scope_id=? AND state_key LIKE '%|preference|%'", (self.scope,)).fetchall()
         self.assertFalse(any('的照片' in row['state_key'] for row in states))
         self.assertTrue(self.m.search(self.scope, '西湖边')['hits'])
+    def test_attributive_before_a_real_preference_does_not_replace_its_object(self):
+        self.svc.turn('one', '为了自己喜欢的音乐，我很喜欢唱歌', user='owner', context={'peer_id':'assistant'})
+        states = self.svc.engine._conn().execute("SELECT state_key FROM states WHERE scope_id=? AND state_key LIKE '%|preference|%'", (self.scope,)).fetchall()
+        self.assertTrue(any('唱歌' in row['state_key'] for row in states))
+        self.assertFalse(any('的音乐' in row['state_key'] for row in states))
+    def test_ambiguous_or_overlong_preference_objects_are_not_invented(self):
+        texts = ['习惯了我对此表示淡定', '不吃饿呀', '不爱吃', '讨厌别说实话', '讨厌～', '我喜欢甲乙丙丁戊己庚辛壬癸子丑寅卯辰巳午未申酉']
+        for text in texts:
+            self.svc.turn('one', text, user='owner', context={'peer_id':'assistant'})
+        snap = self.m.snapshot(self.scope)
+        contents = [n['content'] for n in snap['nodes'] if n['kind']=='state']
+        self.assertFalse(any(any(word in item for word in ('了我对此','饿','甲乙丙丁')) for item in contents))
+        self.assertTrue(all(self.m.search(self.scope, text)['hits'] for text in texts))
+        self.svc.turn('one', '我习惯喝热茶', user='owner', context={'peer_id':'assistant'})
+        snap = self.m.snapshot(self.scope)
+        self.assertTrue(any(n['kind']=='state' and '热茶' in n['content'] for n in snap['nodes']))
 
     def test_clarification_uses_readable_text_and_links_its_evidence(self):
         self.svc.turn('preference', '我喜欢', user='owner', context={'peer_id':'assistant'})
@@ -232,6 +248,55 @@ class ManagementRegression(unittest.TestCase):
         self.assertTrue(any(n['kind']=='anchor' and n['trace_id']==self.tid for n in snap['nodes']))
         self.assertTrue(any(e['kind']=='summary_input' and e['source']==self.tid for e in snap['edges']))
         self.assertTrue(any(e['kind']=='anchor_projection' and e['source']==self.tid for e in snap['edges']))
+    def test_old_anchor_is_visible_outside_recent_trace_limit(self):
+        self.m.memory.mark(self.scope, self.tid, 5)
+        self.svc.turn('one', '今天在整理照片', user='owner', context={'peer_id':'assistant'})
+        self.svc.engine._conn().execute("UPDATE traces SET recorded_at='2000-01-01T00:00:00Z' WHERE trace_id=?", (self.tid,))
+        snap = self.m.snapshot(self.scope, limit=1)
+        self.assertFalse(any(n['kind']=='trace' and n['trace_id']==self.tid for n in snap['nodes']))
+        self.assertTrue(any(n['kind']=='anchor' and n['trace_id']==self.tid for n in snap['nodes']))
+    def test_old_state_evidence_remains_connected_when_recent_traces_fill_graph(self):
+        self.svc.turn('one', '今天在整理照片', user='owner', context={'peer_id':'assistant'})
+        self.svc.engine._conn().execute("UPDATE traces SET recorded_at='2000-01-01T00:00:00Z' WHERE trace_id=?", (self.tid,))
+        snap = self.m.snapshot(self.scope, limit=2)
+        states = [n for n in snap['nodes'] if n['kind']=='state' and self.tid in n.get('evidence', [])]
+        self.assertTrue(states)
+        self.assertTrue(any(n['kind']=='trace' and n['trace_id']==self.tid for n in snap['nodes']))
+        self.assertTrue(any(e['kind']=='evidence' and e['source']==self.tid and e['target']==states[0]['id'] for e in snap['edges']))
+    def test_activity_requests_are_not_saved_as_names(self):
+        for text in ['下次别忘了叫我一起', '怎么不叫我一起', '记得叫我看看', '有热闹叫我看戏', '以后就没人叫我小名了']:
+            self.svc.turn('one', text, user='owner', context={'peer_id':'assistant'})
+        snap = self.m.snapshot(self.scope)
+        self.assertFalse(any(n['kind']=='state' and '|nickname|' in n['id'] for n in snap['nodes']))
+        self.assertFalse(any(tag['kind']=='address' for card in snap['cards'] for tag in card['tags']))
+        self.svc.turn('one', '以后叫我小鲸', user='owner', context={'peer_id':'assistant'})
+        snap = self.m.snapshot(self.scope)
+        self.assertTrue(any(tag['kind']=='address' and '小鲸' in tag['value'] for card in snap['cards'] for tag in card['tags']))
+        self.svc.turn('one', '不要叫我小鲸，叫我阿蓝', user='owner', context={'peer_id':'assistant'})
+        snap = self.m.snapshot(self.scope)
+        self.assertTrue(any(tag['kind']=='address' and '阿蓝' in tag['value'] for card in snap['cards'] for tag in card['tags']))
+    def test_other_people_and_pet_preferences_do_not_become_owner_preferences(self):
+        for text in ['我家兔子不爱吃胡萝卜', '我哥最喜欢吃馒头', '她喜欢喝咖啡']:
+            self.svc.turn('one', text, user='owner', context={'peer_id':'assistant'})
+        snap = self.m.snapshot(self.scope)
+        states = [n['content'] for n in snap['nodes'] if n['kind']=='state']
+        self.assertFalse(any(any(word in state for word in ('胡萝卜','馒头','咖啡')) for state in states))
+        self.svc.turn('one', '我哥喜欢吃馒头，我喜欢喝茶', user='owner', context={'peer_id':'assistant'})
+        self.svc.turn('one', '我喜欢她', user='owner', context={'peer_id':'assistant'})
+        snap = self.m.snapshot(self.scope)
+        self.assertTrue(any(n['kind']=='state' and '茶' in n['content'] for n in snap['nodes']))
+        self.assertTrue(any(n['kind']=='state' and '她' in n['content'] for n in snap['nodes']))
+    def test_questions_denials_and_common_words_do_not_create_false_facts(self):
+        for text in ['你喜欢喝咖啡吗', '难道你不喜欢甜食', '你爱不爱喝奶茶', '我没有说我不爱喝茶', '我打了一路的哈欠', '我看了一篇流水账文章', '再给你三次机会']:
+            self.svc.turn('one', text, user='owner', context={'peer_id':'assistant'})
+        snap = self.m.snapshot(self.scope)
+        state_texts = [n['content'] for n in snap['nodes'] if n['kind']=='state']
+        self.assertFalse(any(any(word in item for word in ('咖啡','甜食','茶')) for item in state_texts))
+        count = self.svc.engine._conn().execute("SELECT COUNT(*) FROM events WHERE scope_id=? AND state_key LIKE ? AND void=0", (self.scope, '%|debt|%')).fetchone()[0]
+        self.assertEqual(count, 0)
+        self.svc.turn('one', '我欠你五十元', user='owner', context={'peer_id':'assistant'})
+        count = self.svc.engine._conn().execute("SELECT COUNT(*) FROM events WHERE scope_id=? AND state_key LIKE ? AND void=0", (self.scope, '%|debt|%')).fetchone()[0]
+        self.assertGreater(count, 0)
     def test_delete_purges_summary_and_person_card(self):
         summary = SummaryStore(self.svc.engine).create(self.scope,[self.tid])
         self.m.forget(self.scope,self.tid,self.hash)

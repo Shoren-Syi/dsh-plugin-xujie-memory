@@ -53,6 +53,7 @@ import json
 import re
 
 from .engine import canonical_json, digest
+from .detect import address_claim as _address_claim
 
 # 标签来源。顺序即可信度顺序：confirmed > observed > inferred。
 SOURCE_CONFIRMED = "confirmed"
@@ -638,34 +639,12 @@ def _load_value(raw: str | None):
         return None
 
 
-# 「叫我 X」「喊我 X」——在给自己定称呼。
-# 只认祈使句里的这两三个动词，不做句法分析：
-# 「他叫我过去」里的"叫我"不是定称呼，所以要求后面紧跟的字不是方位/动作词。
-_ADDRESS_CLAIM = re.compile(
-    r"(?:就|以后|往后|都)?(?:叫|喊)我(?:作|做)?\s*([^\s，。！？,.!?]{1,8})"
-)
-_ADDRESS_STOP = ("过去", "过来", "回来", "出去", "进来", "一声", "一下")
-# 句末语气词。「以后叫我老板吧」里的"吧"是语气，不是称呼的一部分。
-_TAIL_PARTICLES = "吧呀啊嘛呢哦哈啦"
-
 # 明说不是本人。这几句本身就是线索，不需要别的证据。
 _NOT_SELF = (
     "我是他同事", "我是她同事", "我是他朋友", "我是他哥", "我是他弟",
     "我不是本人", "他不在", "她不在", "我替他", "我帮她", "借用一下",
     "这不是我的号", "不是我的账号",
 )
-
-
-def _address_claim(text: str) -> str | None:
-    """这句话在给自己定什么称呼吗。"""
-    m = _ADDRESS_CLAIM.search(text)
-    if not m:
-        return None
-    value = m.group(1)
-    if any(stop in value for stop in _ADDRESS_STOP):
-        return None
-    value = value.rstrip(_TAIL_PARTICLES)
-    return value or None
 
 
 def _denies_being_self(text: str) -> bool:

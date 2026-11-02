@@ -270,14 +270,9 @@ class RuleEncoder:
             modality = "asserted"
             signals.pop("planned", None)
 
-        # 债**已经成立**（incur），未来词修饰的是还款计划，不是这笔债的模态。
-        #
-        # 「我欠你两袋米，回头还你」——两袋此刻就在账上，
-        # 「回头还」是下一件事。整句按 planned 处理，这笔债一条都记不上。
-        if modality == "planned" and op == "incur":
-            modality = "asserted"
-            signals.pop("planned", None)
         slots = self._extract_slots(content, context, op, relation)
+        if slots.pop("_ambiguous_preference", False):
+            return []
         missing = [k for k in ("quantity", "unit") if slots.get(k) is None]
         if missing:
             signals["missing_slots"] = missing
@@ -422,7 +417,8 @@ class RuleEncoder:
         plain = strip_time_words(content)
         transaction = re.search(
             r"(?:给|还|补|赔|退|记上|记账)(?:给)?(?:你|我|他|她)?(?:了|上)?\s*"
-            r"(?:\d|[零一二两三四五六七八九十百千万])", plain
+            r"(?:\d+(?:\.\d+)?|[零一二两三四五六七八九十百千万]+)\s*"
+            r"(?:元|块钱|块|分钱|袋|碗|坛|瓶|斤|公斤|本|件|枚)", plain
         )
         if transaction:
             return "debt"
@@ -447,14 +443,17 @@ class RuleEncoder:
         #   - 明确的债务词直接算；
         #   - 「还」只认还钱类搭配；
         #   - 量词类单字必须和数量一起出现。
-        if any(w in content for w in
-               ("欠", "借钱", "借了", "借我", "借你", "借他", "借她", "赊",
-                "债", "账", "还钱", "还款", "还清", "还了", "还你", "还他",
-                "还她", "两清")):
+        if (re.search(r"(?<!哈)欠|(?<!流水)账", content) or any(w in content for w in
+               ("借钱", "借了", "借我", "借你", "借他", "借她", "赊",
+                "债", "还钱", "还款", "还清", "还了", "还你", "还他",
+                "还她", "两清"))):
             return "debt"
         if (context or {}).get("last_relation") == "debt" and len(plain) <= 12 and has_amount(plain) and any(w in plain for w in
                ("碗", "袋", "坛", "枚", "本", "瓶", "粮", "免")):
             return "debt"
+        if (any(w in content for w in ("叫我", "喊我")) and not detect.address_claim(content)
+                and not any(w in content for w in ("称呼", "名字", "我叫"))):
+            return None
         if any(w in content for w in ("叫我", "喊我", "称呼", "名字")) or (
             "我叫" in content and "叫你" not in content
         ):
@@ -497,6 +496,7 @@ class RuleEncoder:
         slots: dict[str, Any] = {}
 
         if relation == "preference":
+            content = _self_preference_text(content)
             # 「我最喜欢吃烤鱼」：subject=说话人，object=喜欢的东西。
             # 抽不出来就留空，让闸门判缺槽位——**猜比漏更糟**。
             slots["subject"] = context.get("actor_id", "self")
@@ -514,28 +514,26 @@ class RuleEncoder:
             m = re.search(
                 r"(不讨厌|不怕|不再讨厌|不再怕|挺能吃|很能吃|能吃|开始喜欢|爱上了?|"
                 r"不喜欢|不再喜欢|不想吃|最喜欢|最爱|喜欢|偏爱|偏好|讨厌|爱吃|爱喝|怕|习惯|"
-                r"不吃|不喝|不爱吃|不爱喝|受不了|不爱|忌口)"
-                r"\s*([^\s，。！？,.!?]{1,10})",
+                r"不吃|不喝|不爱吃|不爱喝|受不了|不爱|忌口)(?!的)"
+                r"\s*([^\s，。！？,.!?]+)",
                 content,
             )
             if m:
                 value = m.group(1).replace("爱上了", "爱上")
                 obj = _clean_pref_object(m.group(2))
-                if obj:
+                if obj and _reliable_preference_object(value, obj):
                     slots["value"] = value
                     slots["object"] = obj
+                elif m.group(2):
+                    slots["_ambiguous_preference"] = True
             return slots
         if relation == "nickname":
             # 「你以后就叫我小鲸」——称呼在「叫我」后面。
             # 不抽的话 value 是空的，闸门判缺槽位，一句自我介绍永远落不了库。
             slots["subject"] = context.get("actor_id", "self")
-            m = re.search(r"(?:叫|喊)我\s*(?:作|做)?\s*([^\s，。！？]{1,8})", content)
-            if m:
-                value = m.group(1).rstrip("吧呀啊嘛呢哦哈啦")
-                # 「叫我过去」「叫我一声」不是称呼
-                if value and not any(w in value for w in
-                                     ("过去", "过来", "回来", "一声", "一下")):
-                    slots["value"] = value
+            value = detect.address_claim(content)
+            if value:
+                slots["value"] = value
             return slots
         if op == "correct":
             # 修正句有两个数字，语序有两种：
@@ -782,7 +780,30 @@ _PREFERENCE_WORDS = (
 )
 
 
+_OTHER_PREFERENCE_SUBJECT = re.compile(
+    r"(?:我(?:家|的)?(?:兔子|猫|狗|泰迪|宠物|哥哥|姐姐|弟弟|妹妹|哥|姐|爸|妈|爸爸|妈妈|朋友|家人|孩子|儿子|女儿|老婆|丈夫|妻子|男友|女友)|你|(?<!其)他|她|它)"
+)
+
+
+def _self_preference_text(content: str) -> str:
+    """只屏蔽能明确识别为他人或宠物的分句，保留原话以供检索。"""
+    parts = re.split(r"([，。！？,.!?；;])", content)
+    for i in range(0, len(parts), 2):
+        if re.search(r"(?:没(?:有)?说(?:过)?|并没(?:有)?说|不要认为|别以为)", parts[i]):
+            parts[i] = ""
+            continue
+        match = _OTHER_PREFERENCE_SUBJECT.search(parts[i])
+        if not match:
+            continue
+        if any(word in parts[i][:match.start()] for word in _PREFERENCE_WORDS):
+            continue
+        following_self = parts[i].find("我", match.end())
+        parts[i] = parts[i][following_self:] if following_self >= 0 else ""
+    return "".join(parts)
+
+
 def _has_preference_evidence(content: str) -> bool:
+    content = _self_preference_text(content)
     # “设计偏好编号”是话题标签，不是“我偏好某物”的陈述。
     if any(re.search(re.escape(word) + r"(?!的)", content) for word in _PREFERENCE_WORDS):
         return True
@@ -1193,6 +1214,21 @@ _TIME_WORDS = re.compile(
 def strip_time_words(text: str) -> str:
     """去掉日期/时刻/年龄里的数字，免得被当成数量。"""
     return _TIME_WORDS.sub(" ", text or "")
+
+
+def _reliable_preference_object(value: str, obj: str) -> bool:
+    """无法确定对象时只保留原话，避免把片段提升为事实。"""
+    if len(obj) > 16 or not any(ch.isalnum() for ch in obj):
+        return False
+    if value == "习惯" and obj.startswith("了"):
+        return False
+    if value in ("不吃", "不喝") and obj in ("饿", "饱"):
+        return False
+    if value == "不爱" and obj in ("吃", "喝"):
+        return False
+    if value == "讨厌" and obj.startswith("别说"):
+        return False
+    return obj not in ("这个", "那个", "什么", "这样", "那样", "吗", "么")
 
 
 def _clean_pref_object(obj: str) -> str:

@@ -53,6 +53,7 @@ export function MemoryPanel({ remote }: MemoryPanelProps) {
   const adapter = useMemo(() => new MemoryAdapter(remote), [remote])
   const reducedMotion = usePrefersReducedMotion()
   const fieldRef = useRef<NeuralFieldHandle>(null)
+  const searchRef = useRef<HTMLInputElement>(null)
   const epoch = useRef(0)
   const catalogEpoch = useRef(0)
 
@@ -73,6 +74,9 @@ export function MemoryPanel({ remote }: MemoryPanelProps) {
   const [showPending, setShowPending] = useState(false)
   const [layerFocus, setLayerFocus] = useState<number | null>(null)
   const [autoRotate, setAutoRotate] = useState(true)
+  const autoRotateRef = useRef(true)
+  const resumeRotation = useRef(false)
+  autoRotateRef.current = autoRotate
 
   const [target, setTarget] = useState<Target | null>(null)
   const [trace, setTrace] = useState<Trace | null>(null)
@@ -198,17 +202,29 @@ export function MemoryPanel({ remote }: MemoryPanelProps) {
     setTrace(null); setEditing(false); setConfirmForget(false); setActionFailure(null); setClarificationDraft(''); setManageFailure(null)
     setDetailLoading(next !== null)
     setTarget(next)
+    if (next) {
+      if (autoRotateRef.current) resumeRotation.current = true
+      setAutoRotate(false); fieldRef.current?.setAutoRotate(false)
+    }
   }, [])
+
+  const returnToGraph = useCallback(() => {
+    if (busyRef.current) return
+    selectTarget(null)
+    fieldRef.current?.reset()
+    if (resumeRotation.current && !reducedMotion) { setAutoRotate(true); fieldRef.current?.setAutoRotate(true) }
+    resumeRotation.current = false
+  }, [reducedMotion, selectTarget])
 
   const openTrace = useCallback((id: string) => {
     selectTarget(nodeById.has(id) ? { nodeId: id } : { traceId: id })
   }, [nodeById, selectTarget])
 
   const onFieldSelect = useCallback((id: string | null) => {
-    if (id === null) { if (!editing) selectTarget(null); return }
+    if (id === null) { if (!editing) returnToGraph(); return }
     if (target && 'nodeId' in target && target.nodeId === id) return
     selectTarget({ nodeId: id })
-  }, [editing, target, selectTarget])
+  }, [editing, target, selectTarget, returnToGraph])
 
   const save = async () => {
     if (!scopeId || !trace || trace.trace_id !== traceId || busyRef.current) return
@@ -320,8 +336,8 @@ export function MemoryPanel({ remote }: MemoryPanelProps) {
         <div><dt>待澄清</dt><dd><button type="button" className="xjm-stat-button" aria-expanded={showPending} onClick={() => setShowPending(value => !value)}>{stats.clarifications_open} · {showPending ? '收起' : '查看'}</button></dd></div>
         <div><dt>已忘记</dt><dd>{stats.traces_erased}</dd></div>
       </dl>
-      <p className="xjm-note">语义记忆的 {counts[0]} 个节点包括 {visibleStates} 个图中状态和 {visibleAnchors} 个锚点。全部状态还包含未展示的状态。</p>
-      {snapshot?.truncated && <p className="xjm-note">图中显示最近 {snapshot.limit} 条原话，共 {stats.traces} 条。更早的记录可通过搜索查看与编辑。</p>}
+      <p className="xjm-note">语义记忆的 {counts[0]} 个节点包括 {visibleStates} 个图中状态和 {visibleAnchors} 个锚点。图谱展示部分状态及最多 50 条较早锚点，全部数量见上方统计。</p>
+      {snapshot?.truncated && <p className="xjm-note">图中最多显示 {snapshot.limit} 条原话，包含近期记录与语义状态的证据；全部 {stats.traces} 条原话均可通过搜索查看与编辑。</p>}
     </section>}
     {showPending && stats && <section className="xjm-section" aria-label="待澄清列表">
       <h2 className="xjm-h2">待澄清 · {stats.clarifications_open}</h2>
@@ -549,6 +565,7 @@ export function MemoryPanel({ remote }: MemoryPanelProps) {
       <section className="xjm-stage" aria-label="三层神经记忆图">
         <NeuralField ref={fieldRef} nodes={field.nodes} edges={field.edges} selectedId={selectedGraphId} highlightIds={highlightIds}
           dimmed={Boolean(stageOverlay)} reducedMotion={reducedMotion} captions={captions} onSelect={onFieldSelect}
+          popup={targetNode ? <><span className="xjm-popup-kind">{LAYER_META[layerIndex(targetNode.layer)].name} · {KIND_LABEL[targetNode.kind] ?? targetNode.kind}</span><p>{trace?.content ?? targetNode.content}</p><span className="xjm-popup-hint">详情与管理见右侧</span></> : null}
           label={`三层记忆神经图：语义 ${counts[0]}、情节 ${counts[1]}、工作 ${counts[2]} 个节点，${edgesN} 条关联。拖动旋转，滚轮缩放，方向键也可旋转。`} />
         <div className="xjm-stage-top">
         <header className="xjm-stage-head">
@@ -575,8 +592,10 @@ export function MemoryPanel({ remote }: MemoryPanelProps) {
         {stageOverlay && <div className="xjm-overlay">{stageOverlay}</div>}
       </section>
 
-      <aside className="xjm-inspector" aria-label="记忆检查器">
+      <aside className="xjm-inspector" aria-label="记忆管理">
+        <div className="xjm-drawer-main">
         <div className="xjm-insp-head">
+          <div className="xjm-drawer-title"><div><span>MEMORY SPACE</span><h2>记忆管理</h2></div></div>
           <div className="xjm-scope">
             <label className="xjm-scope-label" htmlFor="xjm-scope">记忆库</label>
             <select id="xjm-scope" className="xjm-select" value={scopeId ?? ''} disabled={!scopes.length || busy !== null}
@@ -587,16 +606,11 @@ export function MemoryPanel({ remote }: MemoryPanelProps) {
           </div>
           <div className="xjm-search">
             <IconSearch />
-            <input type="search" className="xjm-search-input" placeholder="搜索原话，包括图外记录" aria-label="搜索记忆"
+            <input ref={searchRef} type="search" className="xjm-search-input" placeholder="搜索原话，包括图外记录" aria-label="搜索记忆"
               value={query} disabled={!canSearch} onChange={e => setQuery(e.target.value)} onKeyDown={onSearchKey} />
             {searching && <span className="xjm-spinner xjm-spinner-sm" aria-hidden="true" />}
             {query && <button type="button" className="xjm-icon-btn xjm-icon-btn-sm" aria-label="清除搜索" onClick={() => setQuery('')}><IconClose /></button>}
           </div>
-          {!showDetail && !query.trim() && <div className="xjm-tabs" role="tablist" aria-label="检查器视图">
-            <button type="button" role="tab" aria-selected={tab === 'overview'} className="xjm-tab" onClick={() => setTab('overview')}>概览</button>
-            <button type="button" role="tab" aria-selected={tab === 'persona'} className="xjm-tab" onClick={() => setTab('persona')}>人设卡{snapshot?.cards.length ? <span className="xjm-tab-count">{snapshot.cards.length}</span> : null}</button>
-            <button type="button" role="tab" aria-selected={tab === 'emotion'} className="xjm-tab" onClick={() => setTab('emotion')}>AI 情绪</button>
-          </div>}
         </div>
         <div className="xjm-insp-body">
           {manageFailure && <p className="xjm-inline-error" role="alert">{FAILURE_TEXT[manageFailure.kind].title}。{FAILURE_TEXT[manageFailure.kind].body}</p>}
@@ -610,6 +624,16 @@ export function MemoryPanel({ remote }: MemoryPanelProps) {
             : tab === 'emotion' ? renderEmotion()
             : renderOverview()}
         </div>
+        <div className="xjm-drawer-footer">
+          <button type="button" className="xjm-btn" disabled={!canSearch} onClick={() => searchRef.current?.focus()}><IconSearch />搜索记忆</button>
+          <button type="button" className="xjm-btn" disabled={busy !== null} onClick={returnToGraph}>回到全图</button>
+        </div>
+        </div>
+        <nav className="xjm-drawer-nav" aria-label="记忆管理导航">
+          {([['overview', '概览'], ['persona', '人设卡'], ['emotion', 'AI 情绪']] as const).map(([key, label]) =>
+            <button key={key} type="button" className="xjm-nav-item" aria-current={!showDetail && !query.trim() && tab === key ? 'page' : undefined} disabled={busy !== null}
+              onClick={() => { selectTarget(null); setQuery(''); setShowPending(false); setTab(key) }}>{label}</button>)}
+        </nav>
         <div className="xjm-toast-slot" aria-live="polite">{toast && <div className="xjm-toast">{toast}</div>}</div>
       </aside>
     </div>

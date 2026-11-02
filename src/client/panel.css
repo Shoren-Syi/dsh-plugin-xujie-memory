@@ -179,11 +179,6 @@ body[data-ds-dark-theme] .xjm-root { --xjm-sem: #8aaeff; --xjm-epi: #efc683; --x
 .xjm-search-input::placeholder { color: var(--xjm-fg3); opacity: 1; }
 .xjm-search-input::-webkit-search-cancel-button { display: none; }
 .xjm-search-input:disabled { cursor: default; }
-.xjm-tabs { display: flex; gap: 4px; border-bottom: 1px solid var(--xjm-line); }
-.xjm-tab { display: inline-flex; align-items: center; gap: 6px; height: 44px; margin-bottom: -1px; padding: 0 10px; border: 0; border-bottom: 2px solid transparent; background: transparent; color: var(--xjm-fg2); font-size: 14px; cursor: pointer; }
-.xjm-tab:hover { color: var(--xjm-fg); }
-.xjm-tab[aria-selected="true"] { color: var(--xjm-fg); font-weight: 600; border-bottom-color: var(--xjm-fg); }
-.xjm-tab-count { min-width: 22px; padding: 0 6px; border-radius: 11px; background: var(--xjm-hover); font-size: 14px; line-height: 22px; text-align: center; font-weight: 500; }
 .xjm-insp-body { flex: 1 1 auto; min-height: 0; overflow: auto; padding: 14px 14px 72px; scrollbar-gutter: stable; }
 
 .xjm-section + .xjm-section { margin-top: 22px; }
@@ -347,4 +342,44 @@ body[data-ds-dark-theme] .xjm-root { --xjm-sem: #8aaeff; --xjm-epi: #efc683; --x
   .xjm-insp-head { padding: 14px 16px 0; }
   .xjm-insp-body { overflow: visible; padding: 14px 16px 88px; }
   .xjm-toast-slot { position: fixed; left: 16px; right: 16px; bottom: 16px; }
+}
+
+/* 图谱铺满工作区，管理和导航固定显示。 */
+.xjm-root { overflow: hidden; }
+.xjm-shell { position: relative; display: block; height: 100%; min-height: 0; }
+.xjm-stage { position: absolute; inset: 0 364px 0 0; margin: 0; border-radius: 0; }
+.xjm-stage-top { right: 14px; }
+.xjm-inspector {
+  position: absolute; z-index: 5; top: 12px; right: 12px; bottom: 12px;
+  width: min(340px, calc(100% - 24px)); height: auto; min-height: 0;
+  border: 1px solid var(--xjm-line); border-radius: 16px;
+  background: var(--xjm-bg); box-shadow: 0 18px 70px rgba(0, 0, 0, .3);
+  flex-direction: row; overflow: hidden;
+}
+.xjm-drawer-main { display: flex; flex: 1 1 auto; min-width: 0; min-height: 0; flex-direction: column; }
+.xjm-drawer-nav { display: flex; flex: 0 0 76px; flex-direction: column; gap: 6px; padding: 18px 8px; border-left: 1px solid var(--xjm-line); background: color-mix(in srgb, var(--xjm-fg) 3%, var(--xjm-bg)); }
+.xjm-nav-item { min-height: 44px; padding: 6px 3px; border: 0; border-radius: 8px; background: transparent; color: var(--xjm-fg2); font-size: 13px; cursor: pointer; }
+.xjm-nav-item:hover { background: var(--xjm-hover); }
+.xjm-nav-item[aria-current="page"] { background: color-mix(in srgb, var(--xjm-sem) 12%, var(--xjm-bg)); color: var(--xjm-sem); font-weight: 600; }
+.xjm-nav-item:disabled { opacity: .5; cursor: default; }
+.xjm-drawer-footer { display: flex; gap: 8px; padding: 10px 14px; border-top: 1px solid var(--xjm-line); background: var(--xjm-bg); }
+.xjm-drawer-footer .xjm-btn { flex: 1; justify-content: center; }
+.xjm-node-popup { position: absolute; z-index: 4; top: 0; left: 0; width: min(240px, 60%); padding: 12px 14px; visibility: hidden; pointer-events: none; border: 1px solid rgba(174, 196, 232, .23); border-radius: 10px; background: rgba(11, 17, 28, .92); color: #f0f4fc; box-shadow: 0 12px 34px rgba(0,0,0,.4); backdrop-filter: blur(14px); }
+.xjm-node-popup p { margin: 6px 0; overflow: hidden; display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 3; line-height: 1.5; overflow-wrap: anywhere; }
+.xjm-popup-kind { font-size: 12px; color: #b6c9ed; }
+.xjm-popup-hint { font-size: 12px; color: #b0bdcf; }
+.xjm-inspector .xjm-insp-body { padding-bottom: 24px; }
+.xjm-inspector .xjm-toast-slot { right: 90px; bottom: 72px; }
+.xjm-drawer-title { display: flex; align-items: center; justify-content: space-between; padding: 4px 0 7px; }
+.xjm-drawer-title span { font-size: 10px; font-weight: 700; letter-spacing: .16em; color: var(--xjm-fg3); }
+.xjm-drawer-title h2 { margin: 2px 0 0; font-size: 20px; letter-spacing: .03em; }
+.xjm-insp-body { overflow: auto; }
+@container xjm (max-width: 760px) {
+  .xjm-shell { height: 100%; min-height: 0; }
+  .xjm-stage { inset: 0 0 50% 0; height: auto; margin: 0; }
+  .xjm-stage-top { right: 10px; }
+  .xjm-canvas { touch-action: none; }
+  .xjm-inspector { top: auto; left: 8px; right: 8px; bottom: 8px; width: auto; height: min(48%, 460px); }
+  .xjm-insp-body { overflow: auto; }
+  .xjm-toast-slot { position: absolute; }
 }

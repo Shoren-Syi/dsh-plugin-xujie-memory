@@ -76,11 +76,39 @@ class Management:
         limit = max(1, min(500, int(limit)))
         # A short read transaction prevents mixed snapshots during concurrent edits.
         with self.engine._tx():
-            rows = conn.execute(
+            recent = conn.execute(
                 "SELECT trace_id,content,content_hash,recorded_at FROM traces"
                 " WHERE scope_id=? AND erased_at IS NULL"
                 " ORDER BY recorded_at DESC,trace_id LIMIT ?", (scope_id, limit)
             ).fetchall()
+            states = conn.execute(
+                "SELECT state_key,value_json,status,evaluated_as_of FROM states"
+                " WHERE scope_id=? AND status IN ('known','stale','disputed')"
+                " ORDER BY evaluated_as_of DESC,state_key LIMIT ?", (scope_id, limit)
+            ).fetchall()
+            # 为状态保留真实证据的展示空间，避免旧证据被最近原话全部挤出图谱。
+            recent_count = limit - limit // 2
+            rows = list(recent[:recent_count])
+            chosen = {r["trace_id"] for r in rows}
+            for state in states:
+                if len(rows) >= limit:
+                    break
+                source = conn.execute(
+                    "SELECT t.trace_id,t.content,t.content_hash,t.recorded_at FROM events e"
+                    " JOIN event_evidence v ON v.event_id=e.event_id"
+                    " JOIN traces t ON t.trace_id=v.trace_id"
+                    " WHERE e.state_key=? AND e.void=0 AND t.scope_id=? AND t.erased_at IS NULL"
+                    " ORDER BY t.recorded_at DESC,t.trace_id LIMIT 1", (state["state_key"], scope_id),
+                ).fetchone()
+                if source and source["trace_id"] not in chosen:
+                    rows.append(source)
+                    chosen.add(source["trace_id"])
+            for row in recent[recent_count:]:
+                if len(rows) >= limit:
+                    break
+                if row["trace_id"] not in chosen:
+                    rows.append(row)
+                    chosen.add(row["trace_id"])
             weights = self.memory.lifecycle.batch_priority([r["trace_id"] for r in rows])
             nodes, edges = [], []
             visible = {r["trace_id"] for r in rows}
@@ -102,11 +130,23 @@ class Management:
                     nodes.append({**node, "id": wid, "layer": "working", "kind": "recent"})
                     edges.append({"source": r["trace_id"], "target": wid,
                                   "kind": "working_projection"})
-            states = conn.execute(
-                "SELECT state_key,value_json,status,evaluated_as_of FROM states"
-                " WHERE scope_id=? AND status IN ('known','stale','disputed')"
-                " ORDER BY evaluated_as_of DESC,state_key LIMIT ?", (scope_id, limit)
+            # 锚点可能早于最近原话，单独取样才能在语义层看到它们。
+            anchors = conn.execute(
+                "SELECT t.trace_id,t.content,t.content_hash,t.recorded_at FROM traces t"
+                " JOIN lifecycle l ON l.ref_id=t.trace_id AND l.ref_type='trace'"
+                " WHERE t.scope_id=? AND t.erased_at IS NULL AND l.scope_id=? AND l.anchor=1"
+                " ORDER BY t.recorded_at DESC,t.trace_id LIMIT 50", (scope_id, scope_id),
             ).fetchall()
+            anchor_weights = self.memory.lifecycle.batch_priority([r["trace_id"] for r in anchors])
+            for r in anchors:
+                if r["trace_id"] in visible:
+                    continue
+                w = anchor_weights.get(r["trace_id"], {})
+                nodes.append({"id": "anchor:" + r["trace_id"], "trace_id": r["trace_id"],
+                              "layer": "semantic", "kind": "anchor", "content": r["content"],
+                              "content_hash": r["content_hash"], "recorded_at": r["recorded_at"],
+                              "importance": w.get("base", 1), "anchor": True,
+                              "priority": w.get("priority", 0), "editable": True})
             for r in states:
                 evidence = conn.execute(
                     "SELECT DISTINCT v.trace_id FROM event_evidence v"

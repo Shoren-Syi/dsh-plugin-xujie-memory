@@ -48,6 +48,20 @@ CN_DIGITS = {
 _CN_NUM_CHARS = "零一二两三四五六七八九十百千万亿"
 
 
+def address_claim(text: str) -> str | None:
+    """提取明确的自称；涉及邀约或动作的「叫我」不能作为称呼。"""
+    for match in re.finditer(r"(?:叫|喊)我(?:作|做)?\s*([^\s，。！？,.!?]{1,8})", text):
+        before = text[max(0, match.start() - 6):match.start()]
+        value = match.group(1).rstrip("吧呀啊嘛呢哦哈啦")
+        if before.endswith(("不", "别", "不要", "别再", "没人", "没有人", "无人", "从未", "没有")):
+            continue
+        if value.startswith(("过去", "过来", "回来", "出去", "进来", "一声", "一下", "一起", "看看", "看戏")):
+            continue
+        if value and value != "了":
+            return value
+    return None
+
+
 def parse_number(text: str) -> int | None:
     """抽出第一个数。阿拉伯优先（支持小数与万/亿），其次中文数字。"""
     m = re.search(r"(\d+(?:\.\d+)?)\s*([万亿])", text)

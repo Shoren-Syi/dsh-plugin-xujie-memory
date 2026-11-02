@@ -5,5 +5,5 @@ function clean(dir){for(const entry of readdirSync(dir,{withFileTypes:true})){co
 for(const dir of ['python','runtime','lib','src','scripts','test','vendor'])clean(join(root,dir))
 for(const name of ['lib/index.js','lib/controller.js','lib/client.js','lib/typert.host.js','lib/typert.remote-client.js','python/xujie_memory/management.py','ACCEPTANCE.md'])if(!existsSync(join(root,name)))throw new Error('Missing release artifact: '+name)
 const m=JSON.parse(readFileSync(join(root,'package.json'),'utf8'))
-if(m.version!=='0.7.1'||m.engines.dsh!=='0.2.1-rc.5')throw new Error('Unreviewed package/host version')
+if(m.version!=='0.7.2'||m.engines.dsh!=='0.2.1-rc.5')throw new Error('Unreviewed package/host version')
 console.log('Release artifacts verified; Python bytecode caches excluded.')

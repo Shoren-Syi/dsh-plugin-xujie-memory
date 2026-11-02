@@ -6,6 +6,7 @@ import {spawn} from 'node:child_process'
 import {once} from 'node:events'
 import {apply} from '../lib/index.js'
 import {TYPERT_REMOTE} from '../lib/typert.remote-client.js'
+import {NeuralEngine} from '../src/client/neural/engine.ts'
 const dir=mkdtempSync(join(tmpdir(),'xujie-node-'))
 const token='isolated-test-token'
 writeFileSync(join(dir,'token'),token,{mode:0o600})
@@ -15,6 +16,22 @@ let checks=0
 const check=(label,fn)=>{fn();checks++;console.log('PASS',label)}
 const cleanups=[]
 try {
+  const drawing = {createRadialGradient:()=>({addColorStop(){}}),fillRect(){}}
+  const canvas = {getContext:()=>drawing,addEventListener(){},removeEventListener(){},style:{}}
+  globalThis.document = {createElement:()=>({getContext:()=>drawing})}
+  globalThis.cancelAnimationFrame = () => {}
+  const graph = new NeuralEngine(canvas,{hidden:true,dataset:{}},{reducedMotion:false,onSelect(){},layerCaptions:['','','']})
+  graph.setData([{id:'memory',layer:1,derived:false,weight:.5,label:'测试原话',kindLabel:'原话'}],[])
+  graph.setSelected('memory')
+  for(let i=0;i<300;i++)graph.step(1/60)
+  const focused=graph.cameraState()
+  for(let i=0;i<120;i++)graph.step(1/60)
+  check('selecting a memory stops rotation and zooms the camera',()=>{assert.equal(graph.isAutoRotating,false);assert.ok(focused.zoom>1.6);assert.ok(Math.abs(graph.cameraState().yaw-focused.yaw)<.001)})
+  graph.resetView()
+  check('reset returns the camera to the full graph',()=>assert.equal(graph.cameraState().zoom,1))
+  graph.dispose()
+  delete globalThis.document
+  delete globalThis.cancelAnimationFrame
   let text='';const port=await new Promise((resolve,reject)=>{const timeout=setTimeout(()=>reject(new Error('kernel startup timeout')),10000);kernel.stdout.on('data',chunk=>{text+=chunk;if(text.includes('\n')){clearTimeout(timeout);resolve(Number(text.trim().split('\n')[0]))}});kernel.once('error',reject);kernel.once('exit',code=>{if(!text)reject(new Error('kernel early exit '+code))})})
   const endpoint=`http://127.0.0.1:${port}`
   const handlers=new Map(),tools=new Map();let section
