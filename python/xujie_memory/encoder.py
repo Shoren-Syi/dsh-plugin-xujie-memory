@@ -273,6 +273,10 @@ class RuleEncoder:
         slots = self._extract_slots(content, context, op, relation)
         if slots.pop("_ambiguous_preference", False):
             return []
+        # 口语里省略喜好对象很常见；保留原话，不猜对象也不生成无意义的澄清。
+        if (relation == 'preference' and not slots.get('object') and not context.get('relation')
+                and not re.search(r'我\s*(?:喜欢|讨厌|偏爱|偏好|爱吃|爱喝|不喜欢)', content)):
+            return []
         missing = [k for k in ("quantity", "unit") if slots.get(k) is None]
         if missing:
             signals["missing_slots"] = missing
@@ -443,10 +447,11 @@ class RuleEncoder:
         #   - 明确的债务词直接算；
         #   - 「还」只认还钱类搭配；
         #   - 量词类单字必须和数量一起出现。
-        if (re.search(r"(?<!哈)欠|(?<!流水)账", content) or any(w in content for w in
-               ("借钱", "借了", "借我", "借你", "借他", "借她", "赊",
-                "债", "还钱", "还款", "还清", "还了", "还你", "还他",
-                "还她", "两清"))):
+        if (detect.has_owed_cue(content) or re.search(r"(?<!流水)账", content)
+                or re.search(r"还了(?=你|我|他|她|钱|点|些|[0-9零一二两三四五六七八九十百千万])", content)
+                or any(w in content for w in
+                       ("借钱", "借了", "借我", "借你", "借他", "借她", "赊",
+                        "债", "还钱", "还款", "还清", "还你", "还他", "还她", "两清"))):
             return "debt"
         if (context or {}).get("last_relation") == "debt" and len(plain) <= 12 and has_amount(plain) and any(w in plain for w in
                ("碗", "袋", "坛", "枚", "本", "瓶", "粮", "免")):
@@ -454,9 +459,9 @@ class RuleEncoder:
         if (any(w in content for w in ("叫我", "喊我")) and not detect.address_claim(content)
                 and not any(w in content for w in ("称呼", "名字", "我叫"))):
             return None
-        if any(w in content for w in ("叫我", "喊我", "称呼", "名字")) or (
-            "我叫" in content and "叫你" not in content
-        ):
+        if (any(w in content for w in ("叫我", "喊我", "称呼"))
+                or re.search(r"我(?:的)?名字(?:叫|是)", content)
+                or ("我叫" in content and "叫你" not in content)):
             return "nickname"
         # 偏好必须有**正面证据**。
         #
@@ -1219,6 +1224,9 @@ def strip_time_words(text: str) -> str:
 def _reliable_preference_object(value: str, obj: str) -> bool:
     """无法确定对象时只保留原话，避免把片段提升为事实。"""
     if len(obj) > 16 or not any(ch.isalnum() for ch in obj):
+        return False
+    # 书名内部的“喜欢”不是偏好动词，截出不完整书名时不能生成事实。
+    if obj.count('《') != obj.count('》'):
         return False
     if value == "习惯" and obj.startswith("了"):
         return False

@@ -1,4 +1,6 @@
 import json
+import datetime
+from concurrent.futures import ThreadPoolExecutor
 import sys
 import tempfile
 import threading
@@ -14,6 +16,9 @@ from xujie_memory.server import MemoryService, serve
 from xujie_memory.management import Management, ManagementError
 from xujie_memory.summary import SummaryStore
 from xujie_memory.profile import ProfileStore
+from xujie_memory.episode_compaction import compact_recall, compact_session
+from xujie_memory.qq_budget import QQBudget, BudgetPolicy, BudgetDenied
+from xujie_memory.qq_settings import QQSettings
 
 class ManagementRegression(unittest.TestCase):
     def setUp(self):
@@ -43,6 +48,304 @@ class ManagementRegression(unittest.TestCase):
         self.assertEqual(self.m.search(other,'吃辣')['hits'],[])
     def test_cross_session_user_scope(self):
         self.assertEqual(self.scope,self.svc.scope_of('two','owner'))
+
+    def test_context_hints_do_not_cross_sessions_in_a_shared_memory_scope(self):
+        self.svc.turn('debt-session', '我欠你五元。', user='same-user', context={'peer_id': 'assistant'})
+        scope = self.svc.scope_of('debt-session', 'same-user')
+        ingest = self.svc.orchestrator.ingest
+        self.assertEqual(ingest._context_hint(scope, 'debt-session')[0], 'debt')
+        self.assertEqual(ingest._context_hint(scope, 'other-session'), (None, {}))
+        self.svc.turn('preference-session', '我喜欢茉莉花茶。', user='same-user')
+        self.assertEqual(ingest._context_hint(scope, 'debt-session')[0], 'debt')
+        self.assertEqual(ingest._context_hint(scope, 'preference-session')[0], 'preference')
+        self.assertEqual(ingest._context_hint(scope, 'other-session'), (None, {}))
+        result = self.svc.turn('other-session', '是的，他是一个电影演员。', user='same-user')
+        self.assertFalse(result['clarifications'])
+        self.assertFalse(any(item['relation'] == 'preference' and item['decision'] == 'pending'
+                             for item in result['outcomes']))
+
+    def test_shared_user_scope_keeps_each_turn_session(self):
+        self.svc.turn('two', '周末计划去爬山', user='owner')
+        conn = self.svc.engine._conn()
+        rows = conn.execute('SELECT content,context_ref FROM traces WHERE scope_id=?', (self.scope,)).fetchall()
+        sessions = {row['content']: json.loads(row['context_ref'])['_xjm_session'] for row in rows}
+        self.assertEqual(sessions['我不吃辣'], 'one')
+        self.assertEqual(sessions['周末计划去爬山'], 'two')
+        changed = self.m.edit(self.scope, self.tid, '我喜欢微辣', self.hash)
+        replacement = self.svc.engine.get_trace(changed['trace']['trace_id'])
+        self.assertEqual(json.loads(replacement['context_ref'])['_xjm_session'], 'one')
+
+    def test_session_excerpt_is_generated_without_crossing_sessions_and_forgotten(self):
+        for i in range(16):
+            self.svc.turn('trip', '我们看《西湖之行》。湖边风景很美，沿途还看到很多树。', user='traveller')
+        scope = self.svc.scope_of('trip', 'traveller')
+        conn = self.svc.engine._conn()
+        rows = conn.execute("SELECT * FROM summaries WHERE scope_id=? AND lifecycle_state='active'", (scope,)).fetchall()
+        self.assertEqual(len(rows), 1)
+        refs = json.loads(rows[0]['input_refs_json'])
+        self.assertEqual(len(refs), 8)
+        self.assertTrue(all(json.loads(self.svc.engine.get_trace(tid)['context_ref'])['_xjm_session'] == 'trip' for tid in refs))
+        related = [{'trace_id': tid, 'content': self.svc.engine.get_trace(tid)['content'], 'kind': 'related'} for tid in refs[:2]]
+        compressed = compact_recall(self.svc.engine, scope, related, '西湖在哪', 500)
+        self.assertEqual(len(compressed), 1)
+        self.assertIn('会话片段摘录', compressed[0]['content'])
+        self.assertIn('会话片段摘录', self.svc.context('trip', '西湖', user='traveller')['context'])
+        item = self.m.detail(scope, refs[0])['trace']
+        self.m.forget(scope, refs[0], item['content_hash'])
+        archived = conn.execute('SELECT text,lifecycle_state FROM summaries WHERE summary_id=?', (rows[0]['summary_id'],)).fetchone()
+        self.assertEqual((archived['text'], archived['lifecycle_state']), ('', 'archived'))
+
+    def test_editing_summary_evidence_removes_outdated_excerpt(self):
+        for _ in range(16):
+            self.svc.turn('edit-episode', '我喜欢《三体》。这部小说让我印象深刻。', user='editor')
+        scope = self.svc.scope_of('edit-episode', 'editor')
+        conn = self.svc.engine._conn()
+        summary = conn.execute("SELECT summary_id,input_refs_json FROM summaries WHERE scope_id=? AND lifecycle_state='active'", (scope,)).fetchone()
+        self.assertIsNotNone(summary)
+        trace_id = json.loads(summary['input_refs_json'])[0]
+        trace = self.m.detail(scope, trace_id)['trace']
+        self.m.edit(scope, trace_id, '我现在不喜欢《三体》。', trace['content_hash'])
+        old = conn.execute('SELECT text,lifecycle_state FROM summaries WHERE summary_id=?', (summary['summary_id'],)).fetchone()
+        self.assertEqual((old['text'], old['lifecycle_state']), ('', 'archived'))
+        self.assertNotIn('会话片段摘录', self.svc.context('edit-episode', '三体', user='editor')['context'])
+
+    def test_excerpt_scan_advances_past_old_ineligible_records(self):
+        scope = self.svc.scope_of('long-session', 'scan-user')
+        conn = self.svc.engine._conn()
+        for index in range(144):
+            content = ('关于普通话题的记录。' if index < 128 else '我们讨论《同一部电影》。还有其他细节。')
+            conn.execute(
+                'INSERT INTO traces(trace_id,scope_id,source_ref,actor_id,source_kind,content,content_hash,recorded_at,context_ref)'
+                ' VALUES(?,?,?,?,?,?,?,?,?)',
+                (f'scan-{index:03}', scope, f'ref-{index:03}', 'user', 'user', content,
+                 f'hash-{index:03}', f'2026-01-01T00:00:{index:03}', json.dumps({'_xjm_session': 'long-session'})),
+            )
+        self.assertIsNone(compact_session(self.svc.engine, scope, 'long-session'))
+        result = compact_session(self.svc.engine, scope, 'long-session')
+        self.assertIsNotNone(result)
+        row = conn.execute('SELECT input_refs_json FROM summaries WHERE summary_id=?', (result,)).fetchone()
+        self.assertTrue(all(int(ref.split('-')[1]) >= 128 for ref in json.loads(row['input_refs_json'])))
+
+    def test_invalid_excerpt_does_not_block_safe_reprocessing(self):
+        for _ in range(16):
+            self.svc.turn('retry-episode', '我读《三体》。这本书很有趣。', user='retry-reader')
+        scope = self.svc.scope_of('retry-episode', 'retry-reader')
+        conn = self.svc.engine._conn()
+        first = conn.execute("SELECT summary_id FROM summaries WHERE scope_id=? AND lifecycle_state='active'", (scope,)).fetchone()[0]
+        conn.execute("UPDATE summaries SET validation_status='failed' WHERE summary_id=?", (first,))
+        replacement = compact_session(self.svc.engine, scope, 'retry-episode')
+        self.assertIsNotNone(replacement)
+        self.assertNotEqual(first, replacement)
+        self.assertEqual(conn.execute('SELECT validation_status FROM summaries WHERE summary_id=?', (replacement,)).fetchone()[0], 'ok')
+
+    def test_different_sessions_are_never_compacted_together(self):
+        for i in range(16):
+            self.svc.turn('left' if i % 2 == 0 else 'right', '我们去看电影。晚一点再讨论剧情。', user='viewer')
+        scope = self.svc.scope_of('left', 'viewer')
+        count = self.svc.engine._conn().execute('SELECT COUNT(*) FROM summaries WHERE scope_id=?', (scope,)).fetchone()[0]
+        self.assertEqual(count, 0)
+
+    def test_excerpt_does_not_drop_numeric_details(self):
+        for i in range(16):
+            self.svc.turn('prices', f'我买了一本书。价格是{i + 10}元。', user='reader')
+        scope = self.svc.scope_of('prices', 'reader')
+        count = self.svc.engine._conn().execute('SELECT COUNT(*) FROM summaries WHERE scope_id=?', (scope,)).fetchone()[0]
+        self.assertEqual(count, 0)
+
+    def test_two_corroborating_title_mentions_can_form_an_excerpt(self):
+        texts = ['今天去了公园。看到了很多花。', '我读《三体》。设定很有趣。',
+                 '下午要去买菜。记得带购物袋。', '这次重读《三体》。我关注人物的选择。']
+        texts += ['天气不错。想去走走。'] * 12
+        for text in texts:
+            self.svc.turn('two-mentions', text, user='two-reader')
+        scope = self.svc.scope_of('two-mentions', 'two-reader')
+        rows = self.svc.engine._conn().execute("SELECT input_refs_json FROM summaries WHERE scope_id=? AND lifecycle_state='active'", (scope,)).fetchall()
+        self.assertEqual(len(rows), 1)
+        refs = json.loads(rows[0]['input_refs_json'])
+        self.assertEqual(len(refs), 2)
+        self.assertTrue(all('《三体》' in self.svc.engine.get_trace(ref)['content'] for ref in refs))
+
+    def test_excerpt_excludes_unrelated_turns_in_same_window(self):
+        texts = [
+            '我读《三体》。故事背景很宏大。', '今天给小狗打了疫苗。明天还要观察。',
+            '《三体》让我印象深刻。故事中的文明很神秘。', '午餐吃了番茄面。味道有点酸。',
+            '我想重读《三体》。这次想注意人物细节。', '下午准备开会。需要先整理材料。',
+            '《三体》的情节很吸引人。读完会推荐给朋友。', '周末要去修自行车。车胎有点漏气。',
+            '最近在练钢琴。每天坚持半小时。', '天气变凉了。晚上记得添衣。',
+            '想整理旧照片。可能需要几个小时。', '桌上的植物长高了。下周需要换盆。',
+            '明天计划去散步。顺便买些水果。', '今天早睡。明天还要工作。',
+            '最近看了一部纪录片。内容很有趣。', '这周需要洗衣服。',
+        ]
+        for text in texts:
+            self.svc.turn('mixed-events', text, user='event-reader')
+        scope = self.svc.scope_of('mixed-events', 'event-reader')
+        rows = self.svc.engine._conn().execute("SELECT text,input_refs_json FROM summaries WHERE scope_id=? AND lifecycle_state='active'", (scope,)).fetchall()
+        self.assertEqual(len(rows), 1)
+        refs = json.loads(rows[0]['input_refs_json'])
+        self.assertEqual(len(refs), 4)
+        self.assertTrue(all('《三体》' in self.svc.engine.get_trace(ref)['content'] for ref in refs))
+        self.assertNotIn('小狗', rows[0]['text'])
+        self.assertNotIn('番茄面', rows[0]['text'])
+
+    def test_excerpt_does_not_turn_questions_into_statements(self):
+        texts = ['你看过《三体》吗？', '我读过《三体》。故事很有趣。',
+                 '《三体》的作者是谁？', '《三体》的设定很特别。以后再讨论。']
+        texts += ['今天的天气很好。可以出去散步。'] * 12
+        for text in texts:
+            self.svc.turn('question-episode', text, user='question-reader')
+        scope = self.svc.scope_of('question-episode', 'question-reader')
+        rows = self.svc.engine._conn().execute("SELECT text,input_refs_json FROM summaries WHERE scope_id=? AND lifecycle_state='active'", (scope,)).fetchall()
+        # 带未来条件的原话不应被截断成经过校验的摘要。
+        self.assertEqual(rows, [])
+
+    def test_excerpt_excludes_question_evidence(self):
+        texts = ['你看过《三体》吗？', '我读过《三体》。故事很有趣。',
+                 '《三体》的作者是谁？', '《三体》的设定很特别。故事背景很大。']
+        texts += ['今天的天气很好。可以出去散步。'] * 12
+        for text in texts:
+            self.svc.turn('question-filter', text, user='question-reader')
+        scope = self.svc.scope_of('question-filter', 'question-reader')
+        row = self.svc.engine._conn().execute("SELECT text,input_refs_json FROM summaries WHERE scope_id=? AND lifecycle_state='active'", (scope,)).fetchone()
+        self.assertIsNotNone(row)
+        refs = json.loads(row['input_refs_json'])
+        self.assertEqual(len(refs), 2)
+        self.assertTrue(all('？' not in self.svc.engine.get_trace(ref)['content'] for ref in refs))
+        self.assertNotIn('作者是谁', row['text'])
+
+    def test_excerpt_keeps_the_sentence_with_the_actual_title(self):
+        texts = ['今天听了歌。《你的背包》的旋律很动人。'] * 16
+        for text in texts:
+            self.svc.turn('music-event', text, user='music-reader')
+        scope = self.svc.scope_of('music-event', 'music-reader')
+        row = self.svc.engine._conn().execute("SELECT text FROM summaries WHERE scope_id=? AND lifecycle_state='active'", (scope,)).fetchone()
+        self.assertIsNotNone(row)
+        self.assertIn('《你的背包》的旋律很动人', row['text'])
+        self.assertNotIn('今天听了歌', row['text'])
+
+    def test_unrelated_topics_are_not_combined_into_an_excerpt(self):
+        subjects = ['西湖游船', '量子计算', '生日蛋糕', '小狗疫苗', '职场面试', '烹饪茄子', '钢琴练习', '自行车胎']
+        for _ in range(2):
+            for subject in subjects:
+                self.svc.turn('mixed', f'今天说说{subject}。关于{subject}有些想法。', user='mixed-viewer')
+        scope = self.svc.scope_of('mixed', 'mixed-viewer')
+        count = self.svc.engine._conn().execute('SELECT COUNT(*) FROM summaries WHERE scope_id=?', (scope,)).fetchone()[0]
+        self.assertEqual(count, 0)
+
+    def test_qq_budget_reserves_before_call_and_keeps_unknown_usage(self):
+        budget = QQBudget(self.svc.engine)
+        policy = BudgetPolicy(per_request=200, daily=200, monthly=300, input_price=1_000_000, output_price=1_000_000, daily_calls=3, cache_price=100_000)
+        today = datetime.datetime(2026, 11, 3, tzinfo=datetime.timezone.utc)
+        budget.configure(self.scope, policy)
+        first = budget.reserve(self.scope, 'chat', 50, 50, now=today)
+        second = budget.reserve(self.scope, 'qzone', 50, 50, now=today)
+        with self.assertRaises(BudgetDenied):
+            budget.reserve(self.scope, 'proactive', 1, 1, now=today)
+        self.assertEqual(budget.settle(first, 20, 10, cached_tokens=10), 31)
+        third = budget.reserve(self.scope, 'chat', 30, 30, now=today)
+        budget.cancel_unstarted(third)
+        row = self.svc.engine._conn().execute('SELECT status,amount FROM qq_budget_calls WHERE call_id=?', (second,)).fetchone()
+        self.assertEqual((row['status'], row['amount']), ('reserved', 100))
+        with self.assertRaises(ValueError):
+            budget.settle(first, 20, 10)
+
+    def test_qq_budget_concurrent_reservations_cannot_exceed_limit(self):
+        policy = BudgetPolicy(per_request=100, daily=100, monthly=100, input_price=1_000_000, output_price=1_000_000, daily_calls=10)
+        now = datetime.datetime(2026, 11, 3, tzinfo=datetime.timezone.utc)
+        QQBudget(self.svc.engine).configure(self.scope, policy)
+        def reserve():
+            try:
+                return QQBudget(self.svc.engine).reserve(self.scope, 'chat', 50, 50, now=now)
+            except BudgetDenied:
+                return None
+            finally:
+                self.svc.engine.close_thread_connection()
+        with ThreadPoolExecutor(max_workers=4) as pool:
+            results = list(pool.map(lambda _: reserve(), range(4)))
+        self.assertEqual(sum(bool(value) for value in results), 1)
+
+    def test_qq_budget_keeps_reservation_when_cache_price_unknown(self):
+        budget = QQBudget(self.svc.engine)
+        policy = BudgetPolicy(per_request=100, daily=100, monthly=100, input_price=1_000_000, output_price=1_000_000, daily_calls=2)
+        with self.assertRaises(BudgetDenied):
+            budget.reserve(self.scope, 'chat', 40, 40)
+        budget.configure(self.scope, policy)
+        call = budget.reserve(self.scope, 'chat', 40, 40)
+        with self.assertRaisesRegex(ValueError, '缓存价格未知'):
+            budget.settle(call, 10, 10, cached_tokens=5)
+        row = self.svc.engine._conn().execute('SELECT status,amount FROM qq_budget_calls WHERE call_id=?', (call,)).fetchone()
+        self.assertEqual((row['status'], row['amount']), ('reserved', 80))
+
+    def test_qq_space_and_chat_have_separate_activity_limits(self):
+        budget = QQBudget(self.svc.engine)
+        policy = BudgetPolicy(per_request=100, daily=1000, monthly=1000, input_price=1_000_000, output_price=1_000_000, daily_calls=10)
+        budget.configure(self.scope, policy)
+        budget.configure_activity(self.scope, 'qzone', 1)
+        budget.reserve(self.scope, 'qzone', 5, 5)
+        with self.assertRaisesRegex(BudgetDenied, '该活动'):
+            budget.reserve(self.scope, 'qzone', 5, 5)
+        self.assertTrue(budget.reserve(self.scope, 'chat', 5, 5))
+
+    def test_qq_settings_hide_token_and_require_budget_to_enable(self):
+        store = QQSettings(self.svc.engine)
+        settings = {'enabled': True, 'wsUrl': 'ws://127.0.0.1:3001', 'httpUrl': 'http://127.0.0.1:3000',
+                    'selfId': '99', 'privateAllow': ['10'], 'groupAllow': [], 'requireMention': True,
+                    'provider': 'deepseek', 'model': 'test', 'maxTokens': 100, 'accessToken': 'secret-test'}
+        with self.assertRaisesRegex(ValueError, '预算'):
+            store.save(self.scope, settings)
+        settings['policy'] = {'per_request': 100, 'daily': 1000, 'monthly': 5000, 'input_price': 1000000, 'output_price': 1000000, 'daily_calls': 10}
+        store.save(self.scope, settings)
+        public = store.get(self.scope)
+        self.assertTrue(public['has_token'])
+        self.assertNotIn('secret-test', json.dumps(public))
+        self.assertEqual(store.active()['accessToken'], 'secret-test')
+        settings.pop('accessToken')
+        store.save(self.scope, settings)
+        self.assertEqual(store.active()['accessToken'], 'secret-test')
+        settings['enabled'] = False
+        settings['accessToken'] = ''
+        store.save(self.scope, settings)
+        self.assertIsNone(store.active())
+        self.assertFalse(store.get(self.scope)['has_token'])
+    def test_qq_schedule_requires_allowlisted_target_and_activity_limit(self):
+        store = QQSettings(self.svc.engine)
+        raw = {'privateAllow': ['10'], 'activityLimits': {'proactive': 1, 'qzone': 1},
+               'schedule': {'proactive': {'enabled': True, 'target': '10', 'intervalMinutes': 60, 'prompt': '问候'},
+                            'qzone': {'enabled': True, 'intervalMinutes': 120, 'prompt': '分享', 'visibility': 64}}}
+        store.save(self.scope, raw)
+        self.assertEqual(store.get(self.scope)['settings']['schedule']['qzone']['visibility'], 64)
+        raw['schedule']['proactive']['target'] = '11'
+        with self.assertRaisesRegex(ValueError, '白名单'):
+            store.save(self.scope, raw)
+        raw['schedule']['proactive'].update(channel='group', target='20')
+        with self.assertRaisesRegex(ValueError, '白名单'):
+            store.save(self.scope, raw)
+        raw['groupAllow'] = ['20']
+        store.save(self.scope, raw)
+        self.assertEqual(store.get(self.scope)['settings']['schedule']['proactive']['channel'], 'group')
+        raw['schedule']['qzone']['intervalMinutes'] = 1
+        with self.assertRaisesRegex(ValueError, '间隔'):
+            store.save(self.scope, raw)
+        raw['schedule']['qzone']['intervalMinutes'] = 120
+        del raw['activityLimits']['qzone']
+        with self.assertRaisesRegex(ValueError, '次数上限'):
+            store.save(self.scope, raw)
+
+    def test_other_people_names_do_not_create_user_name_clarifications(self):
+        for text in ['知道，他的日文名字是やました よりえ。', '这个名字听起来更像是一家公司。']:
+            result = self.svc.turn('names', text, user='name-reader')
+            self.assertFalse(result['clarifications'])
+        result = self.svc.turn('names', '我的名字叫小鲸。', user='name-reader')
+        self.assertTrue(any(item['relation'] == 'nickname' and item['decision'] == 'commit' for item in result['outcomes']))
+
+    def test_elliptical_preferences_remain_searchable_without_false_clarifications(self):
+        examples = ['对，超级喜欢，经典就是无法超越的，你说对吧', '看后我也很喜欢。', '他呀，我也特别喜欢。']
+        for text in examples:
+            result = self.svc.turn('elliptical', text, user='chat-user')
+            self.assertFalse(result['clarifications'])
+        scope = self.svc.scope_of('elliptical', 'chat-user')
+        saved = self.svc.engine._conn().execute('SELECT content FROM traces WHERE scope_id=?', (scope,)).fetchall()
+        self.assertEqual([row['content'] for row in saved], examples)
+
     def test_preference_labels_do_not_create_spurious_clarifications(self):
         sentences = ['我偏爱简洁清爽的界面风格，设计偏好编号0022',
                      '我希望别人讨论问题时先说结论，沟通偏好编号0025',
@@ -59,6 +362,17 @@ class ManagementRegression(unittest.TestCase):
         states = self.svc.engine._conn().execute("SELECT state_key FROM states WHERE scope_id=? AND state_key LIKE '%|preference|%'", (self.scope,)).fetchall()
         self.assertTrue(any('柔和留白' in row['state_key'] for row in states))
 
+    def test_debt_verbs_are_not_matched_inside_ordinary_words(self):
+        texts = ['功课还是有欠缺的哦，还漏说了两个景点。', '在这部电影里我对导演还了解些。', '片长达到了237分钟，真可算我迄今看过最长的电影。']
+        for text in texts:
+            result = self.svc.turn('ordinary-words', text, user='word-reader')
+            self.assertFalse(any(item['relation'] == 'debt' for item in result['outcomes']))
+            self.assertFalse(result['clarifications'])
+        debt = self.svc.turn('ordinary-words', '我欠你五元。', user='word-reader', context={'peer_id': 'assistant'})
+        self.assertTrue(any(item['relation'] == 'debt' and item['decision'] == 'commit' for item in debt['outcomes']))
+        repayment = self.svc.turn('ordinary-words', '我还了你两元。', user='word-reader', context={'peer_id': 'assistant'})
+        self.assertTrue(any(item['relation'] == 'debt' for item in repayment['outcomes']))
+
     def test_routine_topics_and_numbers_do_not_create_debts(self):
         for text in ['我常用文档整理自己的任务，工具记录编号11994',
                      '今年我想在毕业纪念日给朋友写卡片，节日计划编号11989',
@@ -74,6 +388,20 @@ class ManagementRegression(unittest.TestCase):
         self.svc.turn('one', '今年我想在毕业纪念日给朋友写卡片，节日计划编号11989', user='owner', context={'peer_id':'assistant'})
         self.svc.turn('one', '我计划读完一本关于植物的书，阅读目标编号11980', user='owner', context={'peer_id':'assistant'})
         self.assertEqual(conn.execute(sql, (self.scope, '%|debt|%')).fetchone()[0], before)
+
+    def test_film_conversation_does_not_create_debt_clarifications(self):
+        texts = [
+            '我最喜欢的是《达拉斯买家俱乐部》，它是2013年11月1日上映的，我还去影院看了呢。',
+            '这部电影1998年上映，我还是买票看的。',
+            '他凭借这首歌获得了2013年的奖项。',
+        ]
+        for text in texts:
+            self.svc.turn('film', text, user='film-viewer', context={'peer_id': 'assistant'})
+        scope = self.svc.scope_of('film', 'film-viewer')
+        conn = self.svc.engine._conn()
+        count = conn.execute("SELECT COUNT(*) FROM clarifications WHERE scope_id=? AND status='open'", (scope,)).fetchone()[0]
+        self.assertEqual(count, 0)
+        self.assertTrue(self.m.search(scope, '达拉斯买家俱乐部')['hits'])
 
     def test_attributive_liked_photo_is_not_an_invented_preference(self):
         self.svc.turn('one', '我曾经在西湖边拍过一张很喜欢的照片，经历编号0006', user='owner', context={'peer_id':'assistant'})
@@ -96,6 +424,12 @@ class ManagementRegression(unittest.TestCase):
         self.svc.turn('one', '我习惯喝热茶', user='owner', context={'peer_id':'assistant'})
         snap = self.m.snapshot(self.scope)
         self.assertTrue(any(n['kind']=='state' and '热茶' in n['content'] for n in snap['nodes']))
+
+    def test_movie_title_does_not_become_user_preference(self):
+        self.svc.turn('one', '有些了解，是电影《喜欢你》的主题曲。', user='owner', context={'peer_id':'assistant'})
+        snap = self.m.snapshot(self.scope)
+        self.assertFalse(any(n['kind'] == 'state' and '主题曲' in n['content'] for n in snap['nodes']))
+        self.assertTrue(self.m.search(self.scope, '主题曲')['hits'])
 
     def test_clarification_uses_readable_text_and_links_its_evidence(self):
         self.svc.turn('preference', '我喜欢', user='owner', context={'peer_id':'assistant'})
@@ -193,7 +527,13 @@ class ManagementRegression(unittest.TestCase):
         self.assertEqual(self.m.snapshot(self.scope)['stats']['traces'], 2001)
         self.assertTrue(self.m.snapshot(self.scope)['truncated'])
         self.assertEqual(self.m.search(self.scope, '我不吃辣')['hits'][0]['trace_id'], self.tid)
-        self.assertFalse(any(hit['trace_id'] == self.tid for hit in self.m.memory.search(self.scope, '我不吃辣')))
+        self.assertTrue(any(hit['trace_id'] == self.tid for hit in self.m.memory.search(self.scope, '我不吃辣')))
+        self.assertTrue(any(hit['trace_id'] == self.tid for hit in self.m.memory.search(self.scope, '我之前不吃辣')))
+        self.assertTrue(any(hit['trace_id'] == self.tid for hit in self.m.memory.search(self.scope, '吃辣')))
+        self.assertFalse(any(hit['trace_id'] == self.tid for hit in self.m.memory.search(self.svc.scope_of('different', 'another-user'), '吃辣')))
+        self.assertFalse(any(hit['trace_id'] == self.tid for hit in self.m.memory.search(self.scope, '我不吃辣', exclude=self.tid)))
+        context = self.svc.context('one', '你以前不吃辣吗', user='owner')['context']
+        self.assertIn('我不吃辣', context)
         self.m.forget(self.scope, self.tid, self.hash)
         self.assertFalse(any(hit['trace_id'] == self.tid for hit in self.m.search(self.scope, '我不吃辣')['hits']))
     def test_edit_replaces_and_reindexes_persistently(self):
@@ -240,6 +580,71 @@ class ManagementRegression(unittest.TestCase):
             'WHERE v.trace_id=? AND e.void=0',(replacement['trace_id'],)).fetchall()
         self.assertTrue(rows)
         self.assertTrue(all(row['effective_at']==original_time for row in rows))
+    def test_summary_rejects_other_users_deleted_or_missing_evidence(self):
+        store = SummaryStore(self.svc.engine)
+        other_scope = self.svc.scope_of('other-summary', 'other-user')
+        with self.assertRaisesRegex(ValueError, '不属于当前记忆库'):
+            store.create(other_scope, [self.tid])
+        with self.assertRaisesRegex(ValueError, '不存在'):
+            store.create(self.scope, ['missing-trace'])
+        self.svc.turn('other-summary', '我喜欢青茶。', user='other-user')
+        other = self.svc.engine._conn().execute('SELECT trace_id FROM traces WHERE scope_id=?', (other_scope,)).fetchone()[0]
+        foreign = store.create(other_scope, [other])
+        with self.assertRaisesRegex(ValueError, '当前记忆库'):
+            store.merge(self.scope, [foreign.summary_id])
+        self.m.forget(self.scope, self.tid, self.hash)
+        with self.assertRaisesRegex(ValueError, '已删除'):
+            store.create(self.scope, [self.tid])
+
+    def test_summaries_created_at_the_same_time_have_distinct_ids(self):
+        engine = self.svc.engine
+        original_clock = engine._clock
+        engine._clock = lambda: '2026-11-03T00:00:00+00:00'
+        try:
+            store = SummaryStore(engine)
+            first = store.create(self.scope, [self.tid])
+            second = store.create(self.scope, [self.tid])
+            self.assertNotEqual(first.summary_id, second.summary_id)
+            ids = [item['summary_id'] for item in store.active(self.scope)]
+            self.assertLess(ids.index(second.summary_id), ids.index(first.summary_id))
+        finally:
+            engine._clock = original_clock
+
+    def test_summary_validation_rejects_lost_conditions_and_invented_numbers(self):
+        self.svc.turn('summary-validation', '如果明天下雨，我会待在家里。', user='validation-user')
+        scope = self.svc.scope_of('summary-validation', 'validation-user')
+        trace_id = self.svc.engine._conn().execute('SELECT trace_id FROM traces WHERE scope_id=?', (scope,)).fetchone()[0]
+        store = SummaryStore(self.svc.engine)
+        lost = store.create(scope, [trace_id], summarizer=lambda _: '我会待在家里。')
+        invented = store.create(scope, [trace_id], summarizer=lambda _: '如果明天下雨，我会待在家里三天，花费200元。')
+        self.assertEqual(lost.validation_status, 'failed')
+        self.assertEqual(invented.validation_status, 'failed')
+        self.assertFalse(any(node['kind'] == 'summary' for node in self.m.snapshot(scope)['nodes']))
+        self.assertEqual(self.m.snapshot(scope)['stats']['summaries'], 0)
+
+    def test_summary_rejects_lost_arabic_and_chinese_quantities(self):
+        for text, omitted in [('我买了3本书。', '我买了书。'), ('我欠你五元。', '我欠你钱。')]:
+            self.svc.turn('quantity-summary', text, user='quantity-reader')
+            scope = self.svc.scope_of('quantity-summary', 'quantity-reader')
+            trace_id = self.svc.engine._conn().execute('SELECT trace_id FROM traces WHERE scope_id=? AND content=?', (scope, text)).fetchone()[0]
+            summary = SummaryStore(self.svc.engine).create(scope, [trace_id], summarizer=lambda _: omitted)
+            self.assertEqual(summary.validation_status, 'failed')
+        self.assertEqual(self.m.snapshot(scope)['stats']['summaries'], 0)
+
+    def test_summary_counts_exclude_archived_and_invalid_results(self):
+        store = SummaryStore(self.svc.engine)
+        valid = store.create(self.scope, [self.tid])
+        invalid = store.create(self.scope, [self.tid], summarizer=lambda _: '错误内容')
+        archived = store.create(self.scope, [self.tid])
+        conn = self.svc.engine._conn()
+        conn.execute("UPDATE summaries SET validation_status='failed' WHERE summary_id=?", (invalid.summary_id,))
+        conn.execute("UPDATE summaries SET lifecycle_state='archived' WHERE summary_id=?", (archived.summary_id,))
+        snapshot = self.m.snapshot(self.scope)
+        visible = [node['id'] for node in snapshot['nodes'] if node['kind'] == 'summary']
+        self.assertEqual(visible, [valid.summary_id])
+        self.assertEqual(snapshot['stats']['summaries'], 1)
+        self.assertEqual(self.m.memory.layers(self.scope)['episodic']['summaries'], 1)
+
     def test_summary_and_anchor_projections_keep_real_evidence(self):
         self.m.memory.mark(self.scope,self.tid,5)
         summary = SummaryStore(self.svc.engine).create(self.scope,[self.tid])
@@ -297,6 +702,25 @@ class ManagementRegression(unittest.TestCase):
         self.svc.turn('one', '我欠你五十元', user='owner', context={'peer_id':'assistant'})
         count = self.svc.engine._conn().execute("SELECT COUNT(*) FROM events WHERE scope_id=? AND state_key LIKE ? AND void=0", (self.scope, '%|debt|%')).fetchone()[0]
         self.assertGreater(count, 0)
+    def test_forgetting_clears_search_cache_and_hides_old_text(self):
+        from xujie_memory.memory import _prepared
+        _prepared.cache_clear()
+        self.m.search(self.scope, '吃辣')
+        self.assertGreater(_prepared.cache_info().currsize, 0)
+        self.m.forget(self.scope, self.tid, self.hash)
+        self.assertEqual(_prepared.cache_info().currsize, 0)
+        self.assertFalse(self.m.search(self.scope, '吃辣')['hits'])
+        self.assertFalse(self.m.memory.search(self.scope, '吃辣'))
+
+    def test_edit_clears_search_cache_for_replaced_text(self):
+        from xujie_memory.memory import _prepared
+        _prepared.cache_clear()
+        self.m.search(self.scope, '吃辣')
+        self.assertGreater(_prepared.cache_info().currsize, 0)
+        self.m.edit(self.scope, self.tid, '我喜欢清淡口味', self.hash)
+        self.assertEqual(_prepared.cache_info().currsize, 0)
+        self.assertFalse(self.m.search(self.scope, '吃辣')['hits'])
+
     def test_delete_purges_summary_and_person_card(self):
         summary = SummaryStore(self.svc.engine).create(self.scope,[self.tid])
         self.m.forget(self.scope,self.tid,self.hash)
@@ -384,6 +808,17 @@ class HttpRegression(unittest.TestCase):
                 self.assertEqual(status,200);self.assertNotIn('Access-Control-Allow-Origin',headers)
                 self.assertEqual(post('/turn',{'session':'s','text':'我不吃辣'})[0],200)
                 scope=post('/manage/catalog',{})[1]['scopes'][0]['scope_id']
+                config={'scope_id':scope,'policy':{'per_request':200,'daily':300,'monthly':1000,'input_price':1000000,'output_price':1000000,'daily_calls':3}}
+                self.assertEqual(post('/qq/budget/configure',config,'wrong')[0],401)
+                self.assertEqual(post('/qq/budget/configure',config)[0],200)
+                reserved=post('/qq/budget/reserve',{'scope_id':scope,'activity':'chat','input_limit':30,'output_limit':20})
+                self.assertEqual(reserved[0],200)
+                self.assertEqual(post('/qq/budget/status',{'scope_id':scope})[1]['pending'],50)
+                self.assertEqual(post('/turn',{'session':'other','user':'other','text':'另一位用户'})[0],200)
+                other_scope=h.service.scope_of('other','other')
+                self.assertEqual(post('/qq/budget/settle',{'scope_id':other_scope,'call_id':reserved[1]['call_id'],'input_tokens':1,'output_tokens':1})[0],400)
+                settled=post('/qq/budget/settle',{'scope_id':scope,'call_id':reserved[1]['call_id'],'input_tokens':10,'output_tokens':5})
+                self.assertEqual((settled[0],settled[1]['amount']),(200,15))
                 snap=post('/manage/snapshot',{'scope_id':scope})[1]
                 trace=next(n for n in snap['nodes'] if n['kind']=='trace')
                 args={'scope_id':scope,'trace_id':trace['trace_id'],'content':'我喜欢咖啡','expected_hash':'stale'}

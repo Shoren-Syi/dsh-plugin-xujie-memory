@@ -84,6 +84,18 @@ let dsh_plugin_xujie_memory_xujieMemory_manage_parameter_6$schema$value
 const dsh_plugin_xujie_memory_xujieMemory_manage_parameter_6$schema = () => (dsh_plugin_xujie_memory_xujieMemory_manage_parameter_6$schema$value ??= z.string())
 let dsh_plugin_xujie_memory_xujieMemory_manage_result$schema$value
 const dsh_plugin_xujie_memory_xujieMemory_manage_result$schema = () => (dsh_plugin_xujie_memory_xujieMemory_manage_result$schema$value ??= z.boolean())
+let dsh_plugin_xujie_memory_xujieMemory_qqEnsure_result$schema$value
+const dsh_plugin_xujie_memory_xujieMemory_qqEnsure_result$schema = () => (dsh_plugin_xujie_memory_xujieMemory_qqEnsure_result$schema$value ??= z.string())
+let dsh_plugin_xujie_memory_xujieMemory_qqGet_parameter_0$schema$value
+const dsh_plugin_xujie_memory_xujieMemory_qqGet_parameter_0$schema = () => (dsh_plugin_xujie_memory_xujieMemory_qqGet_parameter_0$schema$value ??= z.string())
+let dsh_plugin_xujie_memory_xujieMemory_qqGet_result$schema$value
+const dsh_plugin_xujie_memory_xujieMemory_qqGet_result$schema = () => (dsh_plugin_xujie_memory_xujieMemory_qqGet_result$schema$value ??= z.string())
+let dsh_plugin_xujie_memory_xujieMemory_qqSave_parameter_0$schema$value
+const dsh_plugin_xujie_memory_xujieMemory_qqSave_parameter_0$schema = () => (dsh_plugin_xujie_memory_xujieMemory_qqSave_parameter_0$schema$value ??= z.string())
+let dsh_plugin_xujie_memory_xujieMemory_qqSave_parameter_1$schema$value
+const dsh_plugin_xujie_memory_xujieMemory_qqSave_parameter_1$schema = () => (dsh_plugin_xujie_memory_xujieMemory_qqSave_parameter_1$schema$value ??= z.string())
+let dsh_plugin_xujie_memory_xujieMemory_qqSave_result$schema$value
+const dsh_plugin_xujie_memory_xujieMemory_qqSave_result$schema = () => (dsh_plugin_xujie_memory_xujieMemory_qqSave_result$schema$value ??= z.boolean())
 let dsh_plugin_xujie_memory_xujieMemory_search_parameter_0$schema$value
 const dsh_plugin_xujie_memory_xujieMemory_search_parameter_0$schema = () => (dsh_plugin_xujie_memory_xujieMemory_search_parameter_0$schema$value ??= z.string())
 let dsh_plugin_xujie_memory_xujieMemory_search_parameter_1$schema$value
@@ -186,6 +198,12 @@ let dsh_plugin_xujie_memory_xujieMemory_manage_parameter_5_strict$schema$value
 const dsh_plugin_xujie_memory_xujieMemory_manage_parameter_5_strict$schema = () => (dsh_plugin_xujie_memory_xujieMemory_manage_parameter_5_strict$schema$value ??= z.string())
 let dsh_plugin_xujie_memory_xujieMemory_manage_parameter_6_strict$schema$value
 const dsh_plugin_xujie_memory_xujieMemory_manage_parameter_6_strict$schema = () => (dsh_plugin_xujie_memory_xujieMemory_manage_parameter_6_strict$schema$value ??= z.string())
+let dsh_plugin_xujie_memory_xujieMemory_qqGet_parameter_0_strict$schema$value
+const dsh_plugin_xujie_memory_xujieMemory_qqGet_parameter_0_strict$schema = () => (dsh_plugin_xujie_memory_xujieMemory_qqGet_parameter_0_strict$schema$value ??= z.string())
+let dsh_plugin_xujie_memory_xujieMemory_qqSave_parameter_0_strict$schema$value
+const dsh_plugin_xujie_memory_xujieMemory_qqSave_parameter_0_strict$schema = () => (dsh_plugin_xujie_memory_xujieMemory_qqSave_parameter_0_strict$schema$value ??= z.string())
+let dsh_plugin_xujie_memory_xujieMemory_qqSave_parameter_1_strict$schema$value
+const dsh_plugin_xujie_memory_xujieMemory_qqSave_parameter_1_strict$schema = () => (dsh_plugin_xujie_memory_xujieMemory_qqSave_parameter_1_strict$schema$value ??= z.string())
 let dsh_plugin_xujie_memory_xujieMemory_search_parameter_0_strict$schema$value
 const dsh_plugin_xujie_memory_xujieMemory_search_parameter_0_strict$schema = () => (dsh_plugin_xujie_memory_xujieMemory_search_parameter_0_strict$schema$value ??= z.string())
 let dsh_plugin_xujie_memory_xujieMemory_search_parameter_1_strict$schema$value
@@ -517,6 +535,93 @@ const $remote = createTypertRemoteInfo({
       },
       sourceLocation: {"file":"packages/memory/src/controller.ts","line":94,"column":9},
     },
+    'xujieMemory/qqEnsure': {
+      service: 'xujieMemory',
+      invocation: { kind: 'direct' },
+      parameters: [
+      ],
+      result: {
+        mode: 'strict',
+        typeSymbol: 'dsh-plugin-xujie-memory#xujieMemory/qqEnsure:result',
+        create: dsh_plugin_xujie_memory_xujieMemory_qqEnsure_result$schema,
+        jsonSchema: {"type":"string"},
+      },
+      sourceLocation: {"file":"packages/memory/src/controller.ts","line":107,"column":9},
+    },
+    'xujieMemory/qqGet': {
+      service: 'xujieMemory',
+      invocation: { kind: 'direct' },
+      parameters: [
+        {
+          name: 'scopeId',
+          source: 'json',
+          codec: {
+            mode: 'strict',
+            typeSymbol: 'dsh-plugin-xujie-memory#xujieMemory/qqGet:scopeId',
+            create: dsh_plugin_xujie_memory_xujieMemory_qqGet_parameter_0$schema,
+            jsonSchema: {"type":"string"},
+          },
+          strictCodec: {
+            mode: 'strict',
+            typeSymbol: 'dsh-plugin-xujie-memory#xujieMemory/qqGet:scopeId',
+            create: dsh_plugin_xujie_memory_xujieMemory_qqGet_parameter_0_strict$schema,
+            jsonSchema: {"type":"string"},
+          },
+        },
+      ],
+      result: {
+        mode: 'strict',
+        typeSymbol: 'dsh-plugin-xujie-memory#xujieMemory/qqGet:result',
+        create: dsh_plugin_xujie_memory_xujieMemory_qqGet_result$schema,
+        jsonSchema: {"type":"string"},
+      },
+      sourceLocation: {"file":"packages/memory/src/controller.ts","line":102,"column":9},
+    },
+    'xujieMemory/qqSave': {
+      service: 'xujieMemory',
+      invocation: { kind: 'direct' },
+      parameters: [
+        {
+          name: 'scopeId',
+          source: 'json',
+          codec: {
+            mode: 'strict',
+            typeSymbol: 'dsh-plugin-xujie-memory#xujieMemory/qqSave:scopeId',
+            create: dsh_plugin_xujie_memory_xujieMemory_qqSave_parameter_0$schema,
+            jsonSchema: {"type":"string"},
+          },
+          strictCodec: {
+            mode: 'strict',
+            typeSymbol: 'dsh-plugin-xujie-memory#xujieMemory/qqSave:scopeId',
+            create: dsh_plugin_xujie_memory_xujieMemory_qqSave_parameter_0_strict$schema,
+            jsonSchema: {"type":"string"},
+          },
+        },
+        {
+          name: 'settings',
+          source: 'json',
+          codec: {
+            mode: 'strict',
+            typeSymbol: 'dsh-plugin-xujie-memory#xujieMemory/qqSave:settings',
+            create: dsh_plugin_xujie_memory_xujieMemory_qqSave_parameter_1$schema,
+            jsonSchema: {"type":"string"},
+          },
+          strictCodec: {
+            mode: 'strict',
+            typeSymbol: 'dsh-plugin-xujie-memory#xujieMemory/qqSave:settings',
+            create: dsh_plugin_xujie_memory_xujieMemory_qqSave_parameter_1_strict$schema,
+            jsonSchema: {"type":"string"},
+          },
+        },
+      ],
+      result: {
+        mode: 'strict',
+        typeSymbol: 'dsh-plugin-xujie-memory#xujieMemory/qqSave:result',
+        create: dsh_plugin_xujie_memory_xujieMemory_qqSave_result$schema,
+        jsonSchema: {"type":"boolean"},
+      },
+      sourceLocation: {"file":"packages/memory/src/controller.ts","line":113,"column":9},
+    },
     'xujieMemory/search': {
       service: 'xujieMemory',
       invocation: { kind: 'direct' },
@@ -644,6 +749,21 @@ export const TYPERT = {
             "kind": "method",
             "name": "manage",
             "signature": "@Remote async manage(scopeId: string, action: string, accountId: string, targetId: string, value: string, kind: string, expected: string): Promise<boolean>"
+          },
+          {
+            "kind": "method",
+            "name": "qqGet",
+            "signature": "@Remote async qqGet(scopeId: string): Promise<string>"
+          },
+          {
+            "kind": "method",
+            "name": "qqEnsure",
+            "signature": "@Remote async qqEnsure(): Promise<string>"
+          },
+          {
+            "kind": "method",
+            "name": "qqSave",
+            "signature": "@Remote async qqSave(scopeId: string, settings: string): Promise<boolean>"
           }
         ],
         "types": [

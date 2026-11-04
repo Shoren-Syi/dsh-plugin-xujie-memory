@@ -80,7 +80,7 @@ class FuzzySearch:
         self.engine = engine
 
     def search(self, scope_id: str, query: str, *, limit: int = 5,
-               candidates: int | None = 800) -> list[dict[str, Any]]:
+               candidates: int | None = 800, exclude: str = '') -> list[dict[str, Any]]:
         query = (query or "").strip()
         if not query:
             return []
@@ -102,7 +102,34 @@ class FuzzySearch:
         qchars = set(q)
         scored = []
         for row in rows:
+            if row['trace_id'] == exclude:
+                continue
             score = _similarity_prepared(q, qb, qchars, row["content"])
+            if score >= 0.15:
+                scored.append((score, row))
+        indexed = []
+        if candidates is not None and len(q) == 2:
+            # 三元索引无法覆盖两字词，按当前记忆库查找完整短词。
+            escaped = q.replace('\\', '\\\\').replace('%', '\\%').replace('_', '\\_')
+            indexed = self.engine._conn().execute(
+                "SELECT trace_id,content,content_hash,recorded_at FROM traces"
+                " WHERE scope_id=? AND erased_at IS NULL AND content LIKE ? ESCAPE '\\' LIMIT 80",
+                (scope_id, '%' + escaped + '%'),
+            ).fetchall()
+        elif candidates is not None and len(q) >= 3 and (len(q) <= 12 or max((score for score, _ in scored), default=0) < 0.5):
+            # 近期候选缺少强相关项时，再用少量索引词查找旧原话。
+            grams = list(dict.fromkeys(q[i:i + 3] for i in range(len(q) - 2)))
+            expression = ' OR '.join('"' + term.replace('"', '""') + '"' for term in grams[-3:])
+            indexed = self.engine._conn().execute(
+                "SELECT t.trace_id,t.content,t.content_hash,t.recorded_at FROM traces_fts f"
+                " JOIN traces t ON t.trace_id=f.trace_id WHERE traces_fts MATCH ?"
+                " AND t.scope_id=? AND t.erased_at IS NULL LIMIT 80", (expression, scope_id),
+            ).fetchall()
+        seen = {row['trace_id'] for _, row in scored}
+        for row in indexed:
+            if row['trace_id'] == exclude or row['trace_id'] in seen:
+                continue
+            score = _similarity_prepared(q, qb, qchars, row['content'])
             if score >= 0.15:
                 scored.append((score, row))
         if not scored:
@@ -156,12 +183,10 @@ class Memory:
             "SELECT COUNT(*) AS n FROM traces WHERE scope_id=? AND erased_at IS NULL",
             (scope_id,),
         ).fetchone()["n"]
-        try:
-            summaries = conn.execute(
-                "SELECT COUNT(*) AS n FROM summaries WHERE scope_id=?", (scope_id,)
-            ).fetchone()["n"]
-        except Exception:  # noqa: BLE001
-            summaries = 0
+        summaries = conn.execute(
+            "SELECT COUNT(*) AS n FROM summaries WHERE scope_id=? AND lifecycle_state='active'"
+            " AND validation_status='ok' AND text<>''", (scope_id,)
+        ).fetchone()["n"]
         open_items = conn.execute(
             "SELECT COUNT(*) AS n FROM clarifications WHERE scope_id=? AND status='open'",
             (scope_id,),
@@ -244,6 +269,8 @@ class Memory:
             ).fetchall()
             for account in accounts:
                 profiles.derive_from_memory(scope_id, account["account_id"])
+        # 搜索缓存包含原文，遗忘或编辑后必须同步清空。
+        _prepared.cache_clear()
         return {"trace_id": trace_id, "erased": True, "already_erased": already_erased,
                 "state_keys": result["state_keys"]}
 
@@ -274,10 +301,11 @@ class Memory:
                 "SELECT COUNT(*) FROM clarifications"
                 " WHERE scope_id=? AND status='open'", scope_id),
             "summaries": count(
-                "SELECT COUNT(*) FROM summaries WHERE scope_id=?", scope_id),
+                "SELECT COUNT(*) FROM summaries WHERE scope_id=? AND lifecycle_state='active'"
+                " AND validation_status='ok' AND text<>''", scope_id),
         }
 
     # ------------------------------------------------------------ 搜索
     def search(self, scope_id: str, query: str, *, limit: int = 5,
-               candidates: int | None = 800) -> list[dict]:
-        return self.fuzzy.search(scope_id, query, limit=limit, candidates=candidates)
+               candidates: int | None = 800, exclude: str = '') -> list[dict]:
+        return self.fuzzy.search(scope_id, query, limit=limit, candidates=candidates, exclude=exclude)

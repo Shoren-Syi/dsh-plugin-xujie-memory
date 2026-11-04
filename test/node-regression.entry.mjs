@@ -7,6 +7,8 @@ import {once} from 'node:events'
 import {apply} from '../lib/index.js'
 import {TYPERT_REMOTE} from '../lib/typert.remote-client.js'
 import {NeuralEngine} from '../src/client/neural/engine.ts'
+import {buildMorphology, STRATA} from '../src/client/neural/morphology.ts'
+import {toField} from '../src/client/model.ts'
 const dir=mkdtempSync(join(tmpdir(),'xujie-node-'))
 const token='isolated-test-token'
 writeFileSync(join(dir,'token'),token,{mode:0o600})
@@ -16,6 +18,24 @@ let checks=0
 const check=(label,fn)=>{fn();checks++;console.log('PASS',label)}
 const cleanups=[]
 try {
+  const morphology = buildMorphology()
+  check('three memory layers occupy separate connected planes',()=>{
+    assert.equal(morphology.sites.length,3)
+    for(let layer=0;layer<3;layer++){
+      assert.ok(morphology.sites[layer].length>=250)
+      for(const index of morphology.sites[layer]){
+        const distance=Math.abs(morphology.y[index]-STRATA[layer].y)
+        assert.ok(distance<15)
+      }
+      if(layer>0) assert.ok([...morphology.sites[layer]].filter(index=>morphology.parent[index]>=0).length>=200)
+    }
+  })
+  check('node brightness follows the actual decayed priority',()=>{
+    const node = (id, priority) => ({ id, layer:'episodic', kind:'trace', content:id, editable:true, trace_id:id, priority })
+    const result = toField({ nodes:[node('faded',0.05), node('recent',1), node('important',5)], edges:[] })
+    assert.ok(result.nodes[0].weight < result.nodes[1].weight)
+    assert.ok(result.nodes[1].weight < result.nodes[2].weight)
+  })
   const drawing = {createRadialGradient:()=>({addColorStop(){}}),fillRect(){}}
   const canvas = {getContext:()=>drawing,addEventListener(){},removeEventListener(){},style:{}}
   globalThis.document = {createElement:()=>({getContext:()=>drawing})}
@@ -28,7 +48,17 @@ try {
   for(let i=0;i<120;i++)graph.step(1/60)
   check('selecting a memory stops rotation and zooms the camera',()=>{assert.equal(graph.isAutoRotating,false);assert.ok(focused.zoom>1.6);assert.ok(Math.abs(graph.cameraState().yaw-focused.yaw)<.001)})
   graph.resetView()
+  check('reset starts smoothly',()=>assert.ok(graph.cameraState().zoom>1))
+  for(let i=0;i<240;i++)graph.step(1/60)
   check('reset returns the camera to the full graph',()=>assert.equal(graph.cameraState().zoom,1))
+  graph.setSelected('memory')
+  for(let i=0;i<60;i++)graph.step(1/60)
+  graph.resetView()
+  for(let i=0;i<8;i++)graph.step(1/60)
+  graph.zoomBy(1.2)
+  const manualZoom=graph.cameraState().zoom
+  for(let i=0;i<60;i++)graph.step(1/60)
+  check('manual zoom cancels automatic camera movement',()=>assert.equal(graph.cameraState().zoom,manualZoom))
   graph.dispose()
   delete globalThis.document
   delete globalThis.cancelAnimationFrame
@@ -50,6 +80,9 @@ try {
   const catalog=await controller.catalog(),scope=catalog.scopes[0].scope_id
   const snapshot=await controller.snapshot(scope)
   check('generated snapshot codec accepts real projected DTO',()=>assert.ok(TYPERT_REMOTE.methods['xujieMemory/snapshot'].result.create().safeParse(snapshot).success))
+  const qqSettings=JSON.stringify({enabled:false,wsUrl:'ws://127.0.0.1:3001',httpUrl:'http://127.0.0.1:3000',selfId:'99',privateAllow:['10'],groupAllow:[],requireMention:true,provider:'p',model:'m',maxTokens:100,accessToken:'test-only-token',policy:{per_request:100,daily:1000,monthly:5000,input_price:1000000,output_price:1000000,daily_calls:10}})
+  const qqSaved=await controller.qqSave(scope,qqSettings), qqState=await controller.qqGet(scope)
+  check('QQ settings pass real remote codecs without returning the token',()=>{assert.ok(TYPERT_REMOTE.methods['xujieMemory/qqSave'].result.create().safeParse(qqSaved).success);assert.ok(TYPERT_REMOTE.methods['xujieMemory/qqGet'].result.create().safeParse(qqState).success);assert.equal(JSON.parse(qqState).has_token,true);assert.ok(!qqState.includes('test-only-token'))})
   const account=snapshot.cards[0].account_id
   const managed=await controller.manage(scope,'tag_add',account,'','喜欢探索','habit','')
   check('generated management codec accepts result',()=>assert.ok(TYPERT_REMOTE.methods['xujieMemory/manage'].result.create().safeParse(managed).success))

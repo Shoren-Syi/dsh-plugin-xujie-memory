@@ -200,6 +200,9 @@ class Orchestrator:
         """
         budget = budget or TurnBudget()
         ctx = dict(context or {})
+        if session:
+            # 用户记忆可以跨会话共享，原话仍须保留产生它的会话边界。
+            ctx["_xjm_session"] = session
         actor = actor_id or account_id
         turn = Turn()
 
@@ -375,7 +378,8 @@ class Orchestrator:
             if t["trace_id"] != exclude and _echo_key(t["content"]) != echo
         ][: budget.max_recall]
         if related:
-            return related
+            from .episode_compaction import compact_recall
+            return compact_recall(self.engine, scope_id, related, text, budget.max_context_chars // 2)
 
         # 检索不到就退化成"最近说过的事"，并且**标明它不是相关的**。
         #

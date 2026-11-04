@@ -1,14 +1,15 @@
-import { useCallback, useEffect, useMemo, useRef, useState, type KeyboardEvent, type ReactNode } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState, type KeyboardEvent, type ReactNode, type RefObject } from 'react'
 import type { Catalog, Node, PersonCard, SearchHit, Snapshot, Trace } from './types.ts'
 import { MemoryAdapter, asFailure, type MemoryFailure, type XujieMemoryRemote } from './memory-adapter.ts'
 import { FAILURE_TEXT, KIND_LABEL, LAYER_META, STATUS_LABEL, formatTime, isTraceBacked, layerCounts, layerIndex, shortId, sourceLabel, toField } from './model.ts'
 import { NeuralField, type NeuralFieldHandle } from './NeuralField.tsx'
+import { QQPanel } from './QQPanel.tsx'
 import { IconAlert, IconArrow, IconBack, IconClose, IconEdit, IconForget, IconLock, IconMinus, IconPause, IconPlay, IconPlus, IconReset, IconSearch } from './icons.tsx'
 
 export interface MemoryPanelProps { remote: XujieMemoryRemote }
 
 type Target = { nodeId: string } | { traceId: string }
-type Tab = 'overview' | 'persona' | 'emotion'
+type Tab = 'overview' | 'persona' | 'emotion' | 'qq'
 type TagEditor = { account: string; id: string; kind: string; original: string; value: string }
 
 const TAG_KIND: Record<string, string> = { preference: '偏好', address: '称呼', habit: '习惯', style: '风格', topic: '话题', relation: '关系', nickname: '称呼', debt: '往来', identity: '身份' }
@@ -49,11 +50,45 @@ function StatusBlock({ icon, title, body, action }: { icon?: ReactNode; title: s
   </div>
 }
 
+function MemoryCardLinks({ field, shell, nodes, reducedMotion }: {
+  field: RefObject<NeuralFieldHandle | null>, shell: RefObject<HTMLDivElement | null>,
+  nodes: readonly Node[], reducedMotion: boolean,
+}) {
+  const paths = useRef<Array<SVGPathElement | null>>([])
+  useEffect(() => {
+    let frame = 0
+    const update = () => {
+      const root = shell.current, bounds = root?.getBoundingClientRect()
+      const stage = root?.querySelector('.xjm-stage')?.getBoundingClientRect()
+      const cards = root?.querySelectorAll<HTMLElement>('.xjm-memory-card')
+      if (bounds && stage && cards) nodes.forEach((node, i) => {
+        const point = field.current?.screenOf(node.id), card = cards[i]?.getBoundingClientRect(), path = paths.current[i]
+        if (!point || !card || !path) return
+        const x = stage.left - bounds.left + point.x, y = stage.top - bounds.top + point.y
+        const ex = card.left - bounds.left, ey = card.top - bounds.top + card.height / 2
+        const bend = Math.max(30, (ex - x) * .55)
+        path.setAttribute('d', `M ${x} ${y} C ${x + bend} ${y}, ${ex - bend} ${ey}, ${ex} ${ey}`)
+      })
+      frame = requestAnimationFrame(update)
+    }
+    frame = requestAnimationFrame(update)
+    return () => cancelAnimationFrame(frame)
+  }, [field, shell, nodes])
+  return <svg className="xjm-memory-card-links" aria-hidden="true">
+    {nodes.map((node, i) => <g key={node.id}>
+      <path id={`xjm-memory-link-${i}`} ref={el => { paths.current[i] = el }} />
+      {!reducedMotion && <circle r="1.6"><animateMotion dur={`${4 + i * .7}s`} begin={`${i * -.6}s`} repeatCount="indefinite"><mpath href={`#xjm-memory-link-${i}`} /></animateMotion></circle>}
+    </g>)}
+  </svg>
+}
+
 export function MemoryPanel({ remote }: MemoryPanelProps) {
   const adapter = useMemo(() => new MemoryAdapter(remote), [remote])
   const reducedMotion = usePrefersReducedMotion()
   const fieldRef = useRef<NeuralFieldHandle>(null)
   const searchRef = useRef<HTMLInputElement>(null)
+  const inspectorBodyRef = useRef<HTMLDivElement>(null)
+  const shellRef = useRef<HTMLDivElement>(null)
   const epoch = useRef(0)
   const catalogEpoch = useRef(0)
 
@@ -71,6 +106,8 @@ export function MemoryPanel({ remote }: MemoryPanelProps) {
   const [searchNonce, setSearchNonce] = useState(0)
 
   const [tab, setTab] = useState<Tab>('overview')
+  const [workbenchExpanded, setWorkbenchExpanded] = useState(false)
+  const [activeCard, setActiveCard] = useState<string | null>(null)
   const [showPending, setShowPending] = useState(false)
   const [layerFocus, setLayerFocus] = useState<number | null>(null)
   const [autoRotate, setAutoRotate] = useState(true)
@@ -167,11 +204,20 @@ export function MemoryPanel({ remote }: MemoryPanelProps) {
   const targetNode: Node | null = target && 'nodeId' in target ? nodeById.get(target.nodeId) ?? null : null
   const traceId: string | null = target ? ('traceId' in target ? target.traceId : (targetNode && isTraceBacked(targetNode) ? targetNode.trace_id! : null)) : null
   const selectedGraphId = target ? ('nodeId' in target ? target.nodeId : (nodeById.has(target.traceId) ? target.traceId : null)) : null
+  const memoryCards = useMemo(() => {
+    const nodes = snapshot?.nodes ?? []
+    const summaries = nodes.filter(node => node.kind === 'summary')
+    const covered = new Set(summaries.flatMap(node => node.evidence ?? []))
+    const originals = nodes.filter(node => node.kind === 'trace' && !covered.has(node.id))
+    return [...summaries, ...originals].slice(0, 6)
+  }, [snapshot])
+  const showMemoryCards = workbenchExpanded && tab === 'overview' && !target && !query.trim() && !showPending && layerFocus === null
   const highlightIds = useMemo(() => {
     if (hits) return hits.map(h => h.trace_id)
     if (layerFocus !== null && snapshot) return snapshot.nodes.filter(n => layerIndex(n.layer) === layerFocus).map(n => n.id)
+    if (showMemoryCards) return memoryCards.map(n => n.id)
     return null
-  }, [hits, layerFocus, snapshot])
+  }, [hits, layerFocus, snapshot, showMemoryCards, memoryCards])
 
   // ---- detail ----
   useEffect(() => {
@@ -193,6 +239,10 @@ export function MemoryPanel({ remote }: MemoryPanelProps) {
     const t = setTimeout(() => setToast(null), 3600)
     return () => clearTimeout(t)
   }, [toast])
+
+  useEffect(() => {
+    if (tab === 'persona' && activeCard) inspectorBodyRef.current?.scrollTo({ top: 0 })
+  }, [tab, activeCard])
 
   // Every user-initiated selection goes through here: blocked while a save/forget is in flight
   // (so an async result cannot land on a different record), and it drops the previous record in the
@@ -365,7 +415,7 @@ export function MemoryPanel({ remote }: MemoryPanelProps) {
     ? <p className="xjm-empty-line">还没有人设卡。对话中出现称呼、偏好等信息后会自动推导。</p>
     : <>
       <p className="xjm-note">标签可手动调整；修改标签不会更改原话。已删除的派生标签不会因重新推导而自动出现。</p>
-      {cards.map(card => {
+      {[...cards].sort((a, b) => Number(b.account_id === activeCard) - Number(a.account_id === activeCard)).map(card => {
         const groups = new Map<string, typeof card.tags>()
         for (const t of card.tags) groups.set(t.kind, [...(groups.get(t.kind) ?? []), t])
         return <article key={card.account_id} className="xjm-card">
@@ -444,7 +494,7 @@ export function MemoryPanel({ remote }: MemoryPanelProps) {
     const layer = node?.layer ?? 'episodic'
     const kind = node ? (KIND_LABEL[node.kind] ?? node.kind) : '原话'
     const head = <div className="xjm-detail-head">
-      <button type="button" className="xjm-icon-btn" aria-label="返回" disabled={busy !== null} onClick={() => selectTarget(null)}><IconBack /></button>
+      <button type="button" className="xjm-icon-btn" aria-label="返回" disabled={busy !== null} onClick={returnToGraph}><IconBack /></button>
       <LayerChip layer={layer} />
       <span className="xjm-kind">{kind}</span>
       <span className="xjm-spacer" />
@@ -561,11 +611,12 @@ export function MemoryPanel({ remote }: MemoryPanelProps) {
   const nodesN = snapshot?.nodes.length ?? 0, edgesN = snapshot?.edges.length ?? 0
 
   return <div className="xjm-root">
-    <div className="xjm-shell">
+    <div ref={shellRef} className={`xjm-shell${workbenchExpanded ? ' xjm-shell-expanded' : ''}`}>
       <section className="xjm-stage" aria-label="三层神经记忆图">
         <NeuralField ref={fieldRef} nodes={field.nodes} edges={field.edges} selectedId={selectedGraphId} highlightIds={highlightIds}
           dimmed={Boolean(stageOverlay)} reducedMotion={reducedMotion} captions={captions} onSelect={onFieldSelect}
-          popup={targetNode ? <><span className="xjm-popup-kind">{LAYER_META[layerIndex(targetNode.layer)].name} · {KIND_LABEL[targetNode.kind] ?? targetNode.kind}</span><p>{trace?.content ?? targetNode.content}</p><span className="xjm-popup-hint">详情与管理见右侧</span></> : null}
+          cards={snapshot?.cards ?? []} onCardSelect={account => { returnToGraph(); setQuery(''); setActiveCard(account || null); setTab('persona'); setWorkbenchExpanded(true) }}
+          popup={targetNode ? <><span className="xjm-popup-kind">{LAYER_META[layerIndex(targetNode.layer)].name} · {KIND_LABEL[targetNode.kind] ?? targetNode.kind}</span><p>{trace?.trace_id === traceId ? trace.content : targetNode.content}</p>{typeof targetNode.priority === 'number' && <span className="xjm-popup-hint">当前权重 {targetNode.priority.toFixed(2)} · </span>}<span className="xjm-popup-hint">详情与管理见右侧</span></> : null}
           label={`三层记忆神经图：语义 ${counts[0]}、情节 ${counts[1]}、工作 ${counts[2]} 个节点，${edgesN} 条关联。拖动旋转，滚轮缩放，方向键也可旋转。`} />
         <div className="xjm-stage-top">
         <header className="xjm-stage-head">
@@ -587,34 +638,41 @@ export function MemoryPanel({ remote }: MemoryPanelProps) {
           <span><i className="xjm-g-dot" />原话 · 可编辑</span>
           <span><i className="xjm-g-diamond" />派生 · 只读</span>
           <span><i className="xjm-g-link" />真实关联</span>
-          <span className="xjm-legend-quiet">纤维与脉冲为神经结构，不代表记录</span>
+          <span className="xjm-legend-quiet">圆环表示邻近节点聚合，点击放大；纤维与脉冲不代表记录</span>
         </div>
         {stageOverlay && <div className="xjm-overlay">{stageOverlay}</div>}
       </section>
 
+      {showMemoryCards && memoryCards.length > 0 && <MemoryCardLinks field={fieldRef} shell={shellRef} nodes={memoryCards} reducedMotion={reducedMotion} />}
       <aside className="xjm-inspector" aria-label="记忆管理">
-        <div className="xjm-drawer-main">
+        <div className="xjm-drawer-main" hidden={!workbenchExpanded}>
         <div className="xjm-insp-head">
-          <div className="xjm-drawer-title"><div><span>MEMORY SPACE</span><h2>记忆管理</h2></div></div>
-          <div className="xjm-scope">
+          <div className="xjm-drawer-title"><div><span>MEMORY SPACE</span><h2>记忆管理</h2></div><button type="button" className="xjm-workbench-toggle" onClick={() => setWorkbenchExpanded(false)}>收起</button></div>
+          {tab !== 'qq' && <div className="xjm-scope">
             <label className="xjm-scope-label" htmlFor="xjm-scope">记忆库</label>
             <select id="xjm-scope" className="xjm-select" value={scopeId ?? ''} disabled={!scopes.length || busy !== null}
               onChange={e => setScopeId(e.target.value || null)}>
               {!scopes.length && <option value="">{catalog === null && !failure ? "读取中…" : "无可用范围"}</option>}
               {scopes.map(s => <option key={s.scope_id} value={s.scope_id}>{s.agent_id || shortId(s.scope_id)} · {s.traces} 条</option>)}
             </select>
-          </div>
-          <div className="xjm-search">
+          </div>}
+          {tab !== 'qq' && <div className="xjm-search">
             <IconSearch />
             <input ref={searchRef} type="search" className="xjm-search-input" placeholder="搜索原话，包括图外记录" aria-label="搜索记忆"
               value={query} disabled={!canSearch} onChange={e => setQuery(e.target.value)} onKeyDown={onSearchKey} />
             {searching && <span className="xjm-spinner xjm-spinner-sm" aria-hidden="true" />}
             {query && <button type="button" className="xjm-icon-btn xjm-icon-btn-sm" aria-label="清除搜索" onClick={() => setQuery('')}><IconClose /></button>}
-          </div>
+          </div>}
+          {showMemoryCards && memoryCards.length > 0 && <section className="xjm-memory-cards" aria-label="近期记忆卡片">
+            {memoryCards.map((node, i) => <button key={node.id} type="button" className="xjm-memory-card" onClick={() => selectTarget({ nodeId: node.id })}>
+              <span>{String(i + 1).padStart(2, '0')} / {node.kind === 'summary' ? '摘要' : '原话'}</span><strong>{node.content}</strong><small>{formatTime(node.recorded_at)}</small>
+            </button>)}
+          </section>}
         </div>
-        <div className="xjm-insp-body">
+        <div className="xjm-insp-body" ref={inspectorBodyRef}>
           {manageFailure && <p className="xjm-inline-error" role="alert">{FAILURE_TEXT[manageFailure.kind].title}。{FAILURE_TEXT[manageFailure.kind].body}</p>}
-          {pageFailure ? <StatusBlock icon={pageFailure.kind === 'owner' ? <IconLock /> : <IconAlert />} title={FAILURE_TEXT[pageFailure.kind].title} body={FAILURE_TEXT[pageFailure.kind].body}
+          {tab === 'qq' ? <QQPanel adapter={adapter} />
+            : pageFailure ? <StatusBlock icon={pageFailure.kind === 'owner' ? <IconLock /> : <IconAlert />} title={FAILURE_TEXT[pageFailure.kind].title} body={FAILURE_TEXT[pageFailure.kind].body}
               action={pageFailure.kind !== 'owner' ? <button type="button" className="xjm-btn" onClick={() => setReloadKey(k => k + 1)}>重试</button> : undefined} />
             : loading && !snapshot ? <div className="xjm-skeleton" aria-hidden="true"><i /><i /><i /><i /></div>
             : showDetail ? renderDetail()
@@ -625,17 +683,53 @@ export function MemoryPanel({ remote }: MemoryPanelProps) {
             : renderOverview()}
         </div>
         <div className="xjm-drawer-footer">
-          <button type="button" className="xjm-btn" disabled={!canSearch} onClick={() => searchRef.current?.focus()}><IconSearch />搜索记忆</button>
+          <button type="button" className="xjm-btn" disabled={tab === 'qq' || !canSearch} onClick={() => searchRef.current?.focus()}><IconSearch />搜索记忆</button>
           <button type="button" className="xjm-btn" disabled={busy !== null} onClick={returnToGraph}>回到全图</button>
         </div>
         </div>
         <nav className="xjm-drawer-nav" aria-label="记忆管理导航">
-          {([['overview', '概览'], ['persona', '人设卡'], ['emotion', 'AI 情绪']] as const).map(([key, label]) =>
-            <button key={key} type="button" className="xjm-nav-item" aria-current={!showDetail && !query.trim() && tab === key ? 'page' : undefined} disabled={busy !== null}
-              onClick={() => { selectTarget(null); setQuery(''); setShowPending(false); setTab(key) }}>{label}</button>)}
+          {([['overview', '概览'], ['persona', '人设卡'], ['emotion', 'AI 情绪'], ['qq', 'QQ 接入']] as const).map(([key, label]) =>
+            <button key={key} type="button" className="xjm-nav-item" aria-current={workbenchExpanded && !showDetail && !query.trim() && tab === key ? 'page' : undefined} disabled={busy !== null}
+              onClick={() => { if (workbenchExpanded && tab === key && !showDetail && !query.trim()) { setWorkbenchExpanded(false); return }; returnToGraph(); setQuery(''); setActiveCard(null); setShowPending(false); setTab(key); setWorkbenchExpanded(true) }}>{label}</button>)}
         </nav>
         <div className="xjm-toast-slot" aria-live="polite">{toast && <div className="xjm-toast">{toast}</div>}</div>
       </aside>
+      <section className="xjm-console" aria-label="记忆状态与操作">
+        <div className="xjm-console-cell xjm-console-intro">
+          <span className="xjm-console-kicker">XUJIE / MEMORY</span>
+          <strong>记忆总览</strong>
+          <span className="xjm-console-muted">当前记忆库</span>
+        </div>
+        <div className="xjm-console-cell">
+          <span className="xjm-console-label">原话 <small>ALL RECORDS</small></span>
+          <strong className="xjm-console-number">{stats?.traces ?? '—'}</strong>
+          <span className="xjm-console-muted">可搜索与编辑</span>
+        </div>
+        <div className="xjm-console-cell xjm-console-layers">
+          <span className="xjm-console-label">三层节点 <small>IN VIEW</small></span>
+          <div className="xjm-console-layer-list">
+            {counts.map((count, index) => <span key={LAYER_META[index]!.name} data-layer={index}>
+              <i />{LAYER_META[index]!.name}<b>{snapshot ? count : '—'}</b>
+            </span>)}
+          </div>
+        </div>
+        <div className="xjm-console-cell">
+          <span className="xjm-console-label">关联 <small>IN VIEW</small></span>
+          <strong className="xjm-console-number xjm-console-cyan">{snapshot ? edgesN : '—'}</strong>
+          <span className="xjm-console-muted">图中真实关联</span>
+        </div>
+        <button type="button" className="xjm-console-cell xjm-console-action" disabled={!stats || busy !== null}
+          onClick={() => { returnToGraph(); setQuery(''); setTab('overview'); setShowPending(true); setWorkbenchExpanded(true) }}>
+          <span className="xjm-console-label">待澄清 <small>REVIEW</small></span>
+          <strong className="xjm-console-number xjm-console-amber">{stats?.clarifications_open ?? '—'}</strong>
+          <span className="xjm-console-muted">查看并处理 →</span>
+        </button>
+        <div className="xjm-console-cell">
+          <span className="xjm-console-label">锚点 <small>PINNED</small></span>
+          <strong className="xjm-console-number">{stats?.anchors ?? '—'}</strong>
+          <span className="xjm-console-muted">长期保留</span>
+        </div>
+      </section>
     </div>
   </div>
 }

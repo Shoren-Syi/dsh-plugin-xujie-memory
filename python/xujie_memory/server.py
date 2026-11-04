@@ -44,6 +44,7 @@ import hmac
 import json
 import os
 import secrets
+import sqlite3
 import threading
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
@@ -108,6 +109,7 @@ class MemoryService:
         # 但「同一个 session 两次请求同时建 scope」会各建一次。
         # `INSERT OR IGNORE` 兜住了，这里只是避免无谓的重复计算。
         self._scopes: dict[str, str] = {}
+        self._summary_turns: dict[tuple[str, str], int] = {}
         self._lock = threading.Lock()
         # Serialize HTTP writes with reads of dependent projections. In
         # particular, a /turn cannot republish a half-edited graph.
@@ -149,6 +151,19 @@ class MemoryService:
             scope, user, text, context=dict(context or {}), budget=turn_budget,
             session=session,
         )
+        with self._lock:
+            key = (scope, session)
+            turns = self._summary_turns.pop(key, 0) + 1
+            self._summary_turns[key] = turns
+            if len(self._summary_turns) > 4096:
+                self._summary_turns.pop(next(iter(self._summary_turns)))
+            should_compact = turns % 8 == 0
+        if should_compact:
+            from .episode_compaction import compact_session
+            try:
+                compact_session(self.engine, scope, session)
+            except (sqlite3.Error, ValueError) as exc:
+                result.warnings.append(f"会话片段摘要未生成：{type(exc).__name__}")
         return {
             "ok": True,
             "session": session,
@@ -356,6 +371,13 @@ class _Handler(BaseHTTPRequestHandler):
 
         self.service.request_lock.acquire()
         try:
+            if route == '/qq/settings/active':
+                from .qq_settings import QQSettings
+                self._json(200, {'ok': True, 'settings': QQSettings(self.service.engine).active()})
+                return
+            if route.startswith('/qq/budget/'):
+                self._json(200, self._qq_budget(route, body))
+                return
             if route.startswith("/manage/"):
                 payload = self._manage(route, body)
                 self._json(200, payload)
@@ -461,9 +483,22 @@ class _Handler(BaseHTTPRequestHandler):
         manager = Management(self.service)
         if route == "/manage/catalog":
             return manager.catalog()
+        if route == '/manage/qq/ensure':
+            return {'ok': True, 'scope_id': self.service.scope_of('xujie-qq-settings', 'user')}
         scope = _str_field(body, "scope_id")
         if not scope:
             raise BadRequest("missing_scope_id")
+        if route in ('/manage/qq/get', '/manage/qq/save'):
+            from .qq_settings import QQSettings
+            manager.scope(scope)
+            store = QQSettings(self.service.engine)
+            if route.endswith('/get'):
+                return {'ok': True, **store.get(scope)}
+            try:
+                store.save(scope, json.loads(_str_field(body, 'settings', limit=10000)))
+            except (TypeError, ValueError) as exc:
+                raise BadRequest(str(exc)) from exc
+            return {'ok': True}
         if route == "/manage/snapshot":
             return manager.snapshot(scope, int(_num_field(body, "limit", 250, 1, 500)))
         if route == "/manage/search":
@@ -488,6 +523,40 @@ class _Handler(BaseHTTPRequestHandler):
         if route == "/manage/forget":
             return manager.forget(scope, trace, expected)
         raise ManagementError("route_not_found")
+
+    def _qq_budget(self, route: str, body: dict[str, Any]) -> dict[str, Any]:
+        from .qq_budget import BudgetPolicy, QQBudget
+        scope = _str_field(body, 'scope_id')
+        Management(self.service).scope(scope)
+        budget = QQBudget(self.service.engine)
+        try:
+            if route == '/qq/budget/status':
+                return {'ok': True, **budget.status(scope)}
+            if route == '/qq/budget/configure':
+                policy = body.get('policy')
+                if not isinstance(policy, dict):
+                    raise ValueError('缺少预算配置')
+                budget.configure(scope, BudgetPolicy(**policy))
+                return {'ok': True}
+            if route == '/qq/budget/activity':
+                budget.configure_activity(scope, _str_field(body, 'activity'), body.get('daily_calls'))
+                return {'ok': True}
+            if route == '/qq/budget/reserve':
+                call = budget.reserve(scope, _str_field(body, 'activity'), body.get('input_limit'), body.get('output_limit'))
+                return {'ok': True, 'call_id': call}
+            if route in ('/qq/budget/settle', '/qq/budget/cancel-unstarted'):
+                call = _str_field(body, 'call_id')
+                row = self.service.engine._conn().execute('SELECT scope_id FROM qq_budget_calls WHERE call_id=?', (call,)).fetchone()
+                if row is None or row['scope_id'] != scope:
+                    raise ValueError('预算记录不存在')
+                if route.endswith('/settle'):
+                    amount = budget.settle(call, body.get('input_tokens'), body.get('output_tokens'), body.get('cached_tokens', 0))
+                    return {'ok': True, 'amount': amount}
+                budget.cancel_unstarted(call)
+                return {'ok': True}
+            raise ValueError('未知预算操作')
+        except (TypeError, ValueError) as exc:
+            raise BadRequest(str(exc)) from exc
 
     # ---------------------------------------------------------- 工具
     def _read_json(self) -> dict[str, Any]:

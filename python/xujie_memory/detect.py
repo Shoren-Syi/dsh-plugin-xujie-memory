@@ -48,6 +48,11 @@ CN_DIGITS = {
 _CN_NUM_CHARS = "零一二两三四五六七八九十百千万亿"
 
 
+def has_owed_cue(text: str) -> bool:
+    """区分债务动词“欠”和“欠缺”等描述性词语。"""
+    return bool(re.search(r'(?<!哈)欠(?!缺|佳|妥|安)', text))
+
+
 def address_claim(text: str) -> str | None:
     """提取明确的自称；涉及邀约或动作的「叫我」不能作为称呼。"""
     for match in re.finditer(r"(?:叫|喊)我(?:作|做)?\s*([^\s，。！？,.!?]{1,8})", text):
@@ -58,6 +63,11 @@ def address_claim(text: str) -> str | None:
         if value.startswith(("过去", "过来", "回来", "出去", "进来", "一声", "一下", "一起", "看看", "看戏")):
             continue
         if value and value != "了":
+            return value
+    match = re.search(r"我(?:的)?名字(?:叫|是)\s*([^\s，。！？,.!?]{1,8})", text)
+    if match:
+        value = match.group(1).rstrip("吧呀啊嘛呢哦哈啦")
+        if value and value not in ("什么", "啥", "谁", "什么来着"):
             return value
     return None
 
@@ -1239,12 +1249,11 @@ def longest_shared_span(a: str, b: str) -> int:
 
 
 # ------------------------------------------------------------------ 兜底候选
-# 「这条话在说账」的最小证据：一个动作词。
-# 刻意不收「给」「拿」——它们在没有上下文时几乎什么都指。
+# 兜底必须有明确的交易语境，普通的「还去看了」或「凭借」不能造出一笔账。
 _CLAIM_VERBS = {
-    "repay": ("还", "补", "归还", "结清", "清了"),
-    "incur": ("欠", "赊", "借", "记我", "算我"),
-    "waive": ("免", "算了", "不用还", "勾掉"),
+    "repay": ("还我", "还你", "还他", "还她", "归还", "结清"),
+    "incur": ("欠", "赊", "借给", "借了", "借我", "借你", "借他", "借她", "记我"),
+    "waive": ("不用还", "勾掉"),
 }
 
 
@@ -1259,8 +1268,7 @@ def claim_candidate(
     这不是编码器，是**兜底**。它只产出 `modality="unclear"` 的候选，
     走到闸门必然变成 pending → 问一句 → 用户点头才入账。
 
-    所以它最坏的结果是多问一句，最好的结果是**一句话没有静默消失**。
-    对一个「不撒谎」的记忆系统来说，这个兑换比是划算的。
+    没有明确交易语境时只保留原话，避免把普通对话伪造成待澄清账目。
     """
     if denial_cue(text):
         return None
@@ -1270,9 +1278,11 @@ def claim_candidate(
 
     op = None
     for candidate, words in _CLAIM_VERBS.items():
-        if any(w in text for w in words):
+        if any(has_owed_cue(text) if word == '欠' else word in text for word in words):
             op = candidate
             break
+    if op is None and re.search(r'算我(?:欠|借|赊)?(?:了|上)?\s*[0-9零一二两三四五六七八九十百千万]', text):
+        op = 'incur'
     due = future_cue(text)
     # 「下礼拜给你」里的「给」单独出现几乎无意义，但配上未来时间词
     # 就是一句承诺——这是**合取**才成立的线索，不是关键词。

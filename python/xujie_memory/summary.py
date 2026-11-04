@@ -11,10 +11,11 @@
 from __future__ import annotations
 
 import json
+import uuid
 from dataclasses import dataclass
 from typing import Callable, Protocol, Sequence
 
-from .engine import canonical_json, digest
+from .engine import canonical_json
 
 # 省略校验用的词表。宁可误报，不可漏报——摘要丢一个"不"字，语义就反了。
 # 但"别"歧义太大（"别忘""别人""特别"都不是否定），所以不收。
@@ -85,6 +86,13 @@ def validate_omissions(texts: Sequence[str], summary: str) -> list[str]:
     extra = sum_nums - src_nums
     if extra:
         warnings.append(f"numbers_not_in_source:{','.join(sorted(extra))}")
+    missing = src_nums - sum_nums
+    if missing:
+        warnings.append(f"numbers_lost:{','.join(sorted(missing))}")
+    quantity = r'[零一二两三四五六七八九十百千万亿]+(?:元|块钱|块|公斤|斤|袋|瓶|碗|本|件|张|杯|小时|分钟|天|个月|年|岁|次)'
+    missing_quantities = set(re.findall(quantity, source)) - set(re.findall(quantity, summary))
+    if missing_quantities:
+        warnings.append(f"quantities_lost:{','.join(sorted(missing_quantities))}")
 
     return warnings
 
@@ -102,18 +110,20 @@ class SummaryStore:
         generator_version: str = "extractive-v1",
         coverage: dict | None = None,
     ) -> SummaryResult:
+        if not scope_id or not trace_ids or len(set(trace_ids)) != len(trace_ids):
+            raise ValueError('摘要需要不重复的原话证据')
         texts: list[str] = []
         for tid in trace_ids:
-            t = self.engine.get_trace(tid)
-            if t is None or t["erased_at"]:
-                continue
-            texts.append(t["content"])
+            trace = self.engine.get_trace(tid)
+            if trace is None or trace['scope_id'] != scope_id or trace['erased_at']:
+                raise ValueError('摘要证据不存在、已删除或不属于当前记忆库')
+            texts.append(trace['content'])
 
         text = summarizer(texts)
         warnings = validate_omissions(texts, text)
-        status = "failed" if any(w.startswith("negation_lost") for w in warnings) else "ok"
+        status = "failed" if warnings else "ok"
 
-        summary_id = "sm_" + digest(scope_id, canonical_json(list(trace_ids)), self.engine.now())[:24]
+        summary_id = "sm_" + uuid.uuid4().hex
         self.engine._conn().execute(
             "INSERT INTO summaries(summary_id, scope_id, input_refs_json, text,"
             " generator_version, coverage_json, omissions_json, validation_status,"
@@ -136,19 +146,17 @@ class SummaryStore:
     ) -> SummaryResult:
         """合并多个摘要：生成新产物，旧产物标 merged，不覆盖（12.2）。"""
         conn = self.engine._conn()
-        # 顺序按时间正序，不按 IN 列表顺序，也不按数据库返回顺序。
-        #
-        # 摘要是给人读的：「还你三斤；再还两斤；免一斤吧」和
-        # 「免一斤吧；再还两斤；还你三斤」是两段不同的话。
-        # 而 IN 查询的返回顺序**不保证**（这里实测是倒的），
-        # 所以必须显式 ORDER BY，并用 summary_id 兜底保证可复现（I2）。
+        # 同一时间生成的摘要按插入顺序合并，避免随机编号改变叙事顺序。
         rows = conn.execute(
             f"SELECT * FROM summaries WHERE summary_id IN ({','.join('?' * len(summary_ids))})"
-            f" ORDER BY created_at ASC, summary_id ASC",
+            f" ORDER BY created_at ASC, rowid ASC",
             tuple(summary_ids),
         ).fetchall()
-        if not rows:
-            raise ValueError("no summaries to merge")
+        if not summary_ids or len(set(summary_ids)) != len(summary_ids) or len(rows) != len(summary_ids):
+            raise ValueError('摘要不存在或编号重复')
+        if any(row['scope_id'] != scope_id or row['lifecycle_state'] != 'active'
+               or row['validation_status'] != 'ok' for row in rows):
+            raise ValueError('只能合并当前记忆库中有效的摘要')
 
         texts = [r["text"] for r in rows]
         inputs: list[str] = []
@@ -161,23 +169,25 @@ class SummaryStore:
             # 校验失败保留旧产物，不能因为「更短」就替换（12.2）
             return SummaryResult("", text, inputs, "failed", warnings)
 
-        result = self.create(scope_id, inputs, summarizer, generator_version,
-                             coverage={"merged_from": list(summary_ids)})
-        conn.execute(
-            f"UPDATE summaries SET lifecycle_state='merged'"
-            f" WHERE summary_id IN ({','.join('?' * len(summary_ids))})",
-            tuple(summary_ids),
-        )
-        return result
+        inputs = list(dict.fromkeys(inputs))
+        with self.engine._tx():
+            result = self.create(scope_id, inputs, lambda _: text, generator_version,
+                                 coverage={"merged_from": list(summary_ids)})
+            if result.validation_status != 'ok':
+                return result
+            conn.execute(
+                f"UPDATE summaries SET lifecycle_state='merged'"
+                f" WHERE summary_id IN ({','.join('?' * len(summary_ids))})",
+                tuple(summary_ids),
+            )
+            return result
 
     # ------------------------------------------------------------- 读
     def active(self, scope_id: str) -> list[dict]:
-        # summary_id 是兜底排序键：同一秒内产生的多条摘要，光按 created_at
-        # 排出来的顺序由存储引擎决定——这次是 A、下次可能是 B。
-        # 而整合周期要按这个顺序分组合并，顺序不稳就等于**不幂等**（I2）。
+        # 同一时间生成的摘要按插入顺序排列，保证读取顺序稳定。
         rows = self.engine._conn().execute(
             "SELECT * FROM summaries WHERE scope_id=? AND lifecycle_state='active'"
-            " ORDER BY created_at DESC, summary_id ASC",
+            " ORDER BY created_at DESC, rowid DESC",
             (scope_id,),
         ).fetchall()
         return [dict(r) for r in rows]

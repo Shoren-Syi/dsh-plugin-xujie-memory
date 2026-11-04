@@ -33,6 +33,34 @@ const GROUPS = 4
 const EDGE_SAMPLES = 20
 const TAU = Math.PI * 2
 
+// 内部光纤仅用于表现空间深度；真实记忆和关联由快照单独绘制。
+function makeCoreCloud() {
+  let seed = 0x1a473
+  const random = () => {
+    seed = (Math.imul(seed, 1664525) + 1013904223) >>> 0
+    return seed / 4294967296
+  }
+  const points: Array<{ x: number; y: number; z: number; color: number }> = []
+  const edges: Array<[number, number]> = []
+  const count = 200
+  for (let layer = 0; layer < 3; layer++) {
+    const start = points.length, stratum = STRATA[layer]!
+    for (let n = 0; n < count; n++) {
+      const angle = random() * TAU, radius = Math.sqrt(random()) * stratum.radius * 0.9
+      const point = { x: Math.cos(angle) * radius, y: stratum.y + (random() - 0.5) * 42, z: Math.sin(angle) * radius, color: layer }
+      const nearest: Array<{ index: number; distance: number }> = []
+      for (let i = start; i < points.length; i++) {
+        const p = points[i]!, distance = (p.x - point.x) ** 2 + (p.y - point.y) ** 2 + (p.z - point.z) ** 2
+        if (distance < 70 ** 2) nearest.push({ index: i, distance })
+      }
+      nearest.sort((a, b) => a.distance - b.distance)
+      for (const match of nearest.slice(0, 3)) edges.push([points.length, match.index])
+      if (layer > 0 && n % 5 === 0) edges.push([points.length, (layer - 1) * count + n])
+      points.push(point)
+    }
+  }
+  return { points, edges }
+}const CORE_CLOUD = makeCoreCloud()
 interface Pulse { path: Int32Array; cum: Float32Array; total: number; t: number; speed: number; group: number; node: number }
 interface EdgePulse { edge: number; t: number; speed: number }
 
@@ -79,8 +107,8 @@ export class NeuralEngine {
   private nsy = new Float32Array(0)
   private nsz = new Float32Array(0)
   private nsp = new Float32Array(0)
-  private nOcc = new Uint8Array(0)
   private flash = new Float32Array(0)
+  private clusters = new Uint16Array(0)
   private order: number[] = []
   private edges: Array<{ s: number; t: number; layer: number }> = []
   private edgePts = new Float32Array(0)
@@ -102,8 +130,10 @@ export class NeuralEngine {
   private panY = 0
   private yawTarget: number | null = null
   private focusTarget: number | null = null
+  private returning = false
   private autoRotate = true
   private time = 0
+  private ringPhase = 0
   private last = 0
   private raf = 0
   private running = false
@@ -151,7 +181,7 @@ export class NeuralEngine {
   setOptions(opts: EngineOptions): void {
     const motionChanged = opts.reducedMotion !== this.opts.reducedMotion
     this.opts = opts
-    if (motionChanged) { this.autoRotate = !opts.reducedMotion; this.pulses = []; this.edgePulses = []; if (!opts.reducedMotion) this.seedPulses() }
+    if (motionChanged) { this.autoRotate = !opts.reducedMotion; this.pulses = []; this.edgePulses = []; if (opts.reducedMotion && this.returning) this.resetView(); if (!opts.reducedMotion) this.seedPulses() }
     this.invalidate()
   }
 
@@ -165,8 +195,8 @@ export class NeuralEngine {
     this.nodeVertex = new Int32Array(count)
     this.nx = new Float32Array(count); this.ny = new Float32Array(count); this.nz = new Float32Array(count)
     this.nsx = new Float32Array(count); this.nsy = new Float32Array(count); this.nsz = new Float32Array(count); this.nsp = new Float32Array(count)
-    this.nOcc = new Uint8Array(count)
     this.flash = new Float32Array(count)
+    this.clusters = new Uint16Array(count)
     this.placeNodes()
     this.edges = []
     for (const e of edges) {
@@ -190,6 +220,7 @@ export class NeuralEngine {
     this.hideTooltip()
     this.refreshNeighbours()
     if (idx >= 0 && focus) {
+      this.returning = false
       const target = Math.atan2(-this.nx[idx]!, -this.nz[idx]!)
       this.autoRotate = false
       this.yawVel = this.pitchVel = 0
@@ -229,7 +260,14 @@ export class NeuralEngine {
   setAutoRotate(on: boolean): void { this.autoRotate = on && !this.opts.reducedMotion; this.invalidate() }
   get isAutoRotating(): boolean { return this.autoRotate }
   zoomBy(k: number): void { this.zoomAt(this.width / 2, this.height / 2, k) }
-  resetView(): void { this.yaw = 0.55; this.pitch = 0.34; this.zoom = 1; this.panX = 0; this.panY = 0; this.yawTarget = null; this.focusTarget = null; this.yawVel = this.pitchVel = 0; this.invalidate() }
+  resetView(): void {
+    this.yawTarget = null; this.focusTarget = null; this.yawVel = this.pitchVel = 0
+    if (this.opts.reducedMotion) {
+      this.yaw = 0.55; this.pitch = 0.34; this.zoom = 1; this.panX = this.panY = 0
+      this.returning = false
+    } else this.returning = true
+    this.invalidate()
+  }
 
   resize(width: number, height: number): void {
     this.dpr = Math.min(2, window.devicePixelRatio || 1)
@@ -277,6 +315,8 @@ export class NeuralEngine {
 
   /** Test/QA hook: camera state proves the motion is a 3D rotation, not a 2D canvas spin. */
   cameraState(): { yaw: number; pitch: number; zoom: number } { return { yaw: this.yaw, pitch: this.pitch, zoom: this.zoom } }
+
+  ringScreen(): { x: number; y: number; radius: number } { return { x: this.somaScreen.x, y: this.somaScreen.y, radius: 300 * this.fBase * this.zoom } }
 
   /** Screen-space caption bounds for layout regression checks. */
   captionBounds() { return this.captionBoxes.map(b => ({ ...b })) }
@@ -352,8 +392,8 @@ export class NeuralEngine {
     list.reverse()
     const path = Int32Array.from(list)
     const cum = new Float32Array(path.length)
-    // The soma centre is the implicit origin of every path.
-    let total = Math.hypot(this.m.x[path[0]!]!, this.m.y[path[0]!]!, this.m.z[path[0]!]!) - SOMA_RADIUS * 0.5
+    // 信号从纤维起点出发，不凭空穿过中心。
+    let total = 0
     cum[0] = total
     for (let i = 1; i < path.length; i++) {
       const a = path[i - 1]!, b = path[i]!
@@ -371,17 +411,18 @@ export class NeuralEngine {
     if (this.nodes.length && r < 0.55) {
       node = Math.floor(Math.random() * this.nodes.length)
       v = this.nodeVertex[node]!
+      if (this.m.parent[v]! < 0) { node = -1; v = this.m.sites[1][3 * Math.floor(Math.random() * (this.m.sites[1].length / 3))]! }
     } else {
-      const layer = Math.floor(Math.random() * 3) as LayerIndex
+      const layer = (1 + Math.floor(Math.random() * 2)) as LayerIndex
       const sites = this.m.sites[layer]
-      v = sites[Math.floor(Math.random() * sites.length)] ?? 0
+      v = sites[3 * Math.floor(Math.random() * (sites.length / 3))] ?? 0
     }
     const p = this.pathTo(v)
-    return { ...p, t: Math.random() * 0.15 * p.total, speed: 150 + Math.random() * 170, group: this.m.group[v]!, node }
+    return { ...p, t: Math.random() * 0.15 * p.total, speed: 32 + Math.random() * 30, group: this.m.group[v]!, node }
   }
 
   private seedPulses(): void {
-    const target = 46
+    const target = 4
     this.pulses = Array.from({ length: target }, () => { const p = this.spawnPulse(); p.t = Math.random() * p.total; return p })
     this.edgePulses = []
   }
@@ -406,6 +447,7 @@ export class NeuralEngine {
       this.press = { x: p.x, y: p.y, t: performance.now(), moved: false, button: e.button, shift: e.shiftKey }
       this.yawTarget = null
       this.focusTarget = null
+      this.returning = false
       this.yawVel = this.pitchVel = 0
     })
     on(c, 'pointermove', e => {
@@ -443,6 +485,10 @@ export class NeuralEngine {
       if (e.type !== 'pointercancel' && press && !press.moved && performance.now() - press.t < 600 && press.button === 0) {
         const p = local(e)
         const hit = this.pick(p.x, p.y)
+        if (hit >= 0 && this.clusters[hit]! > 1 && this.zoom < 3) {
+          this.zoomAt(this.nsx[hit]!, this.nsy[hit]!, 1.7)
+          return
+        }
         this.opts.onSelect(hit >= 0 ? this.nodes[hit]!.id : null)
       }
       if (this.opts.reducedMotion) { this.yawVel = this.pitchVel = 0 }
@@ -474,7 +520,11 @@ export class NeuralEngine {
   }
 
   private zoomAt(mx: number, my: number, k: number): void {
-    const next = Math.max(0.55, Math.min(3.4, this.zoom * k))
+    // 手动缩放优先于自动聚焦或归位，避免刚缩放就被动画拉回。
+    this.returning = false
+    this.focusTarget = null
+    this.yawTarget = null
+    const next = Math.max(0.55, Math.min(6, this.zoom * k))
     const kk = next / this.zoom
     const cx = this.width / 2, cy = this.height / 2
     this.panX = mx - cx - (mx - cx - this.panX) * kk
@@ -487,7 +537,7 @@ export class NeuralEngine {
   private pick(x: number, y: number): number {
     let best = -1, bestScore = Infinity
     for (let i = 0; i < this.nodes.length; i++) {
-      if (this.nOcc[i]) continue
+      if (!this.clusters[i]) continue
       const d = Math.hypot(this.nsx[i]! - x, this.nsy[i]! - y)
       const reach = Math.max(12, this.nodeRadius(i) + 8)
       if (d > reach) continue
@@ -504,16 +554,18 @@ export class NeuralEngine {
     if (hit < 0) { this.hideTooltip(); return }
     const node = this.nodes[hit]!
     const tip = this.tooltip
-    if (tip.dataset.id !== node.id) {
-      tip.dataset.id = node.id
+    const clusterSize = this.clusters[hit]!
+    const tipId = `${node.id}:${clusterSize}`
+    if (tip.dataset.id !== tipId) {
+      tip.dataset.id = tipId
       tip.replaceChildren()
       const kind = document.createElement('span')
       kind.className = 'xjm-tip-kind'
       kind.dataset.layer = String(node.layer)
-      kind.textContent = node.kindLabel
+      kind.textContent = clusterSize > 1 ? `邻近的 ${clusterSize} 个节点 · 点击放大` : node.kindLabel
       const text = document.createElement('span')
       text.className = 'xjm-tip-text'
-      text.textContent = node.label.length > 90 ? node.label.slice(0, 90) + '…' : node.label
+      text.textContent = clusterSize > 1 ? '放大后查看各条记忆' : node.label.length > 90 ? node.label.slice(0, 90) + '…' : node.label
       tip.append(kind, text)
     }
     const tx = Math.min(this.width - 300, x + 14), ty = Math.max(8, y - 44)
@@ -529,8 +581,20 @@ export class NeuralEngine {
 
   private step(dt: number): void {
     this.time += dt
+    if (this.autoRotate && !this.opts.reducedMotion) this.ringPhase += dt * 0.08
     const dragging = this.press !== null && this.pointers.size > 0
-    if (this.yawTarget !== null) {
+    if (this.returning && !dragging) {
+      const rate = Math.min(1, dt * 5)
+      const angle = Math.atan2(Math.sin(0.55 - this.yaw), Math.cos(0.55 - this.yaw))
+      this.yaw += angle * rate
+      this.pitch += (0.34 - this.pitch) * rate
+      this.zoom += (1 - this.zoom) * rate
+      this.panX *= 1 - rate; this.panY *= 1 - rate
+      if (Math.abs(angle) < 0.002 && Math.abs(this.pitch - 0.34) < 0.002 && Math.abs(this.zoom - 1) < 0.002 && Math.abs(this.panX) < 0.5 && Math.abs(this.panY) < 0.5) {
+        this.yaw = 0.55; this.pitch = 0.34; this.zoom = 1; this.panX = this.panY = 0
+        this.returning = false
+      }
+    } else if (this.yawTarget !== null) {
       let d = this.yawTarget - this.yaw
       d = Math.atan2(Math.sin(d), Math.cos(d))
       this.yaw += d * Math.min(1, dt * 4.2)
@@ -571,8 +635,8 @@ export class NeuralEngine {
       }
     }
     if (this.edges.length) {
-      const want = Math.min(28, Math.ceil(this.edges.length * 0.35))
-      while (this.edgePulses.length < want) this.edgePulses.push({ edge: Math.floor(Math.random() * this.edges.length), t: -Math.random() * 1.6, speed: 0.35 + Math.random() * 0.3 })
+      const want = Math.min(2, Math.ceil(this.edges.length * 0.05))
+      while (this.edgePulses.length < want) this.edgePulses.push({ edge: Math.floor(Math.random() * this.edges.length), t: -Math.random() * 5, speed: 0.12 + Math.random() * 0.08 })
       for (let i = this.edgePulses.length - 1; i >= 0; i--) {
         const ep = this.edgePulses[i]!
         ep.t += ep.speed * dt
@@ -654,8 +718,17 @@ export class NeuralEngine {
     for (let i = 0; i < nCount; i++) {
       this.nsp[i] = project(this.nx[i]!, this.ny[i]!, this.nz[i]!, tmp, 0)
       this.nsx[i] = tmp[0]!; this.nsy[i] = tmp[1]!; this.nsz[i] = tmp[2]!
-      const behind = this.nsz[i]! > somaZ
-      this.nOcc[i] = behind && Math.hypot(this.nsx[i]! - this.somaScreen.x, this.nsy[i]! - this.somaScreen.y) < this.somaScreen.r * 0.96 ? 1 : 0
+    }
+    this.clusters.fill(0)
+    const cells = new Map<string, number>()
+    const size = this.zoom >= 3 ? 0 : 20 / Math.max(1, this.zoom)
+    const ranked = Array.from({ length: nCount }, (_, i) => i).sort((a, b) => this.nodes[b]!.weight - this.nodes[a]!.weight)
+    for (const i of ranked) {
+      if (!size || i === this.selected || this.highlight?.has(i)) { this.clusters[i] = 1; continue }
+      const key = `${this.nodes[i]!.layer}:${Math.floor(this.nsx[i]! / size)}:${Math.floor(this.nsy[i]! / size)}`
+      const representative = cells.get(key)
+      if (representative === undefined) { cells.set(key, i); this.clusters[i] = 1 }
+      else this.clusters[representative] = Math.min(65535, this.clusters[representative]! + 1)
     }
     for (let e = 0; e < this.edges.length; e++) {
       for (let j = 0; j < EDGE_SAMPLES; j++) {
@@ -663,10 +736,12 @@ export class NeuralEngine {
         project(this.edgePts[o]!, this.edgePts[o + 1]!, this.edgePts[o + 2]!, this.edgeScr, o)
       }
     }
-    this.order = Array.from({ length: nCount }, (_, i) => i).sort((a, b) => this.nsz[b]! - this.nsz[a]!)
+    this.order = ranked.filter(i => this.clusters[i]).sort((a, b) => this.nsz[b]! - this.nsz[a]!)
 
     const dim = this.dimmed ? 0.45 : 1
     const zoomW = Math.max(0.7, Math.min(2.4, f * 1.25))
+    this.drawCoreFrame(f, dim)
+    this.drawCoreCloud(project, dim)
     this.drawStrata(project, dim, true)
     this.drawDust(project, dim)
 
@@ -686,6 +761,69 @@ export class NeuralEngine {
     this.drawSelection()
   }
 
+  private drawCoreFrame(scale: number, dim: number): void {
+    const { ctx } = this
+    const { x, y } = this.somaScreen
+    const radius = 300 * scale
+    if (radius < 2) return
+    // 多层刻度和轨道只构成界面外框，真实人设卡显示在环外。
+    for (const [ratio, alpha, width] of [[1.025, 0.28, 0.8], [1.055, 0.12, 0.7], [1.105, 0.3, 0.8], [1.145, 0.1, 0.6], [1.17, 0.22, 0.7]]) {
+      ctx.beginPath(); ctx.arc(x, y, radius * ratio!, 0, TAU)
+      ctx.lineWidth = Math.max(0.55, width! * scale)
+      ctx.strokeStyle = `rgba(169,202,214,${alpha! * dim})`; ctx.stroke()
+    }
+    const offset = this.ringPhase + this.yaw * 0.08
+    for (let i = 0; i < 144; i++) {
+      const angle = i / 144 * TAU + offset, major = i % 12 === 0, medium = i % 4 === 0
+      const inner = radius * 1.06, outer = radius * (major ? 1.102 : medium ? 1.09 : 1.077)
+      ctx.beginPath(); ctx.moveTo(x + Math.cos(angle) * inner, y + Math.sin(angle) * inner)
+      ctx.lineTo(x + Math.cos(angle) * outer, y + Math.sin(angle) * outer)
+      ctx.lineWidth = Math.max(0.55, scale * (major ? 1.8 : 0.65))
+      ctx.strokeStyle = `rgba(194,226,233,${dim * (major ? 0.72 : medium ? 0.38 : 0.16)})`; ctx.stroke()
+    }
+    for (let i = 0; i < 72; i++) {
+      const a = i / 72 * TAU - offset * 0.7
+      const length = (i % 9 === 0 ? 0.6 : 0.3) * TAU / 72
+      ctx.beginPath(); ctx.arc(x, y, radius * 1.125, a, a + length)
+      ctx.lineWidth = Math.max(1, 3 * scale)
+      const rgb = i % 18 === 0 ? '181,225,224' : '180,196,205'
+      ctx.strokeStyle = `rgba(${rgb},${dim * (i % 9 === 0 ? 0.65 : 0.24)})`; ctx.stroke()
+    }
+    ctx.setLineDash([Math.max(1, scale * 1.2), Math.max(3, scale * 4)])
+    ctx.beginPath(); ctx.arc(x, y, radius * 1.155, offset, TAU + offset)
+    ctx.strokeStyle = `rgba(157,196,202,${0.27 * dim})`; ctx.lineWidth = Math.max(0.55, scale * 0.7); ctx.stroke()
+    ctx.setLineDash([])
+    for (let i = 0; i < 4; i++) {
+      const angle = i * Math.PI / 2 + offset, length = TAU * (i % 2 ? 0.045 : 0.065)
+      ctx.beginPath(); ctx.arc(x, y, radius * 1.025, angle, angle + length)
+      ctx.strokeStyle = `rgba(218,242,244,${0.7 * dim})`; ctx.lineWidth = Math.max(1, 1.8 * scale); ctx.stroke()
+    }
+  }
+  private drawCoreCloud(project: (x: number, y: number, z: number, out: Float32Array, o: number) => number, dim: number): void {
+    const { ctx } = this
+    const positions = new Float32Array(CORE_CLOUD.points.length * 3)
+    CORE_CLOUD.points.forEach((point, i) => project(point.x, point.y, point.z, positions, i * 3))
+    const colors = [[150, 193, 231], [219, 172, 222], [140, 218, 192]] as const
+    ctx.lineWidth = 0.55
+    for (let group = 0; group < colors.length; group++) {
+      ctx.beginPath()
+      for (const [a, b] of CORE_CLOUD.edges) {
+        if (CORE_CLOUD.points[a]!.color !== group) continue
+        ctx.moveTo(positions[a * 3]!, positions[a * 3 + 1]!)
+        ctx.lineTo(positions[b * 3]!, positions[b * 3 + 1]!)
+      }
+      const color = colors[group]!
+      ctx.strokeStyle = `rgba(${color[0]},${color[1]},${color[2]},${(0.24 * dim).toFixed(3)})`
+      ctx.stroke()
+    }
+    ctx.fillStyle = `rgba(219,235,255,${0.45 * dim})`
+    for (let i = 0; i < CORE_CLOUD.points.length; i += 2) {
+      const pulse = 0.5 + 0.5 * Math.sin(this.time * 1.2 + i * 0.37)
+      ctx.globalAlpha = 0.35 + pulse * 0.55
+      ctx.fillRect(positions[i * 3]!, positions[i * 3 + 1]!, 1.1, 1.1)
+    }
+    ctx.globalAlpha = 1
+  }
   private drawFibreBand(bd: number, fog: number, zoomW: number): void {
     const { ctx, m } = this
     const widths = [2.5, 1.35, 0.78, 0.42]
@@ -705,7 +843,7 @@ export class NeuralEngine {
             ctx.moveTo(this.sx[a]!, this.sy[a]!)
             ctx.lineTo(this.sx[b]!, this.sy[b]!)
           }
-          const alpha = lightAlpha[lc]! * fog * (w === 3 ? 0.7 : 1)
+          const alpha = lightAlpha[lc]! * fog * (w === 3 ? 0.18 : 0.3)
           const lw = widths[w]! * zoomW * (0.82 + bd * 0.05)
           if (w <= 1) {
             ctx.globalCompositeOperation = 'lighter'
@@ -737,6 +875,7 @@ export class NeuralEngine {
         let any = false
         for (let e = 0; e < this.edges.length; e++) {
           const edge = this.edges[e]!
+          if (!this.clusters[edge.s] || !this.clusters[edge.t]) continue
           if (edge.layer !== layer) continue
           const active = sel >= 0 && (edge.s === sel || edge.t === sel)
           const hl = this.highlight !== null && (this.highlight.has(edge.s) || this.highlight.has(edge.t))
@@ -773,7 +912,7 @@ export class NeuralEngine {
     const { ctx } = this
     const nd = this.nodes[i]!
     const x = this.nsx[i]!, y = this.nsy[i]!
-    let alpha = fog * (this.nOcc[i] ? 0 : 1)
+    let alpha = fog * (0.22 + 0.78 * nd.weight)
     if (alpha <= 0) return
     const focusSet = this.highlight
     const isSel = i === this.selected, isHover = i === this.hover
@@ -805,48 +944,30 @@ export class NeuralEngine {
       ctx.arc(x, y, r, 0, TAU)
       ctx.fill()
     }
+    if (this.clusters[i]! > 1) {
+      ctx.strokeStyle = `rgba(${rgb[0]},${rgb[1]},${rgb[2]},${alpha * 0.6})`
+      ctx.lineWidth = 0.8
+      ctx.beginPath()
+      ctx.arc(x, y, r + 3, 0, TAU)
+      ctx.stroke()
+    }
     ctx.globalAlpha = 1
   }
 
-  private drawSoma(light: { x: number; y: number }, dim: number): void {
+  private drawSoma(_light: { x: number; y: number }, dim: number): void {
     const { ctx } = this
     const { x, y, r } = this.somaScreen
-    // Bloom behind the cell body.
+    // 中心以柔和光场表现神经活动，记忆节点仍由各层真实记录决定。
+    const glow = ctx.createRadialGradient(x, y, 0, x, y, r * 3.5)
+    glow.addColorStop(0, `rgba(245,250,255,${0.8 * dim})`)
+    glow.addColorStop(0.08, `rgba(207,228,255,${0.45 * dim})`)
+    glow.addColorStop(0.4, `rgba(148,190,241,${0.12 * dim})`)
+    glow.addColorStop(1, 'rgba(100,150,220,0)')
     ctx.globalCompositeOperation = 'lighter'
-    const bloom = ctx.createRadialGradient(x, y, r * 0.6, x, y, r * 5.2)
-    bloom.addColorStop(0, `rgba(170,196,255,${0.26 * dim})`)
-    bloom.addColorStop(0.35, `rgba(120,150,230,${0.08 * dim})`)
-    bloom.addColorStop(1, 'rgba(90,110,200,0)')
-    ctx.fillStyle = bloom
-    ctx.fillRect(x - r * 5.2, y - r * 5.2, r * 10.4, r * 10.4)
+    ctx.fillStyle = glow
+    ctx.beginPath(); ctx.arc(x, y, r * 3.5, 0, TAU); ctx.fill()
     ctx.globalCompositeOperation = 'source-over'
-    // Opaque membrane: occludes everything painted behind it.
-    const dx = light.x - x, dy = light.y - y, dl = Math.hypot(dx, dy) || 1
-    const hx = x + (dx / dl) * r * 0.42, hy = y + (dy / dl) * r * 0.42
-    const body = ctx.createRadialGradient(hx, hy, r * 0.05, x, y, r)
-    body.addColorStop(0, '#f3f6ff')
-    body.addColorStop(0.32, '#a9bce6')
-    body.addColorStop(0.72, '#46557c')
-    body.addColorStop(0.94, '#1a2032')
-    body.addColorStop(1, '#2a3555')
-    ctx.fillStyle = body
-    ctx.beginPath(); ctx.arc(x, y, r, 0, TAU); ctx.fill()
-    // Nucleus and nucleolus, offset away from the light.
-    const nxp = x - (dx / dl) * r * 0.12, nyp = y - (dy / dl) * r * 0.12
-    const nuc = ctx.createRadialGradient(nxp, nyp, 0, nxp, nyp, r * 0.5)
-    nuc.addColorStop(0, 'rgba(40,52,88,0.55)')
-    nuc.addColorStop(0.8, 'rgba(60,76,120,0.35)')
-    nuc.addColorStop(1, 'rgba(60,76,120,0)')
-    ctx.fillStyle = nuc
-    ctx.beginPath(); ctx.arc(nxp, nyp, r * 0.5, 0, TAU); ctx.fill()
-    ctx.fillStyle = 'rgba(225,235,255,0.85)'
-    ctx.beginPath(); ctx.arc(nxp + r * 0.1, nyp - r * 0.06, Math.max(1.2, r * 0.1), 0, TAU); ctx.fill()
-    // Rim light.
-    ctx.strokeStyle = 'rgba(190,210,255,0.55)'
-    ctx.lineWidth = Math.max(1, r * 0.05)
-    ctx.beginPath(); ctx.arc(x, y, r * 0.98, 0, TAU); ctx.stroke()
   }
-
   private drawPulses(project: (x: number, y: number, z: number, out: Float32Array, o: number) => number, front: boolean, somaZ: number): void {
     if (this.opts.reducedMotion) return
     const { ctx, m } = this
@@ -857,8 +978,8 @@ export class NeuralEngine {
       const cum = p.cum
       let lo = 0, hi = cum.length - 1
       if (t <= cum[0]!) {
-        const v = p.path[0]!, k = t / cum[0]!
-        return [m.x[v]! * k, m.y[v]! * k, m.z[v]! * k]
+        const v = p.path[0]!
+        return [m.x[v]!, m.y[v]!, m.z[v]!]
       }
       while (lo < hi - 1) { const mid = (lo + hi) >> 1; if (cum[mid]! < t) lo = mid; else hi = mid }
       const a = p.path[lo]!, b = p.path[hi]!
@@ -872,19 +993,7 @@ export class NeuralEngine {
       if ((tmp[2]! <= somaZ) !== front) continue
       const hx = tmp[0]!, hy = tmp[1]!
       const fade = Math.min(1, p.t / 60) * Math.min(1, (p.total - p.t) / 40 + 0.3)
-      const rgb = LAYER_RGB[p.group]!
-      ctx.beginPath()
-      ctx.moveTo(hx, hy)
-      for (let s = 1; s <= 6; s++) {
-        const q = at(p, p.t - s * 9)
-        if (!q) break
-        project(q[0], q[1], q[2], tmp, 0)
-        ctx.lineTo(tmp[0]!, tmp[1]!)
-      }
-      ctx.strokeStyle = `rgba(${rgb[0]},${rgb[1]},${rgb[2]},${(0.55 * fade).toFixed(3)})`
-      ctx.lineWidth = 1.6 * k * Math.max(0.8, this.fBase * this.zoom)
-      ctx.stroke()
-      const s = 9 * k * Math.max(0.7, this.fBase * this.zoom)
+      const s = 5 * k * Math.max(0.7, this.fBase * this.zoom)
       ctx.globalAlpha = 0.9 * fade
       ctx.drawImage(this.whiteSprite, hx - s, hy - s, s * 2, s * 2)
       ctx.globalAlpha = 1
@@ -898,7 +1007,7 @@ export class NeuralEngine {
       const z = this.edgeScr[o + 2]!
       if ((z <= somaZ) !== front) continue
       const edge = this.edges[ep.edge]!
-      const s = 11 * Math.max(0.7, this.fBase * this.zoom)
+      const s = 6 * Math.max(0.7, this.fBase * this.zoom)
       ctx.globalAlpha = 0.85
       ctx.drawImage(this.sprites[edge.layer]!, x - s, y - s, s * 2, s * 2)
       ctx.globalAlpha = 1
@@ -930,92 +1039,55 @@ export class NeuralEngine {
   /** Stratum boundary rings: back halves drawn first, front halves last, plus captions. */
   private drawStrata(project: (x: number, y: number, z: number, out: Float32Array, o: number) => number, dim: number, back: boolean): void {
     const { ctx } = this
-    const tmp = new Float32Array(3)
-    const steps = 120
-    const somaZ = this.somaScreen.z
-    const captions: Array<{ label: string; li: number; x: number; y: number; w: number; anchorX: number; anchorY: number }> = []
-    for (let li = 0; li < 3; li++) {
-      const st = STRATA[li]!
-      const rgb = LAYER_RGB[li]!
-      for (const [ratio, dash, alpha] of [[1.08, [], 0.3], [0.62, [2, 7], 0.17]] as Array<[number, number[], number]>) {
+    const point = new Float32Array(3)
+    const captions: Array<{ label: string; layer: number; x: number; y: number; width: number }> = []
+    for (let layer = 0; layer < STRATA.length; layer++) {
+      const stratum = STRATA[layer]!, rgb = LAYER_RGB[layer]!
+      for (const ratio of [1, 1.035]) {
         ctx.beginPath()
-        let pen = false
-        for (let i = 0; i <= steps; i++) {
-          const a = (i / steps) * TAU
-          project(Math.cos(a) * st.radius * ratio, st.y, Math.sin(a) * st.radius * ratio, tmp, 0)
-          const isBack = tmp[2]! > somaZ
-          if (isBack !== back) { pen = false; continue }
-          if (!pen) { ctx.moveTo(tmp[0]!, tmp[1]!); pen = true } else ctx.lineTo(tmp[0]!, tmp[1]!)
+        let drawing = false
+        for (let i = 0; i <= 160; i++) {
+          const angle = i / 160 * TAU
+          project(Math.cos(angle) * stratum.radius * ratio, stratum.y, Math.sin(angle) * stratum.radius * ratio, point, 0)
+          if ((point[2]! > this.somaScreen.z) !== back) { drawing = false; continue }
+          if (drawing) ctx.lineTo(point[0]!, point[1]!); else { ctx.moveTo(point[0]!, point[1]!); drawing = true }
         }
-        ctx.setLineDash(dash)
-        ctx.strokeStyle = `rgba(${rgb[0]},${rgb[1]},${rgb[2]},${(alpha * (back ? 0.55 : 1) * dim).toFixed(3)})`
-        ctx.lineWidth = 1
-        ctx.stroke()
+        ctx.strokeStyle = `rgba(${rgb[0]},${rgb[1]},${rgb[2]},${(dim * (back ? 0.13 : 0.36)).toFixed(3)})`
+        ctx.lineWidth = 0.8; ctx.stroke()
       }
-      ctx.setLineDash([])
-      // Tick marks on the outer ring every 15 degrees.
-      ctx.beginPath()
-      for (let i = 0; i < 24; i++) {
-        const a = (i / 24) * TAU
-        const R1 = st.radius * 1.08, R2 = st.radius * (i % 6 === 0 ? 1.15 : 1.11)
-        project(Math.cos(a) * R1, st.y, Math.sin(a) * R1, tmp, 0)
-        if ((tmp[2]! > somaZ) !== back) continue
-        const x1 = tmp[0]!, y1 = tmp[1]!
-        project(Math.cos(a) * R2, st.y, Math.sin(a) * R2, tmp, 0)
-        ctx.moveTo(x1, y1); ctx.lineTo(tmp[0]!, tmp[1]!)
-      }
-      ctx.strokeStyle = `rgba(${rgb[0]},${rgb[1]},${rgb[2]},${(0.4 * (back ? 0.5 : 1) * dim).toFixed(3)})`
-      ctx.stroke()
       if (!back) {
-        // Caption anchored at the ring's right-most projected point.
-        let bx = -Infinity, by = 0
-        for (let i = 0; i < 48; i++) {
-          const a = (i / 48) * TAU
-          project(Math.cos(a) * st.radius * 1.15, st.y, Math.sin(a) * st.radius * 1.15, tmp, 0)
-          if (tmp[0]! > bx) { bx = tmp[0]!; by = tmp[1]! }
+        let right = -Infinity, rightY = 0
+        for (let i = 0; i < 80; i++) {
+          const angle = i / 80 * TAU
+          project(Math.cos(angle) * stratum.radius, stratum.y, Math.sin(angle) * stratum.radius, point, 0)
+          if (point[0]! > right) { right = point[0]!; rightY = point[1]! }
         }
-        const label = this.opts.layerCaptions[li]!
-        ctx.font = '600 14px ui-sans-serif, system-ui, -apple-system, "Segoe UI", "PingFang SC", "Microsoft YaHei", sans-serif'
-        const w = ctx.measureText(label).width
-        const lx = Math.max(12, Math.min(this.width - w - 18, bx + 12))
-        captions.push({ label, li, x: lx, y: by + 5, w, anchorX: bx, anchorY: by })
+        const label = this.opts.layerCaptions[layer]!
+        ctx.font = '600 14px ui-sans-serif, system-ui, "Microsoft YaHei", sans-serif'
+        const width = ctx.measureText(label).width
+        captions.push({ label, layer, x: Math.max(12, Math.min(this.width - width - 18, right + 12)), y: rightY, width })
       }
     }
-    if (!back) {
-      // Resolve captions in screen space after all three strata project. Near edge-on / tilted
-      // views their natural anchors can coincide; labels must stay separate and in the viewport.
-      const gap = 32
-      const minY = Math.min(this.height * 0.35, this.width < 450 ? 174 : 116)
-      const maxY = Math.max(minY + gap * 2, this.height - 104)
-      captions.sort((a, b) => a.y - b.y)
-      for (let i = 0; i < captions.length; i++) {
-        captions[i]!.y = Math.max(minY, Math.min(maxY, captions[i]!.y), i ? captions[i - 1]!.y + gap : minY)
-      }
-      for (let i = captions.length - 1; i >= 0; i--) {
-        captions[i]!.y = Math.min(captions[i]!.y, i < captions.length - 1 ? captions[i + 1]!.y - gap : maxY)
-      }
-      this.captionBoxes = []
-      const textDim = Math.max(dim, 0.78)
-      for (const c of captions) {
-        const rgb = LAYER_RGB[c.li]!
-        if (Math.abs(c.y - c.anchorY) > 20) {
-          ctx.beginPath(); ctx.moveTo(c.anchorX, c.anchorY); ctx.lineTo(c.x - 10, c.y - 4)
-          ctx.strokeStyle = `rgba(${rgb[0]},${rgb[1]},${rgb[2]},0.32)`; ctx.lineWidth = 1; ctx.stroke()
-        }
-        ctx.fillStyle = `rgba(8,10,16,${0.80 * textDim})`
-        ctx.beginPath(); ctx.roundRect(c.x - 8, c.y - 16, c.w + 16, 23, 6); ctx.fill()
-        ctx.font = '600 14px ui-sans-serif, system-ui, -apple-system, "Segoe UI", "PingFang SC", "Microsoft YaHei", sans-serif'
-        ctx.fillStyle = `rgba(${rgb[0]},${rgb[1]},${rgb[2]},${0.97 * textDim})`
-        ctx.fillText(c.label, c.x, c.y)
-        this.captionBoxes.push({ x: c.x - 8, y: c.y - 16, width: c.w + 16, height: 23 })
-      }
+    if (back) return
+    captions.sort((a, b) => a.y - b.y)
+    const minY = Math.min(this.height * 0.35, this.width < 450 ? 174 : 116)
+    const maxY = Math.max(minY + 64, this.height - 104)
+    for (let i = 0; i < captions.length; i++) captions[i]!.y = Math.max(minY, Math.min(maxY - (captions.length - 1 - i) * 32, captions[i]!.y), i ? captions[i - 1]!.y + 32 : minY)
+    this.captionBoxes = []
+    for (const c of captions) {
+      const rgb = LAYER_RGB[c.layer]!
+      ctx.fillStyle = 'rgba(8,10,16,0.85)'
+      ctx.beginPath(); ctx.roundRect(c.x - 8, c.y - 16, c.width + 16, 23, 6); ctx.fill()
+      ctx.font = '600 14px ui-sans-serif, system-ui, "Microsoft YaHei", sans-serif'
+      ctx.fillStyle = `rgba(${rgb[0]},${rgb[1]},${rgb[2]},0.97)`
+      ctx.fillText(c.label, c.x, c.y)
+      this.captionBoxes.push({ x: c.x - 8, y: c.y - 16, width: c.width + 16, height: 23 })
     }
   }
-
   private drawSelection(): void {
     const { ctx } = this
     const mark = (i: number, strong: boolean) => {
-      if (i < 0 || i >= this.nodes.length || this.nOcc[i]) return
+      if (i < 0 || i >= this.nodes.length) return
       const x = this.nsx[i]!, y = this.nsy[i]!, r = this.nodeRadius(i) * 1.35 + 7
       const rgb = LAYER_RGB[this.nodes[i]!.layer]!
       ctx.strokeStyle = `rgba(${Math.min(255, rgb[0] + 60)},${Math.min(255, rgb[1] + 50)},${Math.min(255, rgb[2] + 40)},${strong ? 0.95 : 0.6})`

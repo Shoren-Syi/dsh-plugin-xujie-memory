@@ -1,6 +1,6 @@
 {
   "name": "dsh-plugin-xujie-memory",
-  "version": "0.7.2",
+  "version": "0.8.0-alpha.9",
   "description": "DeepSeek Harness in-app memory workspace: three-layer neural graph, fuzzy recall, atomic memory editing and a person card.",
   "type": "module",
   "main": "lib/index.js",
@@ -67,6 +67,9 @@
   },
   "peerDependencies": {
     "@deepseek-ai/cordis": "^4.0.5"
+  },
+  "dependencies": {
+    "@deepseek-ai/dsh-llm": "0.2.1-rc.5"
   },
   "devDependencies": {
     "esbuild": "^0.25.0",

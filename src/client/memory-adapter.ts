@@ -14,6 +14,9 @@ export interface XujieMemoryRemote {
   edit(scopeId: string, traceId: string, content: string, expectedHash: string): Promise<Result<EditResult>>
   forget(scopeId: string, traceId: string, expectedHash: string): Promise<Result<ForgetResult>>
   manage(scopeId: string, action: string, accountId: string, targetId: string, value: string, kind: string, expected: string): Promise<Result<boolean>>
+  qqGet(scopeId: string): Promise<Result<string>>
+  qqEnsure(): Promise<Result<string>>
+  qqSave(scopeId: string, settings: string): Promise<Result<boolean>>
 }
 
 export type FailureKind = 'owner' | 'conflict' | 'not_found' | 'scope' | 'invalid' | 'emotion_limit' | 'unavailable' | 'unknown'
@@ -70,4 +73,7 @@ export class MemoryAdapter {
   async manage(scopeId: string, action: string, accountId = '', targetId = '', value = '', kind = '', expected = ''): Promise<boolean> {
     return unwrap(await this.remote.manage(scopeId, action, accountId, targetId, value, kind, expected))
   }
+  async qqGet(scopeId: string): Promise<string> { return unwrap(await this.remote.qqGet(scopeId)) }
+  async qqEnsure(): Promise<string> { return unwrap(await this.remote.qqEnsure()) }
+  async qqSave(scopeId: string, settings: string): Promise<boolean> { return unwrap(await this.remote.qqSave(scopeId, settings)) }
 }

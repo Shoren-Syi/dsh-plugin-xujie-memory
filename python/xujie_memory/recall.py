@@ -390,7 +390,7 @@ class Recall:
         # 精确检索落空时，用字符二元组模糊捞一遍候选。
         if not result.traces and text:
             from .memory import Memory
-            hits = Memory(self.engine).search(scope_id, text, limit=budget.max_items + 1)
+            hits = Memory(self.engine).search(scope_id, text, limit=budget.max_items + 1, exclude=exclude)
             hits = [h for h in hits if h["trace_id"] != exclude][: budget.max_items]
             result.traces = [
                 {

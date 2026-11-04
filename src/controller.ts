@@ -97,4 +97,21 @@ export class MemoryController extends TypertRemoteService {
       target_id: targetId, value, kind, expected })
     return true
   }
+
+  @Remote
+  async qqGet(scopeId: string): Promise<string> {
+    return JSON.stringify(await this.call('/manage/qq/get', { scope_id: scopeId }))
+  }
+
+  @Remote
+  async qqEnsure(): Promise<string> {
+    const result = await this.call('/manage/qq/ensure', {})
+    return result.scope_id
+  }
+
+  @Remote
+  async qqSave(scopeId: string, settings: string): Promise<boolean> {
+    await this.call('/manage/qq/save', { scope_id: scopeId, settings })
+    return true
+  }
 }

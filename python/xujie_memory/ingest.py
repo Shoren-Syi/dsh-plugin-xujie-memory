@@ -263,7 +263,7 @@ class Ingest:
         # 「那个不算」「我刚才说错了」这类句子本身不含任何领域词，
         # 靠关键词判 relation 必然猜错——它们指向的是**上一条**。
         # 所以把"上一条是什么关系"作为上下文传给编码器（XM-14）。
-        last_relation, state_hint = self._context_hint(scope_id)
+        last_relation, state_hint = self._context_hint(scope_id, ctx.get('_xjm_session'))
         ctx = {**ctx, "last_relation": last_relation, "state": state_hint}
 
         interps = self.encoder.encode(trace_id, content, {**ctx, "actor_id": actor_id})
@@ -1293,22 +1293,28 @@ class Ingest:
         return event
 
     # ------------------------------------------------------------- 内部
-    def _context_hint(self, scope_id: str) -> tuple[str | None, dict[str, Any]]:
-        """最近一条事件的 relation，以及它那个状态键的当前值。
+    def _context_hint(self, scope_id: str, session: str | None = None) -> tuple[str | None, dict[str, Any]]:
+        """返回当前会话最近事件的关系和状态，供省略句编码使用。
 
-        只用作**上下文提示**，不参与任何判定：
-        编码器可以忽略它，闸门和内核完全不看它。
-
-        为什么需要值：对方说「一百碗」，我说「一百碗啊……行行行」——
-        这是**确认一个已有的数**，不是新增。不知道账上有没有数，
-        模型只能把它判成"复述对方的话"，然后返回空（XM-16）。
+        有会话标识时只能读取同一会话的证据；无标识的旧调用沿用库级行为。
         """
         # events 表不存 relation——它由 state_key 推导（relation 是键的一段）。
         # 查键再解出来，比冗余一列更不容易不一致。
-        row = self.engine._conn().execute(
-            "SELECT state_key FROM events WHERE scope_id=? ORDER BY rowid DESC LIMIT 1",
-            (scope_id,),
-        ).fetchone()
+        conn = self.engine._conn()
+        if session:
+            row = conn.execute(
+                "SELECT e.state_key FROM traces t"
+                " JOIN event_evidence v ON v.trace_id=t.trace_id"
+                " JOIN events e ON e.event_id=v.event_id"
+                " WHERE t.scope_id=? AND t.erased_at IS NULL AND json_valid(t.context_ref)"
+                " AND json_extract(t.context_ref,'$._xjm_session')=? AND e.scope_id=? AND e.void=0"
+                " ORDER BY e.rowid DESC LIMIT 1", (scope_id, session, scope_id),
+            ).fetchone()
+        else:
+            row = conn.execute(
+                "SELECT state_key FROM events WHERE scope_id=? AND void=0 ORDER BY rowid DESC LIMIT 1",
+                (scope_id,),
+            ).fetchone()
         if row is None:
             return None, {}
 

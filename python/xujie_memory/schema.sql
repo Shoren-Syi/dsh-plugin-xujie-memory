@@ -263,6 +263,63 @@ CREATE TABLE IF NOT EXISTS summaries (
 
 CREATE INDEX IF NOT EXISTS idx_summaries_scope ON summaries(scope_id, lifecycle_state);
 
+-- 保留摘要的原始证据索引，避免随记忆数量增长而反复扫描全部摘要。
+CREATE TABLE IF NOT EXISTS episode_summary_inputs (
+    scope_id   TEXT NOT NULL,
+    trace_id   TEXT NOT NULL,
+    summary_id TEXT NOT NULL,
+    PRIMARY KEY (scope_id, trace_id, summary_id)
+);
+CREATE TABLE IF NOT EXISTS episode_compaction_cursors (
+    scope_id TEXT NOT NULL,
+    session_id TEXT NOT NULL,
+    recorded_at TEXT NOT NULL,
+    trace_id TEXT NOT NULL,
+    PRIMARY KEY (scope_id, session_id)
+);
+CREATE INDEX IF NOT EXISTS idx_traces_session_time
+    ON traces(scope_id, json_extract(context_ref, '$._xjm_session'), recorded_at, trace_id)
+    WHERE json_valid(context_ref);
+
+-- 预留按最坏情况计费；用量未知时保留预留，不能当作零费用。
+CREATE TABLE IF NOT EXISTS qq_budget_calls (
+    call_id TEXT PRIMARY KEY,
+    scope_id TEXT NOT NULL,
+    activity TEXT NOT NULL,
+    day TEXT NOT NULL,
+    month TEXT NOT NULL,
+    amount INTEGER NOT NULL CHECK (amount >= 0),
+    status TEXT NOT NULL CHECK (status IN ('reserved', 'settled', 'cancelled')),
+    input_price INTEGER NOT NULL,
+    output_price INTEGER NOT NULL,
+    cache_price INTEGER
+);
+CREATE INDEX IF NOT EXISTS idx_qq_budget_period ON qq_budget_calls(scope_id, month, day);
+CREATE TABLE IF NOT EXISTS qq_budget_policies (
+    scope_id TEXT PRIMARY KEY,
+    per_request INTEGER NOT NULL,
+    daily INTEGER NOT NULL,
+    monthly INTEGER NOT NULL,
+    input_price INTEGER NOT NULL,
+    output_price INTEGER NOT NULL,
+    daily_calls INTEGER NOT NULL,
+    cache_price INTEGER
+);
+CREATE TABLE IF NOT EXISTS qq_budget_activity_limits (
+    scope_id TEXT NOT NULL,
+    activity TEXT NOT NULL CHECK (activity IN ('chat', 'proactive', 'qzone')),
+    daily_calls INTEGER NOT NULL CHECK (daily_calls > 0),
+    PRIMARY KEY (scope_id, activity)
+);
+CREATE TABLE IF NOT EXISTS qq_connections (
+    scope_id TEXT PRIMARY KEY,
+    settings_json TEXT NOT NULL,
+    access_token TEXT NOT NULL,
+    enabled INTEGER NOT NULL CHECK (enabled IN (0, 1)),
+    revision TEXT NOT NULL
+);
+CREATE UNIQUE INDEX IF NOT EXISTS idx_qq_single_connection ON qq_connections(enabled) WHERE enabled = 1;
+
 -- ---------------------------------------------------------------- 承诺（投影）
 -- 「下个月我还你两袋」不改变余额，但它留下了一个**可以被追讨的对象**。
 --

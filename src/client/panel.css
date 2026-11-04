@@ -383,3 +383,149 @@ body[data-ds-dark-theme] .xjm-root { --xjm-sem: #8aaeff; --xjm-epi: #efc683; --x
   .xjm-insp-body { overflow: auto; }
   .xjm-toast-slot { position: absolute; }
 }
+
+/* 底部仪表区使用真实快照数据，图谱在剩余空间内自适应。 */
+.xjm-stage { bottom: 122px; }
+.xjm-inspector { bottom: 134px; }
+.xjm-console {
+  position: absolute; z-index: 6; left: 0; right: 0; bottom: 0; height: 122px;
+  display: grid; grid-template-columns: 1.05fr 1fr 1.8fr 1fr 1fr 1fr;
+  overflow-x: auto; overflow-y: hidden; color-scheme: dark;
+  color: #e6eef3; background: #080b0e; border-top: 1px solid #33414a;
+  box-shadow: 0 -14px 36px rgba(0,0,0,.3); font-variant-numeric: tabular-nums;
+}
+.xjm-console-cell {
+  position: relative; display: flex; flex-direction: column; align-items: flex-start; justify-content: center;
+  min-width: 124px; gap: 4px; padding: 13px 18px; border: 0; border-right: 1px solid #27323a;
+  background: transparent; text-align: left;
+}
+.xjm-console-cell::before { content: ''; position: absolute; top: 0; left: 18px; width: 25px; height: 2px; background: #6d949a; }
+.xjm-console-intro { min-width: 140px; }
+.xjm-console-intro strong { font-size: 17px; letter-spacing: .1em; font-weight: 600; }
+.xjm-console-kicker, .xjm-console-label small { color: #a6b8bd; font: 600 10px/1.4 ui-monospace, Consolas, monospace; letter-spacing: .08em; }
+.xjm-console-label { color: #d7e3e6; font-size: 13px; font-weight: 600; white-space: nowrap; }
+.xjm-console-label small { margin-left: 5px; font-size: 9px; }
+.xjm-console-number { color: #f2f6f6; font: 500 27px/1.1 ui-monospace, Consolas, monospace; letter-spacing: -.04em; }
+.xjm-console-cyan { color: #8ddfdb; }
+.xjm-console-amber { color: #f0c184; }
+.xjm-console-muted { color: #a9bac0; font-size: 12px; white-space: nowrap; }
+.xjm-console-layers { min-width: 215px; }
+.xjm-console-layer-list { display: grid; grid-template-columns: repeat(3, auto); gap: 12px; width: 100%; }
+.xjm-console-layer-list span { display: grid; grid-template-columns: 6px auto; align-items: center; gap: 3px 5px; color: #c5d1d5; font-size: 11px; white-space: nowrap; }
+.xjm-console-layer-list i { width: 5px; height: 5px; border-radius: 50%; background: var(--xjm-lc); }
+.xjm-console-layer-list b { grid-column: 2; color: #eff7f8; font: 500 19px/1.2 ui-monospace, Consolas, monospace; }
+.xjm-console-action { cursor: pointer; }
+.xjm-console-action:hover:not(:disabled) { background: #152027; }
+.xjm-console-action:disabled { cursor: default; opacity: .65; }
+@container xjm (max-width: 760px) {
+  .xjm-stage { inset: 0 0 calc(50% + 61px) 0; }
+  .xjm-inspector { bottom: 130px; height: min(calc(48% - 61px), 460px); }
+  .xjm-console { grid-template-columns: repeat(6, max-content); }
+}
+
+/* 人设卡固定在图谱外沿；卡片内容来自当前记忆范围。 */
+.xjm-orbit-cards { position: absolute; inset: 0; z-index: 3; pointer-events: none; }
+.xjm-orbit-card {
+  position: absolute; top: 0; left: 0; display: flex; flex-direction: column; gap: 3px;
+  width: 142px; min-height: 64px; padding: 8px 10px; overflow: hidden; visibility: hidden;
+  border: 1px solid rgba(137,190,199,.45); border-left: 2px solid #85c9cb; border-radius: 3px;
+  background: rgba(9,17,23,.94); color: #edf8f9; text-align: left;
+  box-shadow: 0 8px 24px rgba(0,0,0,.45); pointer-events: auto; cursor: pointer;
+}
+.xjm-orbit-card:hover { border-color: #b5eded; background: rgba(18,35,42,.98); }
+.xjm-orbit-card strong, .xjm-orbit-tags { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.xjm-orbit-card strong { font-size: 14px; font-weight: 600; }
+.xjm-orbit-caption { color: #a8ccd0; font: 600 10px/1.3 ui-monospace, Consolas, monospace; }
+.xjm-orbit-tags { color: #c1d4d6; font-size: 11px; }
+
+/* 右侧管理区与主画面的深色仪表风格保持一致。 */
+.xjm-inspector {
+  --xjm-fg: #edf5f7; --xjm-fg2: #ccdce1; --xjm-fg3: #adbec7;
+  --xjm-bg: #0a1119; --xjm-surface: #101b25;
+  --xjm-line: rgba(151,187,199,.24); --xjm-line-soft: rgba(151,187,199,.13);
+  --xjm-hover: #1a303c; --xjm-danger: #ff8787; --xjm-danger-ink: #ffaaaa;
+  --xjm-danger-fill: #a7353d; --xjm-warn: #e6b970;
+  --xjm-sem: #a8c2ff; --xjm-epi: #efc683; --xjm-work: #75dfd0;
+  color-scheme: dark; color: var(--xjm-fg); border-color: #354d59;
+  border-radius: 8px; background: linear-gradient(155deg, #101b25, #090f16 65%);
+}
+.xjm-inspector .xjm-drawer-main { background: rgba(8,15,22,.65); }
+.xjm-inspector .xjm-drawer-nav { background: #0b151e; }
+.xjm-inspector .xjm-drawer-title span { color: #98c4cb; }
+.xjm-inspector .xjm-nav-item[aria-current="page"] { color: #b3e9e8; background: #1a3943; box-shadow: inset 2px 0 #75d0d1; }
+.xjm-inspector .xjm-btn-primary { background: #3b8791; color: #fff; }
+.xjm-inspector .xjm-btn-primary:hover:not(:disabled) { background: #4c9ca5; }
+.xjm-inspector .xjm-textarea { border-color: var(--xjm-line); }
+.xjm-inspector .xjm-skeleton i { background: #243540; }
+.xjm-inspector ::selection { background: #3d7784; color: #fff; }
+
+/* 角色入口沿环均匀排列，展开卡片不遮挡其它入口。 */
+.xjm-orbit-card {
+  display: grid; place-items: center; width: 26px; min-height: 26px; height: 26px; padding: 0; overflow: visible;
+  border: 1px solid #7dbdc7; border-radius: 50%; background: #10212c; color: #ecfbfd;
+  box-shadow: 0 0 0 3px rgba(83,151,166,.12), 0 0 14px rgba(103,193,204,.25);
+}
+.xjm-orbit-card:hover, .xjm-orbit-card:focus-visible { z-index: 4; border-color: #c2f6f4; background: #244756; }
+.xjm-orbit-initial { font-size: 11px; font-weight: 700; line-height: 1; }
+.xjm-orbit-popover {
+  position: absolute; top: 31px; left: 0; display: none; width: 160px; padding: 9px 11px;
+  border: 1px solid #577b88; border-left: 2px solid #85c9cb; border-radius: 4px;
+  background: rgba(9,17,23,.97); box-shadow: 0 8px 24px rgba(0,0,0,.45); text-align: left;
+}
+.xjm-orbit-card:hover .xjm-orbit-popover, .xjm-orbit-card:focus-visible .xjm-orbit-popover { display: flex; flex-direction: column; gap: 3px; }
+.xjm-orbit-card[data-horizontal="right"] .xjm-orbit-popover { left: auto; right: 0; }
+.xjm-orbit-card[data-vertical="bottom"] .xjm-orbit-popover { top: auto; bottom: 31px; }
+.xjm-orbit-pages { position: absolute; z-index: 4; left: 16px; bottom: 50px; display: flex; align-items: center; gap: 8px; padding: 3px 7px; border: 1px solid #405764; border-radius: 5px; background: #0c151d; color: #d4e6e8; font-size: 12px; }
+.xjm-orbit-pages button { width: 30px; height: 30px; border: 0; background: transparent; color: inherit; font-size: 20px; cursor: pointer; }
+.xjm-orbit-pages button:disabled { opacity: .35; cursor: default; }
+
+/* 角色入口与环带共用一条轨道，卡槽本身保留足够大的点击区域。 */
+.xjm-root { background: #080d13; }
+
+/* 导航始终可见，内容只在选中模块时展开。 */
+.xjm-workbench-toggle { padding: 6px 9px; border: 1px solid #38525a; border-radius: 3px; background: transparent; color: #c3d9dc; font-size: 12px; cursor: pointer; }
+.xjm-workbench-toggle:hover { border-color: #8fb9bd; color: #fff; }
+.xjm-qq { padding-bottom: 12px; }
+.xjm-qq-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; margin: 12px 0; }
+.xjm-qq-field { display: flex; min-width: 0; flex-direction: column; gap: 4px; color: #c3d6db; font-size: 12px; }
+.xjm-qq-field .xjm-input { width: 100%; min-width: 0; }
+.xjm-qq-check { display: flex; align-items: center; gap: 7px; margin: 9px 0; color: #d4e4e7; font-size: 12px; }
+@container xjm (max-width: 760px) { .xjm-qq-grid { grid-template-columns: 1fr; } }
+.xjm-memory-cards { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 7px; padding: 12px 0 2px; }
+.xjm-memory-card { display: flex; min-width: 0; min-height: 65px; flex-direction: column; align-items: flex-start; gap: 3px; padding: 8px 10px; border: 1px solid #30434a; border-radius: 2px; background: #0d171e; color: #e1eaed; text-align: left; cursor: pointer; }
+.xjm-memory-card:hover, .xjm-memory-card:focus-visible { border-color: #a1d4d4; background: #14252c; }
+.xjm-memory-card span { color: #a4c3c6; font: 10px/1.3 ui-monospace, monospace; }
+.xjm-memory-card strong { width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 12px; font-weight: 500; }
+.xjm-memory-card small { color: #9eb1b8; font-size: 10px; }
+.xjm-memory-card-links { position: absolute; z-index: 6; inset: 0; width: 100%; height: 100%; overflow: visible; pointer-events: none; }
+.xjm-memory-card-links path { fill: none; stroke: #9ac8cf; stroke-width: .7; opacity: .32; }
+.xjm-memory-card-links circle { fill: #defcff; filter: drop-shadow(0 0 4px #9cdddf); }
+.xjm-popup-link { position: absolute; z-index: 3; inset: 0; width: 100%; height: 100%; pointer-events: none; }
+.xjm-popup-link path { fill: none; stroke: #b8dedf; stroke-width: 1; opacity: .72; stroke-dasharray: 300; animation: xjm-link-appear .4s ease-out both; }
+@keyframes xjm-link-appear { from { stroke-dashoffset: 300; opacity: 0; } to { stroke-dashoffset: 0; opacity: .72; } }
+@media (prefers-reduced-motion: reduce) { .xjm-popup-link path { animation: none; } }
+.xjm-drawer-main[hidden] { display: none; }
+@container xjm (min-width: 761px) {
+  .xjm-stage { right: 100px; }
+  .xjm-inspector { width: 76px; }
+  .xjm-drawer-nav { border-left: 0; }
+  .xjm-shell-expanded .xjm-stage { right: min(520px, 50%); }
+  .xjm-shell-expanded .xjm-inspector { width: min(496px, calc(50% - 24px)); }
+  .xjm-shell-expanded .xjm-drawer-nav { border-left: 1px solid var(--xjm-line); }
+}
+@container xjm (max-width: 760px) {
+  .xjm-inspector:has(.xjm-drawer-main[hidden]) { left: auto; top: 8px; right: 8px; bottom: auto; width: 76px; height: auto; }
+}
+.xjm-orbit-card {
+  border: 0; border-radius: 0; background: transparent; box-shadow: none;
+}
+.xjm-orbit-card:hover, .xjm-orbit-card:focus-visible { background: transparent; }
+.xjm-orbit-initial {
+  display: block; width: 15px; height: 3px; border-radius: 1px;
+  background: #add6dc; box-shadow: 0 0 6px rgba(116,201,212,.55);
+}
+.xjm-orbit-card:nth-child(5n + 2) .xjm-orbit-initial { background: #d8bda3; }
+.xjm-orbit-card:nth-child(5n + 4) .xjm-orbit-initial { background: #b7c6ef; }
+.xjm-orbit-card:hover .xjm-orbit-initial, .xjm-orbit-card:focus-visible .xjm-orbit-initial {
+  height: 5px; background: #f0ffff; box-shadow: 0 0 12px #79d9e3;
+}

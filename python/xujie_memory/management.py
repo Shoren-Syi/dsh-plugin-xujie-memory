@@ -176,7 +176,7 @@ class Management:
                                       "kind": "evidence"})
             summaries = conn.execute(
                 "SELECT summary_id,text,input_refs_json,created_at FROM summaries"
-                " WHERE scope_id=? AND lifecycle_state='active' AND text<>''"
+                " WHERE scope_id=? AND lifecycle_state='active' AND validation_status='ok' AND text<>''"
                 " ORDER BY created_at DESC,summary_id LIMIT 60", (scope_id,),
             ).fetchall()
             for r in summaries:
@@ -364,13 +364,17 @@ class Management:
             original = self.engine.get_trace(trace_id)
             actor = original["actor_id"]
             occurred_at = original.get("source_time") or original["recorded_at"]
+            original_context = json.loads(original["context_ref"]) if original.get("context_ref") else {}
+            edit_context = {"peer_id": "assistant", "effective_at": occurred_at}
+            if original_context.get("_xjm_session"):
+                edit_context["_xjm_session"] = original_context["_xjm_session"]
             self.memory.forget(scope_id, trace_id)
             # A saved edit is an explicit user correction, not a fabricated
             # conversational turn. Do not run profile-watching/auto-replies.
             result = self.service.orchestrator.ingest.ingest(
                 scope_id, "edit:" + trace_id + ":" + uuid.uuid4().hex,
                 actor, "user_statement", content,
-                context={"peer_id": "assistant", "effective_at": occurred_at}, confirmed=True,
+                context=edit_context, confirmed=True,
                 pattern_escalation=False,
             )
             self.engine._conn().execute(

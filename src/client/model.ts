@@ -25,13 +25,13 @@ export function isTraceBacked(node: Node): boolean {
 }
 
 function weightOf(node: Node): number {
-  if (node.kind === 'state') return 0.62
-  if (node.kind === 'summary') return 0.58
-  if (node.kind === 'clarification') return 0.42
-  const importance = Math.max(1, Math.min(5, Number(node.importance ?? 1)))
-  return Math.min(1, (importance - 1) / 4 * 0.7 + (node.anchor ? 0.3 : 0) + (node.kind === 'recent' ? 0.12 : 0))
+  // 优先使用内核计算的衰减权重；无权重的派生记录保持中性亮度。
+  if (typeof node.priority === 'number' && Number.isFinite(node.priority)) {
+    const priority = Math.max(0, node.priority)
+    return priority / (priority + 2)
+  }
+  return 0.5
 }
-
 export function toField(snapshot: Snapshot): { nodes: FieldNode[]; edges: FieldEdge[] } {
   const nodes = snapshot.nodes.map((n): FieldNode => ({
     id: n.id, layer: layerIndex(n.layer), derived: !isTraceBacked(n), weight: weightOf(n),
