@@ -92,6 +92,9 @@
   .g-dot { width: 7px; height: 7px; border-radius: 50%; background: #e4eaf7; box-shadow: 0 0 6px rgba(200, 215, 255, .7); }
   .g-diamond { width: 7px; height: 7px; transform: rotate(45deg); box-shadow: inset 0 0 0 1.5px #e4eaf7; }
   .g-link { width: 18px; height: 1.5px; border-radius: 1px; background: linear-gradient(90deg, #efc683, #8aaeff); }
+  .legend i[data-layer="0"].g-dot { background: var(--sem); box-shadow: 0 0 6px rgba(168, 194, 255, .6); }
+  .legend i[data-layer="1"].g-diamond { box-shadow: inset 0 0 0 1.5px var(--epi); }
+  .legend i[data-layer="2"].g-dot { background: var(--work); box-shadow: 0 0 6px rgba(117, 223, 208, .6); }
 
   /* 中央状态卡（加载 / 错误 / 空库） */
   .overlay { position: absolute; inset: 0; z-index: 3; display: grid; place-items: center; padding: 24px; pointer-events: none; }
@@ -289,9 +292,10 @@
       </div>
     </div>
     <div class="legend" id="legend">
-      <span><i class="g-dot"></i>事件 · 原话</span>
-      <span><i class="g-diamond"></i>事实 · 人物 · 派生</span>
-      <span><i class="g-link"></i>记忆关联</span>
+      <span><i class="g-dot" data-layer="0"></i>持久记忆 · 事实/人物</span>
+      <span><i class="g-diamond" data-layer="1"></i>重点标注 · 钉住</span>
+      <span><i class="g-dot" data-layer="2"></i>遗忘权重池 · 按权重衰减</span>
+      <span><i class="g-diamond" data-layer="1"></i>存疑池（外挂，不在三层）</span>
       <span class="legend-quiet">圆环表示邻近节点聚合，点击放大；纤维与脉冲不代表记录</span>
     </div>
     <div class="overlay" id="overlay" hidden></div>
@@ -322,6 +326,7 @@
       <button type="button" class="nav-item" data-tab="events">事件<span class="nav-count" data-count="events"></span></button>
       <button type="button" class="nav-item" data-tab="facts">事实<span class="nav-count" data-count="facts"></span></button>
       <button type="button" class="nav-item" data-tab="entities">人物<span class="nav-count" data-count="entities"></span></button>
+      <button type="button" class="nav-item" data-tab="doubts">存疑池<span class="nav-count" data-count="doubts"></span></button>
     </nav>
   </aside>
 
@@ -442,6 +447,54 @@ function makeCoreCloud() {
 }
 const CORE_CLOUD = makeCoreCloud();
 
+// ---------- 节点微色：每个节点一个独立色相，亮度随权重 ----------
+function hashStr(s) {
+  let h = 2166136261;
+  for (let i = 0; i < s.length; i++) { h ^= s.charCodeAt(i); h = Math.imul(h, 16777619); }
+  return h >>> 0;
+}
+function rgbToHsl([r, g, b]) {
+  r /= 255; g /= 255; b /= 255;
+  const max = Math.max(r, g, b), min = Math.min(r, g, b);
+  let h = 0, s = 0;
+  const l = (max + min) / 2;
+  if (max !== min) {
+    const d = max - min;
+    s = l > 0.5 ? d / (2 - max - min) : d / (max + min);
+    if (max === r) h = (g - b) / d + (g < b ? 6 : 0);
+    else if (max === g) h = (b - r) / d + 2;
+    else h = (r - g) / d + 4;
+    h /= 6;
+  }
+  return [h, s, l];
+}
+function hslToRgb([h, s, l]) {
+  const hue2rgb = (p, q, t) => {
+    if (t < 0) t += 1; if (t > 1) t -= 1;
+    if (t < 1 / 6) return p + (q - p) * 6 * t;
+    if (t < 1 / 2) return q;
+    if (t < 2 / 3) return p + (q - p) * (2 / 3 - t) * 6;
+    return p;
+  };
+  let r, g, b;
+  if (s === 0) { r = g = b = l; }
+  else {
+    const q = l < 0.5 ? l * (1 + s) : l + s - l * s;
+    const p = 2 * l - q;
+    r = hue2rgb(p, q, h + 1 / 3); g = hue2rgb(p, q, h); b = hue2rgb(p, q, h - 1 / 3);
+  }
+  return [Math.round(r * 255), Math.round(g * 255), Math.round(b * 255)];
+}
+/** 节点色：layer 基色 + id 哈希色相偏移；亮度按权重（低权重更暗）。 */
+function nodeRgb(base, id, weight) {
+  const seed = hashStr(String(id));
+  const hsl = rgbToHsl(base);
+  const hue = (hsl[0] + ((seed % 41) - 20) / 360 + 1) % 1;       // ±20°
+  const sat = Math.min(1, Math.max(0.25, hsl[1] - 0.15 + ((seed >> 8) % 21) / 100));
+  const lum = Math.max(0.3, Math.min(0.82, 0.34 + weight * 0.48)); // 低权重更暗
+  return hslToRgb([hue, sat, lum]);
+}
+
 function sprite(rgb, core) {
   const c = document.createElement("canvas");
   c.width = c.height = 64;
@@ -497,6 +550,13 @@ class NeuralEngine {
     this.pulses = [];
     this.edgePulses = [];
     this.pathCache = new Map();
+    // 节点微色缓存：每个节点一个独立淡色，亮度随权重。
+    this._nodeColors = new Map();
+    this._nodeSprites = new Map();
+    // 存疑池：外挂星环（真实 doubts 数据），不占三层。
+    this.doubts = [];
+    this.doubtScr = [];
+    this.doubtHover = -1;
 
     this.width = 1; this.height = 1; this.dpr = 1;
     this.yaw = 0.55; this.pitch = 0.34;
@@ -523,6 +583,23 @@ class NeuralEngine {
   }
 
   // ---------- public API ----------
+
+  setDoubts(list) {
+    this.doubts = Array.isArray(list) ? list.slice(0, 40) : [];
+    this.doubtScr = this.doubts.map(() => ({ x: 0, y: 0, z: 0 }));
+    this.invalidate();
+  }
+
+  pickDoubt(x, y) {
+    let best = -1, bestD = 18 * 18;
+    for (let i = 0; i < this.doubtScr.length; i++) {
+      const s = this.doubtScr[i];
+      if (!s) continue;
+      const d = (s.x - x) ** 2 + (s.y - y) ** 2;
+      if (d < bestD) { bestD = d; best = i; }
+    }
+    return best;
+  }
 
   setOptions(opts) {
     const motionChanged = opts.reducedMotion !== this.opts.reducedMotion;
@@ -829,6 +906,8 @@ class NeuralEngine {
       if (e.type !== "pointercancel" && press && !press.moved && performance.now() - press.t < 600 && press.button === 0) {
         const p = local(e);
         const hit = this.pick(p.x, p.y);
+        const dh = this.pickDoubt(p.x, p.y);
+        if (dh >= 0) { this.opts.onSelect("doubt:" + this.doubts[dh].id); return; }
         if (hit >= 0 && this.clusters[hit] > 1 && this.zoom < 3) {
           this.zoomAt(this.nsx[hit], this.nsy[hit], 1.7);
           return;
@@ -1000,6 +1079,32 @@ class NeuralEngine {
     return (1.6 + nd.weight * 2.0) * Math.max(0.6, this.nsp[i] * this.fBase * this.zoom * 1.15);
   }
 
+  nodeColor(i) {
+    const nd = this.nodes[i];
+    const w = Math.max(0, Math.min(1, nd.weight));
+    const key = `${nd.id}:${Math.round(w * 20)}`;
+    let rgb = this._nodeColors.get(key);
+    if (!rgb) {
+      rgb = nodeRgb(LAYER_RGB[nd.layer], nd.id, w);
+      this._nodeColors.set(key, rgb);
+    }
+    return rgb;
+  }
+
+  nodeSprite(i) {
+    const nd = this.nodes[i];
+    const w = Math.max(0, Math.min(1, nd.weight));
+    const rgb = this.nodeColor(i);
+    const key = `${nd.layer}:${rgb[0]},${rgb[1]},${rgb[2]}:${Math.round(w * 20)}`;
+    let sp = this._nodeSprites.get(key);
+    if (!sp) {
+      // 光晕按节点自身颜色生成，低权重更暗的淡光
+      sp = sprite(rgb, 0.75 + w * 0.25);
+      this._nodeSprites.set(key, sp);
+    }
+    return sp;
+  }
+
   render() {
     const { ctx, m } = this;
     const W = this.width, H = this.height;
@@ -1085,6 +1190,7 @@ class NeuralEngine {
     const dim = this.dimmed ? 0.45 : 1;
     const zoomW = Math.max(0.7, Math.min(2.4, f * 1.25));
     this.drawCoreFrame(f, dim);
+    this.drawDoubtRing(project, dim);
     this.drawCoreCloud(project, dim);
     this.drawStrata(project, dim, true);
     this.drawDust(project, dim);
@@ -1103,6 +1209,59 @@ class NeuralEngine {
     this.drawPulses(project, true, somaZ);
     this.drawStrata(project, dim, false);
     this.drawSelection();
+  }
+
+  // 存疑池星环：外挂的三维环，真实 doubts 节点，可点、随场旋转。
+  drawDoubtRing(project, dim) {
+    const { ctx } = this;
+    const n = this.doubts.length;
+    if (!n) return;
+    const R = 390, N = 96;
+    const tmp = new Float32Array(3);
+    const spin = this.time * 0.06;
+    ctx.beginPath();
+    for (let i = 0; i <= N; i++) {
+      const a = (i / N) * TAU + spin;
+      project(Math.cos(a) * R, 0, Math.sin(a) * R, tmp, 0);
+      if (i === 0) ctx.moveTo(tmp[0], tmp[1]); else ctx.lineTo(tmp[0], tmp[1]);
+    }
+    ctx.strokeStyle = `rgba(177,141,255,${0.65 * dim})`;
+    ctx.lineWidth = 1.6;
+    ctx.stroke();
+    for (let i = 0; i < 24; i++) {
+      const a = (i / 24) * TAU + spin;
+      project(Math.cos(a) * R, 0, Math.sin(a) * R, tmp, 0);
+      const x1 = tmp[0], y1 = tmp[1];
+      project(Math.cos(a) * (R + 9), 0, Math.sin(a) * (R + 9), tmp, 0);
+      ctx.beginPath(); ctx.moveTo(x1, y1); ctx.lineTo(tmp[0], tmp[1]);
+      ctx.strokeStyle = `rgba(177,141,255,${0.45 * dim})`;
+      ctx.stroke();
+    }
+    for (let i = 0; i < n; i++) {
+      const a = (i / n) * TAU + spin + 0.4;
+      project(Math.cos(a) * R, 0, Math.sin(a) * R, tmp, 0);
+      this.doubtScr[i] = { x: tmp[0], y: tmp[1], z: tmp[2] };
+      const near = this.doubtHover === i;
+      const r = near ? 10 : 7.5;
+      const grad = ctx.createRadialGradient(tmp[0], tmp[1], 0, tmp[0], tmp[1], r * 2.4);
+      grad.addColorStop(0, "rgba(255,255,255,1)");
+      grad.addColorStop(.3, `rgba(196,166,255,${0.95 * dim})`);
+      grad.addColorStop(1, "rgba(177,141,255,0)");
+      ctx.fillStyle = grad;
+      ctx.beginPath(); ctx.arc(tmp[0], tmp[1], r * 2.4, 0, TAU); ctx.fill();
+      if (near) {
+        ctx.font = "500 12px ui-monospace, Consolas, monospace";
+        const label = String(this.doubts[i].question || "").slice(0, 36);
+        const tw = ctx.measureText(label).width;
+        ctx.fillStyle = "rgba(10,15,24,.85)";
+        ctx.beginPath();
+        if (ctx.roundRect) ctx.roundRect(tmp[0] + 12, tmp[1] - 10, tw + 14, 24, 6);
+        else ctx.rect(tmp[0] + 12, tmp[1] - 10, tw + 14, 24);
+        ctx.fill();
+        ctx.fillStyle = "rgba(238,245,251,.95)";
+        ctx.fillText(label, tmp[0] + 19, tmp[1] + 6);
+      }
+    }
   }
 
   drawCoreFrame(scale, dim) {
@@ -1258,7 +1417,9 @@ class NeuralEngine {
     const { ctx } = this;
     const nd = this.nodes[i];
     const x = this.nsx[i], y = this.nsy[i];
-    let alpha = fog * (0.22 + 0.78 * nd.weight);
+    const w = Math.max(0, Math.min(1, nd.weight));
+    // 权重亮度：低权重是快熄灭的暗点，高权重是亮光（低权重仍留可见微光）
+    let alpha = fog * (0.18 + Math.pow(w, 1.2) * 0.82);
     if (alpha <= 0) return;
     const focusSet = this.highlight;
     const isSel = i === this.selected, isHover = i === this.hover;
@@ -1272,12 +1433,12 @@ class NeuralEngine {
     const fl = this.flash[i];
     ctx.globalCompositeOperation = "lighter";
     ctx.globalAlpha = Math.min(1, alpha * (0.38 + fl * 0.6 + (focusSet && focusSet.has(i) ? 0.4 : 0)));
-    const halo = r * (3.2 + fl * 3);
-    ctx.drawImage(this.sprites[nd.layer], x - halo, y - halo, halo * 2, halo * 2);
+    const halo = r * (3.0 + fl * 3);
+    ctx.drawImage(this.nodeSprite(i), x - halo, y - halo, halo * 2, halo * 2);
     ctx.globalAlpha = Math.min(1, alpha);
     ctx.globalCompositeOperation = "source-over";
-    const rgb = LAYER_RGB[nd.layer];
-    ctx.fillStyle = `rgb(${Math.round(rgb[0] * 0.35 + 165)},${Math.round(rgb[1] * 0.35 + 165)},${Math.round(rgb[2] * 0.35 + 165)})`;
+    const rgb = this.nodeColor(i);
+    ctx.fillStyle = `rgba(${rgb[0]},${rgb[1]},${rgb[2]},${(0.5 + w * 0.45).toFixed(3)})`;
     if (nd.derived) {
       // 派生/只读记录：菱形轮廓，绝不与原始记录同形。
       ctx.beginPath();
@@ -1476,14 +1637,15 @@ const ICON = {
 };
 
 // ---------- 常量 ----------
-const LAYER_INDEX = { semantic: 0, episodic: 1, working: 2 };
-const LAYER_NAME = ["语义", "情节", "工作"];
-const LAYER_EN = ["SEMANTIC", "EPISODIC", "WORKING"];
-const KIND_LABEL = { event: "事件", fact: "事实", trait: "特征", entity: "人物", turn: "原话", doubt: "疑问" };
+// 海马体自己的三层：持久记忆层 / 重点标注层 / 遗忘权重池；存疑池外挂。
+const LAYER_INDEX = { persistent: 0, pinned: 1, forgotten: 2 };
+const LAYER_NAME = ["持久记忆", "重点标注", "遗忘权重池"];
+const LAYER_EN = ["PERSISTENT", "PINNED", "FORGETTING"];
+const KIND_LABEL = { event: "事件", fact: "事实", trait: "特征", entity: "人物", turn: "原话", doubt: "存疑" };
 const TIER_NAME = { 1: "hot", 2: "warm", 3: "cold" };
 const TIER_LABEL = { hot: "hot · 热", warm: "warm · 温", cold: "cold · 冷" };
-const TAB_OF_KIND = { event: "events", fact: "facts", entity: "entities", trait: "entities", turn: "events", doubt: "events" };
-const TAB_TITLE = { events: "事件", facts: "事实", entities: "人物" };
+const TAB_OF_KIND = { event: "events", fact: "facts", entity: "entities", trait: "entities", turn: "events", doubt: "doubts" };
+const TAB_TITLE = { events: "事件", facts: "事实", entities: "人物", doubts: "存疑池" };
 
 // ---------- 数据源：http(s) 同源；file:// 或 ?api= 时指向内核端口 ----------
 const API = (() => {
@@ -1557,10 +1719,11 @@ if (engine) {
 
 // ---------- 快照 → 场数据 ----------
 function toField(d) {
-  const nodes = (d.nodes || []).map((n) => ({
+  // 存疑池外挂，不进三维场；只映射三层。
+  const nodes = (d.nodes || []).filter((n) => LAYER_INDEX[n.layer] !== undefined).map((n) => ({
     id: n.id,
-    layer: LAYER_INDEX[n.layer] ?? 1,
-    derived: n.kind !== "event" && n.kind !== "turn",
+    layer: LAYER_INDEX[n.layer],
+    derived: n.kind !== "event",
     weight: Math.max(0.3, Math.min(1, Number(n.priority) || 0.5)),
     label: String(n.content || ""),
     kindLabel: KIND_LABEL[n.kind] || n.kind,
@@ -1572,7 +1735,10 @@ function toField(d) {
 
 function layerCounts(d) {
   const c = [0, 0, 0];
-  for (const n of d.nodes || []) c[LAYER_INDEX[n.layer] ?? 1]++;
+  for (const n of d.nodes || []) {
+    const i = LAYER_INDEX[n.layer];
+    if (i !== undefined) c[i]++;   // 存疑池外挂，不计入三层
+  }
   return c;
 }
 
@@ -1596,7 +1762,7 @@ function findRecord(id) {
 function renderHead(d) {
   const c = d.counts || {};
   const nodes = (d.nodes || []).length, edges = (d.edges || []).length;
-  $("sub").textContent = `${nodes} 个节点 · ${edges} 条关联 · 事件 ${c.events ?? 0} / 事实 ${c.facts ?? 0} / 人物 ${c.entities ?? 0}`;
+  $("sub").textContent = `${nodes} 个节点 · ${edges} 条关联 · 事件 ${c.events ?? 0} / 事实 ${c.facts ?? 0} / 人物 ${c.entities ?? 0} / 存疑 ${c.doubts ?? 0}`;
   const t = d.tiers || {};
   const layers = layerCounts(d);
   $("console").innerHTML = `
@@ -1631,7 +1797,7 @@ function renderHead(d) {
       <strong class="console-number console-cyan">${edges}</strong>
       <span class="console-muted">图中真实关联</span>
     </div>`;
-  for (const [k, v] of [["events", c.events], ["facts", c.facts], ["entities", c.entities]]) {
+  for (const [k, v] of [["events", c.events], ["facts", c.facts], ["entities", c.entities], ["doubts", c.doubts]]) {
     const el = document.querySelector(`[data-count="${k}"]`);
     if (el) el.textContent = v ?? "";
   }
@@ -1652,6 +1818,9 @@ function filteredItems() {
   }
   if (state.tab === "facts") {
     return (d.facts || []).filter((f) => hit(f.key, f.value, f.session)).map((f) => ({ type: "fact", f }));
+  }
+  if (state.tab === "doubts") {
+    return (d.doubts || []).filter((x) => hit(x.question, x.session)).map((x) => ({ type: "doubt", x }));
   }
   return (d.entities || []).filter((en) => hit(en.canonical, en.type, en.aliases)).map((en) => ({ type: "entity", en }));
 }
@@ -1718,6 +1887,14 @@ function renderList() {
         <span class="row-text row-text-1">${mark(f.value)}</span>
         <span class="row-meta">置信 ${fmtConf(f.confidence)}</span>
       </button></li>`;
+    } else if (it.type === "doubt") {
+      const x = it.x;
+      const id = `doubt:${x.id}`;
+      html += `<li><button type="button" class="row" data-id="${esc(id)}" aria-current="${state.detailId === id}">
+        <span class="row-lead"><span class="badge" data-layer="1">存疑</span><span class="row-meta">${esc(x.session || "")}</span></span>
+        <span class="row-text">${mark(x.question)}</span>
+        <span class="row-meta">影响 ${fmtConf(x.impact)} · 成本 ${fmtConf(x.cost)}</span>
+      </button></li>`;
     } else {
       const en = it.en;
       const id = `entity:${en.id}`;
@@ -1745,11 +1922,12 @@ function renderDetail(id) {
   const found = findRecord(id);
   if (!found || !found.node) { state.detailId = null; renderList(); return; }
   const { kind, node, record } = found;
-  const layer = LAYER_INDEX[node.layer] ?? 1;
+  const isDoubt = kind === "doubt";
+  const layer = LAYER_INDEX[node.layer];
   const d = state.data;
   const head = `<div class="detail-head">
     <button type="button" class="icon-btn" id="btnBack" aria-label="返回列表">${ICON.back}</button>
-    <span class="chip" data-layer="${layer}"><i class="dot"></i>${LAYER_NAME[layer]}</span>
+    <span class="chip" data-layer="${isDoubt ? 1 : layer}"><i class="dot"></i>${isDoubt ? "存疑池" : LAYER_NAME[layer]}</span>
     <span class="kind-label">${KIND_LABEL[kind] || kind}</span>
     <span class="spacer"></span>
     ${node.derived ? '<span class="badge badge-muted">派生 · 只读</span>' : ""}
@@ -1787,6 +1965,14 @@ function renderDetail(id) {
       + metaRow("置信度", fmtConf(f.confidence))
       + (owner ? metaRow("所属人物", `<button type="button" class="btn" style="min-height:30px;padding:0 10px" data-jump="entity:${owner.id}">${esc(owner.canonical)}</button>`) : "")
       + metaRow("会话", esc(f.session || "—"), true)
+      + "</dl>";
+  } else if (kind === "doubt" && record) {
+    const x = record;
+    main = `<div class="content">${esc(x.question)}</div>`;
+    meta = '<dl class="meta">'
+      + metaRow("影响", fmtConf(x.impact))
+      + metaRow("成本", fmtConf(x.cost))
+      + metaRow("会话", esc(x.session || "—"), true)
       + "</dl>";
   } else if (kind === "entity" && record) {
     const en = record;
@@ -1946,6 +2132,7 @@ async function load(manual) {
     if (engine && changed) {
       const f = toField(d);
       engine.setData(f.nodes, f.edges);
+      engine.setDoubts(d.doubts || []);   // 存疑池星环（外挂，真实数据）
     }
     if (state.detailId) {
       const found = findRecord(state.detailId);

@@ -2833,33 +2833,32 @@ class Store:
             nodes.append(node)
 
         for e in events:
-            add({"id": f"event:{e['id']}", "layer": "episodic", "kind": "event",
+            # 海马体自己的分层：重点标注层（pinned）与遗忘权重池（其余事件）。
+            add({"id": f"event:{e['id']}",
+                 "layer": "pinned" if e["pinned"] else "forgotten", "kind": "event",
                  "content": e["summary"] or e["raw_preview"] or "",
                  "priority": float(e["weight"] or 0.0), "ts": e["event_time"],
                  "session": e["session"], "keywords": e["keywords"] or "",
                  "tier": e["tier"], "raw": e["raw_preview"], "pinned": e["pinned"]})
         for f in facts:
-            add({"id": f"fact:{f['key']}", "layer": "semantic", "kind": "fact",
+            add({"id": f"fact:{f['key']}", "layer": "persistent", "kind": "fact",
                  "content": f"{f['key']} = {f['value']}",
                  "priority": float(f["confidence"] or 0.5) * 2.0,
                  "session": f["session"], "entity_id": f["entity_id"]})
         for t in traits:
             evidence = (t["evidence"] or "").strip()
-            add({"id": f"trait:{t['id']}", "layer": "semantic", "kind": "trait",
+            add({"id": f"trait:{t['id']}", "layer": "persistent", "kind": "trait",
                  "content": (f"{t['trait']}：{evidence}" if evidence else str(t["trait"])),
                  "priority": float(t["confidence"] or 0.5) * 2.0,
                  "entity_id": t["entity_id"]})
         for en in entities:
-            add({"id": f"entity:{en['id']}", "layer": "semantic", "kind": "entity",
+            add({"id": f"entity:{en['id']}", "layer": "persistent", "kind": "entity",
                  "content": en["canonical"],
                  "priority": float(en["confidence"] or 0.5) * 2.0,
                  "type": en["type"], "aliases": en["aliases"]})
-        for t in turns:
-            add({"id": f"turn:{t['session']}:{t['idx']}", "layer": "working", "kind": "turn",
-                 "content": t["content"], "priority": 1.0, "ts": t["ts"],
-                 "session": t["session"]})
         for d in doubts:
-            add({"id": f"doubt:{d['id']}", "layer": "working", "kind": "doubt",
+            # 存疑池是外挂，不进三层；前端单独一个视图展示。
+            add({"id": f"doubt:{d['id']}", "layer": "doubt", "kind": "doubt",
                  "content": d["question"], "priority": float(d["impact"] or 0.5) * 2.0,
                  "session": d["session"]})
 
