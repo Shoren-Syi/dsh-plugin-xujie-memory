@@ -1,0 +1,201 @@
+# 事实词表（M8.1）
+#
+# 为什么要有这张表
+# ----------------
+# 抽取器把"住在哪""做什么工作"当成 fact 单独存，因为这两类信息
+# **会变，而且变了之后旧值必须失效**。事件是流水账，事实是当前状态。
+#
+# 但事实的 key 一旦自由生长，就等于没有 key：
+# 实测 8 个窗口，模型给了 11 条 fact、11 个不同的 key ——
+# `居住城市` 和 `居住地` 同时存在，两者都在描述"住哪"。
+# 后续"搬到上海"只会顶掉其中一个，另一个永远 active。
+# 同一件事有两个当前值，比没有事实更糟：模型会二选一，随机。
+#
+# 所以：**key 必须闭集**。模型给了表外的 key，这条 fact 不写。
+#
+# 字段
+# ----
+#   cn      给模型看的中文名（prompt 里就是它）
+#   card    single = 同一实体同时只能有一个值；multi = 可以并存多个
+#   type    place / org / enum / number / text，决定值怎么归一
+#   aliases 模型可能写的其他说法（英文、近义中文），一律映射到本 key
+#
+# card 的取舍
+# -----------
+# 矛盾检测只在 single 上有定义。"住在哪"只能有一个答案，
+# "不吃什么"可以有五个。把 diet 设成 single，第二样忌口进来的那一刻
+# 就会把第一样顶掉 —— 那是**丢信息**，不是"更新"。
+# 所以 multi 类型的 key 只做去重插入，永不关闭旧值。
+#
+# 加新 key 的原则
+# --------------
+# 只有当"同一实体同时有两个值"在语义上**不可能**成立时才加 single。
+# 拿不准就 multi —— 多一条并存的事实只是啰嗦，错关一条是丢数据。
+
+version: 1
+
+keys:
+
+  # ---------------------------------------------------------------- 地点
+  city:
+    cn: 居住城市
+    card: single
+    type: place
+    aliases: [居住城市, 居住地, 城市, 常驻地, 常住城市, 所在地, 住在哪, 现居, 住址]
+  district:
+    cn: 居住区县
+    card: single
+    type: place
+    aliases: [居住区县, 居住区, 区县, 城区, 住在哪个区, 小区, 街区]
+  hometown:
+    cn: 家乡
+    card: single
+    type: place
+    aliases: [家乡, 老家, 故乡, 籍贯, 老家在哪]
+
+  # ---------------------------------------------------------------- 工作
+  occupation:
+    cn: 职业
+    card: single
+    type: text
+    aliases: [职业, 工作, 岗位, 做什么工作, 干什么的, 职务]
+  employer:
+    cn: 工作单位
+    card: single
+    type: org
+    aliases: [工作单位, 公司, 单位, 就职公司, 雇主, 在哪上班, 上班的地方]
+  title:
+    cn: 职位
+    card: single
+    type: text
+    aliases: [职位, 职级, 头衔, 级别, title]
+  industry:
+    cn: 行业
+    card: single
+    type: text
+    aliases: [行业, 所在行业, 领域]
+  commute:
+    cn: 通勤方式
+    card: single
+    type: enum
+    aliases: [通勤方式, 通勤, 上班方式, 怎么上班, 交通工具, 出行方式]
+
+  # ---------------------------------------------------------------- 人
+  age:
+    cn: 年龄
+    card: single
+    type: number
+    aliases: [年龄, 岁数, 多大, 年纪, age]
+  birthday:
+    cn: 生日
+    card: single
+    type: date
+    aliases: [生日, 出生日期, 哪天生日, birthday]
+  partner:
+    cn: 伴侣
+    card: single
+    type: text
+    aliases: [伴侣, 对象, 配偶, 老公, 老婆, 男朋友, 女朋友, 已婚]
+  child:
+    cn: 子女
+    card: multi
+    type: text
+    aliases: [子女, 孩子, 儿子, 女儿, 几个孩子]
+  family:
+    cn: 家庭成员
+    card: multi
+    type: text
+    aliases: [家庭成员, 家人, 父母, 兄弟姐妹]
+
+  # ---------------------------------------------------------------- 宠物
+  pet:
+    cn: 宠物
+    card: multi
+    type: text
+    aliases: [宠物, 养的动物, 养什么, 猫, 狗]
+  pet_name:
+    cn: 宠物名
+    card: multi
+    type: text
+    aliases: [宠物名, 猫叫什么, 狗叫什么, 宠物的名字]
+  pet_age:
+    cn: 宠物年龄
+    card: multi
+    type: number
+    aliases: [宠物年龄, 猫多大, 狗多大]
+
+  # ---------------------------------------------------------------- 身体
+  health:
+    cn: 健康状况
+    card: single
+    type: text
+    aliases: [健康状况, 身体状况, 身体, 体检结果, 病情]
+  condition:
+    cn: 慢性病
+    card: multi
+    type: text
+    aliases: [慢性病, 疾病, 病史, 有什么病, 症状]
+  allergy:
+    cn: 过敏
+    card: multi
+    type: text
+    aliases: [过敏, 过敏源, 对什么过敏]
+  medication:
+    cn: 用药
+    card: multi
+    type: text
+    aliases: [用药, 吃什么药, 长期服药, 药物]
+
+  # ---------------------------------------------------------------- 习惯
+  diet:
+    cn: 饮食忌口
+    card: multi
+    type: text
+    aliases: [饮食忌口, 忌口, 不吃, 讨厌吃, 饮食禁忌, 口味]
+  diet_pref:
+    cn: 饮食偏好
+    card: multi
+    type: text
+    aliases: [饮食偏好, 喜欢吃什么, 爱吃的, 口味偏好]
+  sleep:
+    cn: 作息
+    card: single
+    type: text
+    aliases: [作息, 睡眠, 睡觉时间, 几点睡, 几点起]
+  hobby:
+    cn: 爱好
+    card: multi
+    type: text
+    aliases: [爱好, 兴趣, 业余, 喜欢做什么, 消遣]
+  sport:
+    cn: 运动
+    card: multi
+    type: text
+    aliases: [运动, 健身, 锻炼, 练什么]
+
+  # ---------------------------------------------------------------- 学业与资产
+  school:
+    cn: 学校
+    card: single
+    type: org
+    aliases: [学校, 母校, 毕业院校, 就读学校]
+  major:
+    cn: 专业
+    card: single
+    type: text
+    aliases: [专业, 学什么, 所学专业]
+  education:
+    cn: 学历
+    card: single
+    type: enum
+    aliases: [学历, 学位, 本科, 硕士, 博士]
+  mortgage:
+    cn: 房贷
+    card: single
+    type: text
+    aliases: [房贷, 月供, 贷款, 还贷, 房贷剩余]
+  goal:
+    cn: 长期目标
+    card: multi
+    type: text
+    aliases: [长期目标, 目标, 打算, 计划做什么]

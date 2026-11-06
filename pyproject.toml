@@ -1,0 +1,44 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "hippocampus-deepseek"
+version = "0.1.0"
+description = "DeepSeek 的旁路记忆中间件：改一行 base_url，让 AI 记得住。"
+requires-python = ">=3.11"
+dependencies = [
+    "pydantic>=2.6",
+    "pyyaml>=6.0",
+    "tzdata>=2024.1",
+    # serve 就是产品本体（记忆代理），不装这些等于插件不能用。
+    # M28.1 验收在干净环境里发现：裸 `pip install` 后 `hippo serve` 直接
+    # 缺 uvicorn —— 把安装说明写成"先装再加 [server]"是没必要的门槛。
+    "fastapi>=0.110",
+    "uvicorn>=0.27",
+    "httpx>=0.27",
+]
+
+[project.optional-dependencies]
+# 兼容旧文档/旧命令：依赖已并入主 dependencies，这个 extra 变成空壳。
+server = []
+dev = ["pytest>=8.0", "pytest-asyncio>=0.23"]
+
+[project.scripts]
+hippo = "hippo.cli:main"
+
+[tool.setuptools.packages.find]
+include = ["hippo*"]
+
+[tool.setuptools.package-data]
+hippo = ["data/*.yaml", "data/*.sql", "data/migrations/*.sql",
+         "data/*.md", "data/prompts/*.md"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+addopts = "-q"
+markers = [
+    "slow: 建 8000/10万条数据的性能测试，跑全量时可用 -m 'not slow' 跳过",
+]
+asyncio_mode = "auto"
+asyncio_default_fixture_loop_scope = "function"

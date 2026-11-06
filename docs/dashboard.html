@@ -1,0 +1,398 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>海马体插件 0.1.0 · 发布看板</title>
+<style>
+  :root {
+    --bg: #05080f;
+    --bg2: #0a1424;
+    --fg: #eef3fb;
+    --fg2: #b9c6dd;
+    --fg3: #7f8faa;
+    --sem: #8aaeff;
+    --epi: #efc683;
+    --work: #75dfd0;
+    --line: rgba(138, 174, 255, 0.16);
+    --glass: rgba(14, 24, 38, 0.66);
+    --mono: ui-monospace, "Cascadia Code", Consolas, monospace;
+  }
+  * { box-sizing: border-box; }
+  html, body { height: 100%; margin: 0; }
+  body {
+    background: radial-gradient(1200px 800px at 30% 20%, #0d1a30 0%, var(--bg2) 38%, var(--bg) 100%);
+    color: var(--fg);
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC", "Microsoft YaHei", sans-serif;
+    overflow: hidden;
+  }
+  canvas#field { position: fixed; inset: 0; width: 100%; height: 100%; display: block; }
+  .vignette {
+    position: fixed; inset: 0; pointer-events: none;
+    background: radial-gradient(ellipse at 50% 46%, transparent 42%, rgba(2, 5, 10, 0.72) 100%);
+  }
+  .grain {
+    position: fixed; inset: 0; pointer-events: none; opacity: 0.05;
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='120' height='120'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='2'/%3E%3C/filter%3E%3Crect width='120' height='120' filter='url(%23n)' opacity='0.6'/%3E%3C/svg%3E");
+  }
+
+  header { position: fixed; left: 44px; top: 38px; z-index: 4; pointer-events: none; }
+  .brand {
+    font: 600 11px/1 var(--mono); letter-spacing: 0.34em; color: var(--work);
+    text-transform: uppercase; opacity: 0.9;
+  }
+  h1 { margin: 14px 0 6px; font-size: 40px; line-height: 1.08; font-weight: 650; letter-spacing: -0.02em; }
+  h1 em { font-style: normal; color: var(--sem); }
+  header p { margin: 0; font: 400 13px/1.7 var(--mono); color: var(--fg3); letter-spacing: 0.06em; }
+
+  .kpis {
+    position: fixed; left: 44px; bottom: 40px; z-index: 4;
+    display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 10px; max-width: 640px;
+  }
+  .kpi {
+    padding: 13px 15px 12px; border: 1px solid var(--line); border-radius: 12px;
+    background: var(--glass); backdrop-filter: blur(14px);
+    box-shadow: 0 14px 40px rgba(0, 0, 0, 0.35), inset 0 1px 0 rgba(255, 255, 255, 0.04);
+  }
+  .kpi b { display: block; white-space: nowrap; font: 500 26px/1.15 var(--mono); letter-spacing: -0.02em; color: #f4f8ff; }
+  .kpi b small { font-size: 13px; color: var(--fg3); letter-spacing: 0; }
+  .kpi span { display: block; margin-top: 4px; font-size: 11px; color: var(--fg3); letter-spacing: 0.05em; }
+
+  aside.panel {
+    position: fixed; right: 40px; top: 38px; bottom: 40px; width: 372px; z-index: 4;
+    display: flex; flex-direction: column; gap: 10px; overflow: auto; padding-right: 2px;
+  }
+  .card {
+    padding: 15px 17px; border: 1px solid var(--line); border-radius: 14px;
+    background: var(--glass); backdrop-filter: blur(14px);
+    box-shadow: 0 18px 48px rgba(0, 0, 0, 0.4), inset 0 1px 0 rgba(255, 255, 255, 0.04);
+  }
+  .card h2 {
+    margin: 0 0 10px; font: 600 11px/1.3 var(--mono); letter-spacing: 0.22em;
+    text-transform: uppercase; color: var(--fg3);
+  }
+  .row { display: flex; align-items: baseline; justify-content: space-between; gap: 10px; padding: 6px 0; border-top: 1px solid rgba(138, 174, 255, 0.08); }
+  .row:first-of-type { border-top: 0; }
+  .row .k { font-size: 12.5px; color: var(--fg2); }
+  .row .v { font: 500 13px/1.4 var(--mono); color: #eef4ff; text-align: right; }
+  .row .v.ok { color: var(--work); }
+  .row .v.warn { color: var(--epi); }
+  .row .v.bad { color: #ff8f8f; }
+
+  .badge { display: inline-flex; align-items: center; gap: 6px; padding: 3px 8px; border-radius: 999px; font: 500 10.5px/1.4 var(--mono); letter-spacing: 0.08em; }
+  .badge.ok { color: var(--work); background: rgba(117, 223, 208, 0.1); border: 1px solid rgba(117, 223, 208, 0.3); }
+  .badge.warn { color: var(--epi); background: rgba(239, 198, 131, 0.1); border: 1px solid rgba(239, 198, 131, 0.3); }
+  .badge::before { content: ""; width: 6px; height: 6px; border-radius: 50%; background: currentColor; box-shadow: 0 0 8px currentColor; }
+
+  .bar-list { display: flex; flex-direction: column; gap: 8px; }
+  .bar-item { display: grid; grid-template-columns: 74px 1fr 46px; align-items: center; gap: 9px; }
+  .bar-item .lab { font: 500 11px/1.4 var(--mono); color: var(--fg3); letter-spacing: 0.04em; }
+  .bar-track { height: 7px; border-radius: 4px; background: rgba(138, 174, 255, 0.08); overflow: hidden; }
+  .bar-fill { height: 100%; border-radius: 4px; }
+  .bar-fill.on { background: linear-gradient(90deg, rgba(239, 198, 131, 0.45), var(--epi)); }
+  .bar-fill.off { background: linear-gradient(90deg, rgba(117, 223, 208, 0.45), var(--work)); }
+  .bar-item .num { font: 500 12px/1.4 var(--mono); color: #eef4ff; text-align: right; }
+
+  .m28 { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 8px; }
+  .m28 .tile { padding: 10px 10px 9px; border: 1px solid var(--line); border-radius: 10px; background: rgba(9, 16, 26, 0.5); }
+  .m28 .tile b { display: block; font-size: 11px; color: var(--fg3); letter-spacing: 0.06em; }
+  .m28 .tile span { display: block; margin-top: 5px; font: 500 12px/1.4 var(--mono); color: #eaf2ff; }
+  .m28 .tile i { display: block; margin-top: 3px; font: 400 10px/1.4 var(--mono); font-style: normal; color: var(--fg3); }
+
+  footer {
+    position: fixed; left: 44px; bottom: 14px; z-index: 4;
+    font: 400 10.5px/1.4 var(--mono); color: rgba(127, 143, 170, 0.7); letter-spacing: 0.08em;
+  }
+  @media (max-width: 1080px) {
+    aside.panel { display: none; }
+    h1 { font-size: 30px; }
+    .kpis { grid-template-columns: repeat(2, 1fr); max-width: 420px; }
+  }
+</style>
+</head>
+<body>
+<canvas id="field"></canvas>
+<div class="vignette"></div>
+<div class="grain"></div>
+
+<header>
+  <div class="brand">Hippocampus · DeepSeek · Release Board</div>
+  <h1>海马体插件 <em>0.1.0</em></h1>
+  <p>M0–M28 · 发布看板 · 2026-11-06</p>
+</header>
+
+<div class="kpis">
+  <div class="kpi"><b>1145</b><span>全量测试 0 fail</span></div>
+  <div class="kpi"><b>8/8</b><span>doctor 干净环境</span></div>
+  <div class="kpi"><b>27.0s</b><span>从零 onboarding</span></div>
+  <div class="kpi"><b>¥0.21</b><span>真实数据验证花费</span></div>
+</div>
+
+<aside class="panel">
+  <div class="card">
+    <h2>发布门 · P6 Gate</h2>
+    <div class="row"><span class="k">M28.1 干净环境可装</span><span class="v ok">通过</span></div>
+    <div class="row"><span class="k">M26 六项指标</span><span class="v warn">引用交接报告</span></div>
+    <div class="row"><span class="k">M27 压测</span><span class="v warn">引用交接报告</span></div>
+    <div class="row"><span class="k">结论</span><span class="badge warn">有条件通过</span></div>
+  </div>
+
+  <div class="card">
+    <h2>真实数据 · 预筛对照</h2>
+    <div class="bar-list">
+      <div class="bar-item"><span class="lab">预筛 开</span><div class="bar-track"><div class="bar-fill on" style="width:3%"></div></div><span class="num">1</span></div>
+      <div class="bar-item"><span class="lab">预筛 关</span><div class="bar-track"><div class="bar-fill off" style="width:100%"></div></div><span class="num">33</span></div>
+    </div>
+    <div class="row" style="margin-top:10px"><span class="k">同批 120 轮真实对话 · 事件数</span><span class="v">召回全中</span></div>
+    <div class="row"><span class="k">ITX / GPT中转 / 叙界</span><span class="v ok">6 / 5 / 1 命中</span></div>
+  </div>
+
+  <div class="card">
+    <h2>M28 三小节</h2>
+    <div class="m28">
+      <div class="tile"><b>M28.1</b><span>打包</span><i>venv · 8/8 · 零残留</i></div>
+      <div class="tile"><b>M28.2</b><span>文档</span><i>9 FAQ · 3 示例</i></div>
+      <div class="tile"><b>M28.3</b><span>回滚</span><i>backup · restore</i></div>
+    </div>
+  </div>
+
+  <div class="card">
+    <h2>本版修复</h2>
+    <div class="row"><span class="k">GBK 控制台 doctor 崩溃</span><span class="v ok">已修</span></div>
+    <div class="row"><span class="k">裸装缺 server 依赖</span><span class="v ok">已修</span></div>
+    <div class="row"><span class="k">serve 引导语被缓冲</span><span class="v ok">已修</span></div>
+  </div>
+</aside>
+
+<footer>hippocampus-deepseek 0.1.0 · M0–M28 · 改一行 base_url 就能记得住</footer>
+
+<script>
+(() => {
+  "use strict";
+  const canvas = document.getElementById("field");
+  const ctx = canvas.getContext("2d");
+  const TAU = Math.PI * 2;
+
+  // 视觉语言照 xujie-memory：语义蓝 / 情节琥珀 / 工作青 + 银灰主干
+  const LAYER_RGB = [[138, 174, 255], [239, 198, 131], [117, 223, 208]];
+  const CORE_RGB = [206, 216, 236];
+
+  let W = 0, H = 0, DPR = 1;
+
+  // 确定性随机（刷新后粒子分布一致，适合截图）
+  let seed = 0x9e3779b9;
+  const rnd = () => {
+    seed = (Math.imul(seed, 1664525) + 1013904223) >>> 0;
+    return seed / 4294967296;
+  };
+
+  const points = [];
+  const edges = [];
+  const milestones = [];
+  const stars = [];
+  let sprites = [];
+
+  function makeSprites() {
+    sprites = [];
+    const colors = [...LAYER_RGB, CORE_RGB];
+    for (const rgb of colors) {
+      const c = document.createElement("canvas");
+      c.width = c.height = 64;
+      const g = c.getContext("2d");
+      const grd = g.createRadialGradient(32, 32, 0, 32, 32, 32);
+      grd.addColorStop(0, "rgba(255,255,255,0.95)");
+      grd.addColorStop(0.14, `rgba(${rgb[0]},${rgb[1]},${rgb[2]},0.92)`);
+      grd.addColorStop(0.4, `rgba(${rgb[0]},${rgb[1]},${rgb[2]},0.26)`);
+      grd.addColorStop(1, `rgba(${rgb[0]},${rgb[1]},${rgb[2]},0)`);
+      g.fillStyle = grd;
+      g.fillRect(0, 0, 64, 64);
+      sprites.push(c);
+    }
+  }
+
+  function build() {
+    points.length = 0; edges.length = 0; milestones.length = 0;
+    stars.length = 0;
+    for (let i = 0; i < 150; i++) {
+      stars.push({ x: rnd(), y: rnd(), r: 0.5 + rnd() * 1.3, phase: rnd() * TAU });
+    }
+    const strata = [-150, 15, 175];      // 三层高度
+    const radii = [265, 205, 245];
+    const perLayer = 110;
+    for (let layer = 0; layer < 3; layer++) {
+      const start = points.length;
+      for (let n = 0; n < perLayer; n++) {
+        const a = rnd() * TAU;
+        const r = Math.sqrt(rnd()) * radii[layer];
+        points.push({
+          x: Math.cos(a) * r,
+          y: strata[layer] + (rnd() - 0.5) * 34,
+          z: Math.sin(a) * r,
+          layer,
+          size: 1.6 + rnd() * 2.2,
+          phase: rnd() * TAU,
+        });
+      }
+      // 同层近邻连线
+      for (let i = start; i < points.length; i++) {
+        const near = [];
+        for (let j = start; j < points.length; j++) {
+          if (i === j) continue;
+          const dx = points[i].x - points[j].x, dy = points[i].y - points[j].y, dz = points[i].z - points[j].z;
+          const d2 = dx * dx + dy * dy + dz * dz;
+          if (d2 < 62 * 62) near.push([j, d2]);
+        }
+        near.sort((a, b) => a[1] - b[1]);
+        for (const [j] of near.slice(0, 2)) if (j > i) edges.push([i, j]);
+      }
+      // 跨层稀疏连线（主干感）
+      if (layer > 0) {
+        for (let n = 0; n < 26; n++) {
+          const i = start + Math.floor(rnd() * perLayer);
+          const j = (layer - 1) * perLayer + Math.floor(rnd() * perLayer);
+          edges.push([i, j]);
+        }
+      }
+    }
+
+    // 项目里程碑节点：漂浮在场地里的"大事件"
+    const list = [
+      { label: "M28.1", sub: "打包 · 8/8", layer: 0, dir: -1 },
+      { label: "M28.2", sub: "文档 · 9 FAQ", layer: 1, dir: 1 },
+      { label: "M28.3", sub: "回滚 · backup", layer: 2, dir: 1 },
+      { label: "Gate", sub: "有条件通过", layer: 3, dir: -1 },
+      { label: "真实数据", sub: "33 事件 · 召回全中", layer: 1, dir: 1 },
+    ];
+    list.forEach((m, i) => {
+      const a = (i / list.length) * TAU - Math.PI / 2 + 0.34;
+      milestones.push({
+        x: Math.cos(a) * 325,
+        y: [ -110, 55, -185, 165, -25 ][i],
+        z: Math.sin(a) * 325,
+        label: m.label,
+        sub: m.sub,
+        color: m.layer > 2 ? 3 : m.layer,
+      });
+    });
+  }
+
+  function resize() {
+    DPR = Math.min(window.devicePixelRatio || 1, 2);
+    W = window.innerWidth; H = window.innerHeight;
+    canvas.width = W * DPR; canvas.height = H * DPR;
+    ctx.setTransform(DPR, 0, 0, DPR, 0, 0);
+  }
+
+  const FOCAL = 820;
+  let t = 0;
+
+  function render() {
+    t += 1 / 60;
+    ctx.clearRect(0, 0, W, H);
+
+    // 背景星点：只做体积感，不抢主体
+    for (const s of stars) {
+      const a = 0.04 + 0.05 * (0.5 + 0.5 * Math.sin(t * 0.7 + s.phase));
+      ctx.fillStyle = `rgba(170,198,240,${a.toFixed(3)})`;
+      ctx.beginPath();
+      ctx.arc(s.x * W, s.y * H, s.r, 0, TAU);
+      ctx.fill();
+    }
+
+    const cx = W * 0.40, cy = H * 0.5;
+    const yaw = t * 0.16;
+    const pitch = -0.34 + Math.sin(t * 0.11) * 0.05;
+    const cosY = Math.cos(yaw), sinY = Math.sin(yaw);
+    const cosP = Math.cos(pitch), sinP = Math.sin(pitch);
+
+    const proj = (p) => {
+      // 绕 Y 轴
+      let x = p.x * cosY - p.z * sinY;
+      let z = p.x * sinY + p.z * cosY;
+      // 绕 X 轴（俯仰）
+      let y = p.y * cosP - z * sinP;
+      z = p.y * sinP + z * cosP;
+      const s = FOCAL / (FOCAL + z + 640);
+      return { x: cx + x * s, y: cy + y * s, s, z };
+    };
+
+    // 先投影，再按深度排序（远的先画）
+    const pp = points.map((p) => ({ p, q: proj(p) }));
+    const mp = milestones.map((m) => ({ m, q: proj(m) }));
+
+    // 边：低透明度，随深度衰减
+    ctx.lineWidth = 1;
+    for (const [i, j] of edges) {
+      const a = pp[i], b = pp[j];
+      if (!a || !b) continue;
+      const depth = (a.q.s + b.q.s) / 2;
+      const alpha = Math.max(0, 0.07 + (depth - 0.35) * 0.2);
+      ctx.strokeStyle = `rgba(138,174,255,${alpha.toFixed(3)})`;
+      ctx.beginPath();
+      ctx.moveTo(a.q.x, a.q.y);
+      ctx.lineTo(b.q.x, b.q.y);
+      ctx.stroke();
+    }
+
+    // 粒子
+    const sorted = pp.sort((a, b) => a.q.z - b.q.z);
+    for (const { p, q } of sorted) {
+      const breathe = 1 + Math.sin(t * 1.6 + p.phase) * 0.18;
+      const r = p.size * q.s * breathe * 2.7;
+      const alpha = Math.min(1, Math.max(0.12, (q.s - 0.28) * 1.9));
+      const sp = sprites[p.layer];
+      ctx.globalAlpha = alpha * 0.9;
+      ctx.drawImage(sp, q.x - r, q.y - r, r * 2, r * 2);
+    }
+    ctx.globalAlpha = 1;
+
+    // 里程碑节点 + 标签
+    for (const { m, q } of mp.sort((a, b) => a.q.z - b.q.z)) {
+      const r = 7 * q.s * 2.4;
+      const sp = sprites[m.color];
+      ctx.globalAlpha = 0.95;
+      ctx.drawImage(sp, q.x - r, q.y - r, r * 2, r * 2);
+      ctx.globalAlpha = 1;
+      // 标签常显，带 pill 底，左右交替避免旋转时叠字
+      const la = Math.max(0.3, Math.min(1, q.s * 1.4));
+      ctx.font = "600 11px ui-monospace, Consolas, monospace";
+      const tw = Math.max(ctx.measureText(m.label).width, 44);
+      const pw = tw + 12;
+      const lx = m.dir > 0 ? q.x + r * 0.9 : q.x - r * 0.9 - pw;
+      const ly = q.y - 12;
+      ctx.fillStyle = "rgba(7,12,21,0.74)";
+      ctx.beginPath();
+      if (ctx.roundRect) ctx.roundRect(lx, ly - 2, pw, 28, 6);
+      else ctx.rect(lx, ly - 2, pw, 28);
+      ctx.fill();
+      ctx.fillStyle = `rgba(238,243,251,${la.toFixed(3)})`;
+      ctx.fillText(m.label, lx + 6, ly + 10);
+      ctx.font = "400 9.5px ui-monospace, Consolas, monospace";
+      ctx.fillStyle = `rgba(185,198,221,${(la * 0.8).toFixed(3)})`;
+      ctx.fillText(m.sub, lx + 6, ly + 21);
+    }
+
+    // 中心辉光（视线锚点）
+    const halo = ctx.createRadialGradient(cx, cy, 0, cx, cy, 210);
+    halo.addColorStop(0, "rgba(117,223,208,0.10)");
+    halo.addColorStop(0.5, "rgba(138,174,255,0.035)");
+    halo.addColorStop(1, "rgba(0,0,0,0)");
+    ctx.fillStyle = halo;
+    ctx.fillRect(cx - 220, cy - 220, 440, 440);
+
+    requestAnimationFrame(render);
+  }
+
+  function init() {
+    resize();
+    makeSprites();
+    build();
+    window.addEventListener("resize", () => { resize(); });
+    requestAnimationFrame(render);
+  }
+
+  init();
+})();
+</script>
+</body>
+</html>

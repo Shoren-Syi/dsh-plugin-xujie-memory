@@ -1,0 +1,68 @@
+{
+  "rounds": 6,
+  "wall_ms": 307962,
+  "counts": {
+    "events": 4,
+    "entities": 3,
+    "card_traits": 1,
+    "facts": 2,
+    "doubts": 1,
+    "plans": 0,
+    "affect": 0,
+    "ledger": 0,
+    "turns": 12,
+    "metrics": 6,
+    "kw_index": 14,
+    "event_entities": 4,
+    "extract_runs": 2
+  },
+  "stats": {
+    "ok": 2,
+    "total": 2,
+    "attempted": 2,
+    "success_rate": 1.0,
+    "events": 4,
+    "verbatim_fail": 0,
+    "cost": 0.004051,
+    "prompt_tokens": 4574,
+    "cached_tokens": 2048,
+    "reasoning_tokens": 0,
+    "cache_hit_rate": 0.4477
+  },
+  "events": [
+    "我下周要去趟成都出差，帮我看看要准备什么",
+    "我吃不了太辣的",
+    "行，我们公司出差报销要提前审批",
+    "对了，我养的那只猫叫年糕，得找人喂"
+  ],
+  "detail": {
+    "facts": [
+      {
+        "entity": "用户",
+        "key": "饮食忌口",
+        "value": "吃不了太辣的",
+        "conf": 0.95
+      },
+      {
+        "entity": "用户",
+        "key": "宠物",
+        "value": "养了一只猫，名叫年糕",
+        "conf": 0.95
+      }
+    ],
+    "traits": [
+      {
+        "entity": "用户",
+        "trait": "养猫，猫名叫年糕",
+        "status": "observed"
+      }
+    ],
+    "plans": [],
+    "doubts": [
+      {
+        "q": "出差的具体日期和时长未知，影响喂猫方案选择",
+        "conf": 0.5
+      }
+    ]
+  }
+}

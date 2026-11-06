@@ -1,0 +1,1067 @@
+{
+  "base": "2026-11-05T10:00:00+08:00",
+  "cases": 60,
+  "graded": 56,
+  "ok": 56,
+  "accuracy": 1.0,
+  "fuzzy_ok": 4,
+  "fuzzy_total": 4,
+  "cross_year": [
+    {
+      "hint": "去年冬天",
+      "kind": "season",
+      "want": [
+        "2025-12-01",
+        "2026-03-01",
+        "season"
+      ],
+      "got": [
+        "2025-12-01",
+        "2026-03-01",
+        "season"
+      ],
+      "guessed": 0,
+      "ok": true,
+      "matched": "去年冬天"
+    },
+    {
+      "hint": "上个月",
+      "kind": "relative",
+      "want": [
+        "2025-12-01",
+        "2026-01-01",
+        "month"
+      ],
+      "got": [
+        "2025-12-01",
+        "2026-01-01",
+        "month"
+      ],
+      "guessed": 0,
+      "ok": true,
+      "matched": "上个月"
+    }
+  ],
+  "rows": [
+    {
+      "hint": "昨天",
+      "kind": "relative",
+      "want": [
+        "2026-11-04",
+        "2026-11-05",
+        "day"
+      ],
+      "got": [
+        "2026-11-04",
+        "2026-11-05",
+        "day"
+      ],
+      "guessed": 1,
+      "ok": true,
+      "matched": "昨天"
+    },
+    {
+      "hint": "前天",
+      "kind": "relative",
+      "want": [
+        "2026-11-03",
+        "2026-11-04",
+        "day"
+      ],
+      "got": [
+        "2026-11-03",
+        "2026-11-04",
+        "day"
+      ],
+      "guessed": 1,
+      "ok": true,
+      "matched": "前天"
+    },
+    {
+      "hint": "大前天",
+      "kind": "relative",
+      "want": [
+        "2026-11-02",
+        "2026-11-03",
+        "day"
+      ],
+      "got": [
+        "2026-11-02",
+        "2026-11-03",
+        "day"
+      ],
+      "guessed": 1,
+      "ok": true,
+      "matched": "大前天"
+    },
+    {
+      "hint": "今天",
+      "kind": "relative",
+      "want": [
+        "2026-11-05",
+        "2026-11-06",
+        "day"
+      ],
+      "got": [
+        "2026-11-05",
+        "2026-11-06",
+        "day"
+      ],
+      "guessed": 1,
+      "ok": true,
+      "matched": "今天"
+    },
+    {
+      "hint": "明天",
+      "kind": "relative",
+      "want": [
+        "2026-11-06",
+        "2026-11-07",
+        "day"
+      ],
+      "got": [
+        "2026-11-06",
+        "2026-11-07",
+        "day"
+      ],
+      "guessed": 1,
+      "ok": true,
+      "matched": "明天"
+    },
+    {
+      "hint": "上周",
+      "kind": "relative",
+      "want": [
+        "2026-10-26",
+        "2026-11-02",
+        "week"
+      ],
+      "got": [
+        "2026-10-26",
+        "2026-11-02",
+        "week"
+      ],
+      "guessed": 0,
+      "ok": true,
+      "matched": "上周"
+    },
+    {
+      "hint": "这周",
+      "kind": "relative",
+      "want": [
+        "2026-11-02",
+        "2026-11-09",
+        "week"
+      ],
+      "got": [
+        "2026-11-02",
+        "2026-11-09",
+        "week"
+      ],
+      "guessed": 0,
+      "ok": true,
+      "matched": "这周"
+    },
+    {
+      "hint": "下周",
+      "kind": "relative",
+      "want": [
+        "2026-11-09",
+        "2026-11-16",
+        "week"
+      ],
+      "got": [
+        "2026-11-09",
+        "2026-11-16",
+        "week"
+      ],
+      "guessed": 0,
+      "ok": true,
+      "matched": "下周"
+    },
+    {
+      "hint": "上周三",
+      "kind": "relative",
+      "want": [
+        "2026-10-28",
+        "2026-10-29",
+        "day"
+      ],
+      "got": [
+        "2026-10-28",
+        "2026-10-29",
+        "day"
+      ],
+      "guessed": 1,
+      "ok": true,
+      "matched": "上周三"
+    },
+    {
+      "hint": "上星期五",
+      "kind": "relative",
+      "want": [
+        "2026-10-30",
+        "2026-10-31",
+        "day"
+      ],
+      "got": [
+        "2026-10-30",
+        "2026-10-31",
+        "day"
+      ],
+      "guessed": 1,
+      "ok": true,
+      "matched": "上星期五"
+    },
+    {
+      "hint": "下周三",
+      "kind": "relative",
+      "want": [
+        "2026-11-11",
+        "2026-11-12",
+        "day"
+      ],
+      "got": [
+        "2026-11-11",
+        "2026-11-12",
+        "day"
+      ],
+      "guessed": 1,
+      "ok": true,
+      "matched": "下周三"
+    },
+    {
+      "hint": "上个月",
+      "kind": "relative",
+      "want": [
+        "2026-10-01",
+        "2026-11-01",
+        "month"
+      ],
+      "got": [
+        "2026-10-01",
+        "2026-11-01",
+        "month"
+      ],
+      "guessed": 0,
+      "ok": true,
+      "matched": "上个月"
+    },
+    {
+      "hint": "这个月",
+      "kind": "relative",
+      "want": [
+        "2026-11-01",
+        "2026-12-01",
+        "month"
+      ],
+      "got": [
+        "2026-11-01",
+        "2026-12-01",
+        "month"
+      ],
+      "guessed": 0,
+      "ok": true,
+      "matched": "这个月"
+    },
+    {
+      "hint": "下个月",
+      "kind": "relative",
+      "want": [
+        "2026-12-01",
+        "2027-01-01",
+        "month"
+      ],
+      "got": [
+        "2026-12-01",
+        "2027-01-01",
+        "month"
+      ],
+      "guessed": 0,
+      "ok": true,
+      "matched": "下个月"
+    },
+    {
+      "hint": "上上个月",
+      "kind": "relative",
+      "want": [
+        "2026-09-01",
+        "2026-10-01",
+        "month"
+      ],
+      "got": [
+        "2026-09-01",
+        "2026-10-01",
+        "month"
+      ],
+      "guessed": 0,
+      "ok": true,
+      "matched": "上上个月"
+    },
+    {
+      "hint": "去年",
+      "kind": "relative",
+      "want": [
+        "2025-01-01",
+        "2026-01-01",
+        "year"
+      ],
+      "got": [
+        "2025-01-01",
+        "2026-01-01",
+        "year"
+      ],
+      "guessed": 0,
+      "ok": true,
+      "matched": "去年"
+    },
+    {
+      "hint": "今年",
+      "kind": "relative",
+      "want": [
+        "2026-01-01",
+        "2027-01-01",
+        "year"
+      ],
+      "got": [
+        "2026-01-01",
+        "2027-01-01",
+        "year"
+      ],
+      "guessed": 0,
+      "ok": true,
+      "matched": "今年"
+    },
+    {
+      "hint": "前年",
+      "kind": "relative",
+      "want": [
+        "2024-01-01",
+        "2025-01-01",
+        "year"
+      ],
+      "got": [
+        "2024-01-01",
+        "2025-01-01",
+        "year"
+      ],
+      "guessed": 0,
+      "ok": true,
+      "matched": "前年"
+    },
+    {
+      "hint": "去年冬天",
+      "kind": "season",
+      "want": [
+        "2025-12-01",
+        "2026-03-01",
+        "season"
+      ],
+      "got": [
+        "2025-12-01",
+        "2026-03-01",
+        "season"
+      ],
+      "guessed": 0,
+      "ok": true,
+      "matched": "去年冬天"
+    },
+    {
+      "hint": "今年冬天",
+      "kind": "season",
+      "want": [
+        "2026-12-01",
+        "2027-03-01",
+        "season"
+      ],
+      "got": [
+        "2026-12-01",
+        "2027-03-01",
+        "season"
+      ],
+      "guessed": 0,
+      "ok": true,
+      "matched": "今年冬天"
+    },
+    {
+      "hint": "冬天",
+      "kind": "season",
+      "want": [
+        "2025-12-01",
+        "2026-03-01",
+        "season"
+      ],
+      "got": [
+        "2025-12-01",
+        "2026-03-01",
+        "season"
+      ],
+      "guessed": 1,
+      "ok": true,
+      "matched": "冬天"
+    },
+    {
+      "hint": "夏天",
+      "kind": "season",
+      "want": [
+        "2026-06-01",
+        "2026-09-01",
+        "season"
+      ],
+      "got": [
+        "2026-06-01",
+        "2026-09-01",
+        "season"
+      ],
+      "guessed": 0,
+      "ok": true,
+      "matched": "夏天"
+    },
+    {
+      "hint": "春天",
+      "kind": "season",
+      "want": [
+        "2026-03-01",
+        "2026-06-01",
+        "season"
+      ],
+      "got": [
+        "2026-03-01",
+        "2026-06-01",
+        "season"
+      ],
+      "guessed": 0,
+      "ok": true,
+      "matched": "春天"
+    },
+    {
+      "hint": "去年夏天",
+      "kind": "season",
+      "want": [
+        "2025-06-01",
+        "2025-09-01",
+        "season"
+      ],
+      "got": [
+        "2025-06-01",
+        "2025-09-01",
+        "season"
+      ],
+      "guessed": 0,
+      "ok": true,
+      "matched": "去年夏天"
+    },
+    {
+      "hint": "2026-03-15",
+      "kind": "absolute",
+      "want": [
+        "2026-03-15",
+        "2026-03-16",
+        "day"
+      ],
+      "got": [
+        "2026-03-15",
+        "2026-03-16",
+        "day"
+      ],
+      "guessed": 1,
+      "ok": true,
+      "matched": "2026-03-15"
+    },
+    {
+      "hint": "2025年3月",
+      "kind": "absolute",
+      "want": [
+        "2025-03-01",
+        "2025-04-01",
+        "month"
+      ],
+      "got": [
+        "2025-03-01",
+        "2025-04-01",
+        "month"
+      ],
+      "guessed": 0,
+      "ok": true,
+      "matched": "2025年3月"
+    },
+    {
+      "hint": "3月5日",
+      "kind": "absolute",
+      "want": [
+        "2027-03-05",
+        "2027-03-06",
+        "day"
+      ],
+      "got": [
+        "2027-03-05",
+        "2027-03-06",
+        "day"
+      ],
+      "guessed": 1,
+      "ok": true,
+      "matched": "3月5日"
+    },
+    {
+      "hint": "12月",
+      "kind": "absolute",
+      "want": [
+        "2026-12-01",
+        "2027-01-01",
+        "month"
+      ],
+      "got": [
+        "2026-12-01",
+        "2027-01-01",
+        "month"
+      ],
+      "guessed": 0,
+      "ok": true,
+      "matched": "12月"
+    },
+    {
+      "hint": "前天下午",
+      "kind": "relative",
+      "want": [
+        "2026-11-03",
+        "2026-11-04",
+        "day"
+      ],
+      "got": [
+        "2026-11-03",
+        "2026-11-04",
+        "day"
+      ],
+      "guessed": 1,
+      "ok": true,
+      "matched": "前天下午"
+    },
+    {
+      "hint": "上周六晚上",
+      "kind": "relative",
+      "want": [
+        "2026-10-31",
+        "2026-11-01",
+        "day"
+      ],
+      "got": [
+        "2026-10-31",
+        "2026-11-01",
+        "day"
+      ],
+      "guessed": 1,
+      "ok": true,
+      "matched": "上周六晚上"
+    },
+    {
+      "hint": "前几天",
+      "kind": "fuzzy",
+      "want": [
+        "2026-10-30",
+        "2026-11-05",
+        "fuzzy"
+      ],
+      "got": [
+        "2026-10-30",
+        "2026-11-05",
+        "fuzzy"
+      ],
+      "guessed": 1,
+      "ok": true,
+      "matched": "前几天"
+    },
+    {
+      "hint": "最近",
+      "kind": "fuzzy",
+      "want": [
+        "2026-10-30",
+        "2026-11-05",
+        "fuzzy"
+      ],
+      "got": [
+        "2026-10-30",
+        "2026-11-05",
+        "fuzzy"
+      ],
+      "guessed": 1,
+      "ok": true,
+      "matched": "最近"
+    },
+    {
+      "hint": "以前",
+      "kind": "fuzzy",
+      "want": [
+        null,
+        null,
+        "none"
+      ],
+      "got": [
+        null,
+        null,
+        "none"
+      ],
+      "guessed": null,
+      "ok": true,
+      "matched": ""
+    },
+    {
+      "hint": "两天前",
+      "kind": "before",
+      "want": [
+        "2026-11-03",
+        "2026-11-04",
+        "day"
+      ],
+      "got": [
+        "2026-11-03",
+        "2026-11-04",
+        "day"
+      ],
+      "guessed": 1,
+      "ok": true,
+      "matched": "两天前"
+    },
+    {
+      "hint": "半个月前",
+      "kind": "before",
+      "want": [
+        "2026-10-21",
+        "2026-10-22",
+        "day"
+      ],
+      "got": [
+        "2026-10-21",
+        "2026-10-22",
+        "day"
+      ],
+      "guessed": 1,
+      "ok": true,
+      "matched": "半个月前"
+    },
+    {
+      "hint": "三个月前",
+      "kind": "before",
+      "want": [
+        "2026-08-01",
+        "2026-09-01",
+        "month"
+      ],
+      "got": [
+        "2026-08-01",
+        "2026-09-01",
+        "month"
+      ],
+      "guessed": 1,
+      "ok": true,
+      "matched": "三个月前"
+    },
+    {
+      "hint": "半年前",
+      "kind": "before",
+      "want": [
+        "2026-05-01",
+        "2026-06-01",
+        "month"
+      ],
+      "got": [
+        "2026-05-01",
+        "2026-06-01",
+        "month"
+      ],
+      "guessed": 1,
+      "ok": true,
+      "matched": "半年前"
+    },
+    {
+      "hint": "两年前",
+      "kind": "before",
+      "want": [
+        "2024-01-01",
+        "2025-01-01",
+        "year"
+      ],
+      "got": [
+        "2024-01-01",
+        "2025-01-01",
+        "year"
+      ],
+      "guessed": 1,
+      "ok": true,
+      "matched": "两年前"
+    },
+    {
+      "hint": "三小时前",
+      "kind": "before",
+      "want": [
+        "2026-11-05",
+        "2026-11-05",
+        "hour"
+      ],
+      "got": [
+        "2026-11-05",
+        "2026-11-05",
+        "hour"
+      ],
+      "guessed": 1,
+      "ok": true,
+      "matched": "三小时前"
+    },
+    {
+      "hint": "下下个月",
+      "kind": "relative",
+      "want": [
+        "2027-01-01",
+        "2027-02-01",
+        "month"
+      ],
+      "got": [
+        "2027-01-01",
+        "2027-02-01",
+        "month"
+      ],
+      "guessed": 0,
+      "ok": true,
+      "matched": "下下个月"
+    },
+    {
+      "hint": "元旦",
+      "kind": "absolute",
+      "want": [
+        "2027-01-01",
+        "2027-01-02",
+        "day"
+      ],
+      "got": [
+        "2027-01-01",
+        "2027-01-02",
+        "day"
+      ],
+      "guessed": 0,
+      "ok": true,
+      "matched": "元旦"
+    },
+    {
+      "hint": "春节",
+      "kind": "fuzzy",
+      "want": [
+        null,
+        null,
+        "none"
+      ],
+      "got": [
+        null,
+        null,
+        "none"
+      ],
+      "guessed": null,
+      "ok": true,
+      "matched": ""
+    },
+    {
+      "hint": "上上周一",
+      "kind": "relative",
+      "want": [
+        "2026-10-19",
+        "2026-10-20",
+        "day"
+      ],
+      "got": [
+        "2026-10-19",
+        "2026-10-20",
+        "day"
+      ],
+      "guessed": 1,
+      "ok": true,
+      "matched": "上上周一"
+    },
+    {
+      "hint": "小时候",
+      "kind": "life_stage",
+      "want": [
+        "1999-01-01",
+        "2009-01-01",
+        "fuzzy"
+      ],
+      "got": [
+        "1999-01-01",
+        "2009-01-01",
+        "fuzzy"
+      ],
+      "guessed": 0,
+      "ok": true,
+      "matched": "小时候"
+    },
+    {
+      "hint": "童年",
+      "kind": "life_stage",
+      "want": [
+        "1999-01-01",
+        "2009-01-01",
+        "fuzzy"
+      ],
+      "got": [
+        "1999-01-01",
+        "2009-01-01",
+        "fuzzy"
+      ],
+      "guessed": 0,
+      "ok": true,
+      "matched": "童年"
+    },
+    {
+      "hint": "小学的时候",
+      "kind": "life_stage",
+      "want": [
+        "2003-01-01",
+        "2009-01-01",
+        "fuzzy"
+      ],
+      "got": [
+        "2003-01-01",
+        "2009-01-01",
+        "fuzzy"
+      ],
+      "guessed": 0,
+      "ok": true,
+      "matched": "小学"
+    },
+    {
+      "hint": "初中那会儿",
+      "kind": "life_stage",
+      "want": [
+        "2008-01-01",
+        "2012-01-01",
+        "fuzzy"
+      ],
+      "got": [
+        "2008-01-01",
+        "2012-01-01",
+        "fuzzy"
+      ],
+      "guessed": 0,
+      "ok": true,
+      "matched": "初中"
+    },
+    {
+      "hint": "高中时住校",
+      "kind": "life_stage",
+      "want": [
+        "2011-01-01",
+        "2015-01-01",
+        "fuzzy"
+      ],
+      "got": [
+        "2011-01-01",
+        "2015-01-01",
+        "fuzzy"
+      ],
+      "guessed": 0,
+      "ok": true,
+      "matched": "高中"
+    },
+    {
+      "hint": "大学时",
+      "kind": "life_stage",
+      "want": [
+        "2014-01-01",
+        "2019-01-01",
+        "fuzzy"
+      ],
+      "got": [
+        "2014-01-01",
+        "2019-01-01",
+        "fuzzy"
+      ],
+      "guessed": 0,
+      "ok": true,
+      "matched": "大学"
+    },
+    {
+      "hint": "刚毕业那会儿",
+      "kind": "life_stage",
+      "want": [
+        "2018-01-01",
+        "2022-01-01",
+        "fuzzy"
+      ],
+      "got": [
+        "2018-01-01",
+        "2022-01-01",
+        "fuzzy"
+      ],
+      "guessed": 0,
+      "ok": true,
+      "matched": "刚毕业"
+    },
+    {
+      "hint": "疫情那会儿",
+      "kind": "anchor",
+      "want": [
+        "2020-01-01",
+        "2023-01-01",
+        "fuzzy"
+      ],
+      "got": [
+        "2020-01-01",
+        "2023-01-01",
+        "fuzzy"
+      ],
+      "guessed": 0,
+      "ok": true,
+      "matched": "疫情"
+    },
+    {
+      "hint": "非典那年",
+      "kind": "anchor",
+      "want": [
+        "2003-03-01",
+        "2003-08-01",
+        "fuzzy"
+      ],
+      "got": [
+        "2003-03-01",
+        "2003-08-01",
+        "fuzzy"
+      ],
+      "guessed": 0,
+      "ok": true,
+      "matched": "非典"
+    },
+    {
+      "hint": "汶川地震那年",
+      "kind": "anchor",
+      "want": [
+        "2008-05-01",
+        "2008-06-01",
+        "fuzzy"
+      ],
+      "got": [
+        "2008-05-01",
+        "2008-06-01",
+        "fuzzy"
+      ],
+      "guessed": 0,
+      "ok": true,
+      "matched": "汶川"
+    },
+    {
+      "hint": "奥运会那年",
+      "kind": "anchor",
+      "want": [
+        "2008-08-01",
+        "2008-09-01",
+        "fuzzy"
+      ],
+      "got": [
+        "2008-08-01",
+        "2008-09-01",
+        "fuzzy"
+      ],
+      "guessed": 0,
+      "ok": true,
+      "matched": "奥运"
+    },
+    {
+      "hint": "金融危机那阵子",
+      "kind": "anchor",
+      "want": [
+        "2008-09-01",
+        "2009-06-01",
+        "fuzzy"
+      ],
+      "got": [
+        "2008-09-01",
+        "2009-06-01",
+        "fuzzy"
+      ],
+      "guessed": 0,
+      "ok": true,
+      "matched": "金融危机"
+    },
+    {
+      "hint": "明天早上7点半",
+      "kind": "edge",
+      "want": [
+        "2026-11-06",
+        "2026-11-06",
+        "minute"
+      ],
+      "got": [
+        "2026-11-06",
+        "2026-11-06",
+        "minute"
+      ],
+      "guessed": 0,
+      "ok": true,
+      "matched": "明天7点早上"
+    },
+    {
+      "hint": "上周日晚上8点",
+      "kind": "edge",
+      "want": [
+        "2026-11-01",
+        "2026-11-01",
+        "hour"
+      ],
+      "got": [
+        "2026-11-01",
+        "2026-11-01",
+        "hour"
+      ],
+      "guessed": 0,
+      "ok": true,
+      "matched": "上周日8点晚上"
+    },
+    {
+      "hint": "2024年12月31日",
+      "kind": "edge",
+      "want": [
+        "2024-12-31",
+        "2025-01-01",
+        "day"
+      ],
+      "got": [
+        "2024-12-31",
+        "2025-01-01",
+        "day"
+      ],
+      "guessed": 1,
+      "ok": true,
+      "matched": "2024年12月31日"
+    },
+    {
+      "hint": "下下周三",
+      "kind": "edge",
+      "want": [
+        "2026-11-18",
+        "2026-11-19",
+        "day"
+      ],
+      "got": [
+        "2026-11-18",
+        "2026-11-19",
+        "day"
+      ],
+      "guessed": 1,
+      "ok": true,
+      "matched": "下下周三"
+    },
+    {
+      "hint": "两个半月前",
+      "kind": "edge",
+      "want": [
+        "2026-08-22",
+        "2026-08-23",
+        "day"
+      ],
+      "got": [
+        "2026-08-22",
+        "2026-08-23",
+        "day"
+      ],
+      "guessed": 1,
+      "ok": true,
+      "matched": "两个半月前"
+    }
+  ]
+}

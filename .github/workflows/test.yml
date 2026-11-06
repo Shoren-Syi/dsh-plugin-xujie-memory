@@ -1,0 +1,29 @@
+name: test
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install
+        run: pip install -e ".[server,dev]"
+
+      - name: Python tests
+        run: python -m pytest -q --tb=short
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+
+      - name: Plugin tests
+        run: node --test test/plugin.test.mjs test/integration.test.mjs

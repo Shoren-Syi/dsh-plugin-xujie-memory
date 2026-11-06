@@ -1,0 +1,26 @@
+海马体插件 · 交付包快照
+生成时间   2026-11-06 11:28 
+包版本     0.1.0（M0–M27 完成，M28 未开工）
+
+运行环境（生成本包时实测）
+  Python     3.11.1
+  SQLite     3.45.1
+  pydantic   2.12.5
+  fastapi    0.128.2
+  依赖下限   pydantic>=2.6 / pyyaml>=6.0 / tzdata>=2024.1
+             server extra: fastapi>=0.110 / uvicorn>=0.27 / httpx>=0.27
+
+测试结果（生成时全量跑过）
+  1137 passed, 2 warnings in 31.18s
+  命令：python -m pytest --tb=line
+
+内容规模
+  hippo        83 个文件    21194 行
+  tests       100 个文件    16270 行
+  tools        37 个文件     6683 行
+  reports     121 个文件    17575 行
+
+解压后先做三件事
+  1. pip install -e ".[server,dev]"
+  2. python -m pytest -q          # 期望 1137 passed
+  3. 读 START-HERE.md 第 7 节      # 下一步做 M28

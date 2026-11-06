@@ -1,0 +1,238 @@
+{
+  "total_events": 44,
+  "rows": [
+    {
+      "q": "老王最近怎么样",
+      "needle": "喂猫",
+      "keep": true,
+      "expect": 2,
+      "found": true,
+      "cand": 7,
+      "entities": [
+        "老王"
+      ],
+      "mode": "recent"
+    },
+    {
+      "q": "老王要去哪出差",
+      "needle": "深圳",
+      "keep": true,
+      "expect": 2,
+      "found": true,
+      "cand": 7,
+      "entities": [
+        "老王"
+      ],
+      "mode": "plain"
+    },
+    {
+      "q": "我搬家搬去了哪",
+      "needle": "从朝阳搬到海淀",
+      "keep": true,
+      "expect": 1,
+      "found": true,
+      "cand": 44,
+      "entities": [],
+      "mode": "plain"
+    },
+    {
+      "q": "我房租涨了多少",
+      "needle": "两千",
+      "keep": true,
+      "expect": 1,
+      "found": true,
+      "cand": 44,
+      "entities": [],
+      "mode": "plain"
+    },
+    {
+      "q": "我以前住哪个区",
+      "needle": "朝阳",
+      "keep": true,
+      "expect": 3,
+      "found": true,
+      "cand": 44,
+      "entities": [],
+      "mode": "historical"
+    },
+    {
+      "q": "我能吃辣吗",
+      "needle": "辣",
+      "keep": true,
+      "expect": 7,
+      "found": true,
+      "cand": 44,
+      "entities": [],
+      "mode": "plain"
+    },
+    {
+      "q": "我讨厌什么菜",
+      "needle": "香菜",
+      "keep": true,
+      "expect": 1,
+      "found": true,
+      "cand": 44,
+      "entities": [],
+      "mode": "plain"
+    },
+    {
+      "q": "我几点睡",
+      "needle": "十一点",
+      "keep": true,
+      "expect": 1,
+      "found": true,
+      "cand": 44,
+      "entities": [],
+      "mode": "plain"
+    },
+    {
+      "q": "老板骂我那次",
+      "needle": "当众",
+      "keep": true,
+      "expect": 1,
+      "found": true,
+      "cand": 2,
+      "entities": [
+        "老板"
+      ],
+      "mode": "plain"
+    },
+    {
+      "q": "我那只猫叫什么",
+      "needle": "年糕",
+      "keep": true,
+      "expect": 1,
+      "found": true,
+      "cand": 44,
+      "entities": [],
+      "mode": "plain"
+    },
+    {
+      "q": "我老婆是做什么的",
+      "needle": "护士",
+      "keep": true,
+      "expect": 1,
+      "found": true,
+      "cand": 1,
+      "entities": [
+        "老婆"
+      ],
+      "mode": "plain"
+    },
+    {
+      "q": "我在哪上班",
+      "needle": "字节",
+      "keep": true,
+      "expect": 2,
+      "found": true,
+      "cand": 44,
+      "entities": [],
+      "mode": "plain"
+    },
+    {
+      "q": "我什么时候要交报告",
+      "needle": "季度报告",
+      "keep": true,
+      "expect": 1,
+      "found": true,
+      "cand": 44,
+      "entities": [],
+      "mode": "plain"
+    },
+    {
+      "q": "我要去医院复查什么",
+      "needle": "甲状腺",
+      "keep": true,
+      "expect": 1,
+      "found": true,
+      "cand": 44,
+      "entities": [],
+      "mode": "plain"
+    },
+    {
+      "q": "我妈生日是哪天",
+      "needle": "生日",
+      "keep": true,
+      "expect": 2,
+      "found": true,
+      "cand": 44,
+      "entities": [],
+      "mode": "plain"
+    },
+    {
+      "q": "我学的什么乐器",
+      "needle": "吉他",
+      "keep": true,
+      "expect": 1,
+      "found": true,
+      "cand": 44,
+      "entities": [],
+      "mode": "plain"
+    },
+    {
+      "q": "小李怕坐什么",
+      "needle": "飞机",
+      "keep": true,
+      "expect": 2,
+      "found": true,
+      "cand": 4,
+      "entities": [
+        "小李"
+      ],
+      "mode": "plain"
+    },
+    {
+      "q": "我今年多大",
+      "needle": "三十二",
+      "keep": false,
+      "expect": 1,
+      "found": false,
+      "cand": 42,
+      "entities": [],
+      "mode": "at"
+    },
+    {
+      "q": "孩子什么时候上学",
+      "needle": "小学",
+      "keep": true,
+      "expect": 1,
+      "found": true,
+      "cand": 44,
+      "entities": [],
+      "mode": "plain"
+    },
+    {
+      "q": "老王最近怎么样",
+      "needle": "香菜",
+      "keep": false,
+      "expect": 1,
+      "found": false,
+      "cand": 7,
+      "entities": [
+        "老王"
+      ],
+      "mode": "recent"
+    },
+    {
+      "q": "小李怕坐什么",
+      "needle": "香菜",
+      "keep": false,
+      "expect": 1,
+      "found": false,
+      "cand": 4,
+      "entities": [
+        "小李"
+      ],
+      "mode": "plain"
+    }
+  ],
+  "merged": 13,
+  "must_keep": [
+    18,
+    18
+  ],
+  "must_drop": [
+    0,
+    3
+  ]
+}

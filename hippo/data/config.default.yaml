@@ -1,0 +1,144 @@
+# 海马体插件 · 默认配置
+# 完整说明见《海马体插件-完整手册》第一部分 §19
+
+db_path: ~/.hippo/mem.db
+timezone: Asia/Shanghai
+
+deepseek:
+  base_url: https://api.deepseek.com
+  model: deepseek-chat          # 角色路径锁死 chat，reasoner 不用于角色
+  extract_model: deepseek-chat
+  temperature: 1.1
+
+session:
+  header: X-Hippo-Session
+  default: main
+
+budget:
+  # 每天允许花多少 token（对话 + 抽取合计）。0 = 不设上限。
+  # 超限后：停止抽取、停掉角色卡与记忆段，只装人设 + 钉住 + 时间锚，
+  # 次日 00:00 自动恢复。也可以 `hippo budget reset` 立即恢复。
+  daily_tokens: 500000
+  # degrade = 降级（推荐）；off = 只统计、不改变行为。
+  # 没有 "stop" 这一档：直接拒绝对话会让用户以为插件坏了，
+  # 而"少记一点"至少还能聊。
+  on_exceed: degrade
+
+pack:
+  persona_tokens: 500
+  cards_tokens: 400
+  pinned_tokens: 200
+  memory_tokens: 600
+  dynamic_tokens: 150
+  time_anchor_last: true
+
+retrieve:
+  trigger_jaccard: 0.25
+  max_summaries: 8
+  max_raws: 2
+  min_weight: 0.15
+  max_candidates: 800
+  recent_days: 30
+  # M11 原话层：一条原文最多 400 token；剩不到 200 就不拉了。
+  raw_max_tokens: 400
+  raw_min_budget: 200
+  # 两次检索最小间隔（轮）。0 = 关闭。实测挡掉的多是"真换话题"，默认关。
+  min_interval_turns: 0
+
+# L2 排序（M10.2）。权重之和 >1 是刻意的：分数是排序键，不是概率。
+# w_soft_since 是 M9 的 D61 的落点——"最近"从硬过滤降级成软信号，
+# 设 0 就等于关掉这个信号，检索退回纯相关度。
+rank:
+  w_keyword: 0.55
+  w_weight: 0.25
+  w_recency: 0.10
+  w_pinned: 0.10
+  w_soft_since: 0.05
+  summary_max_tokens: 80
+  memory_budget_ratio: 0.6
+
+decay:
+  # 排序用的"新近度"，按 event_time 算（"这件事多久以前发生的"）。
+  # 只影响排序，不影响存亡。真正决定记忆会不会老死的是下面的 weight 段。
+  half_life_days: {hot: 3, warm: 30, cold: 180}
+  recall_bonus: 0.20
+  arousal_bonus: 0.30
+  pinned_multiplier: 2.0
+
+weight:
+  # 记忆衰减（M14）。按 last_access 算（"多久没被想起来了"）。
+  # 半衰期按 w0 分档，不按 tier——tier 是权重算出来的，用它当输入会自指。
+  # 方向：越重要忘得越慢（w0≥0.7 撑 180 天，w0<0.4 三天就淡）。
+  half_life_by_w0: [[0.70, 180], [0.40, 30], [0.0, 3]]
+  pinned_half_life: 36500        # 100 年 = 钉住即不衰减
+  recall_hl_gain: 0.25           # 召回 5 次 → 半衰期 ×2.25
+  recall_cap: 5
+  hot: 0.70
+  warm: 0.30
+  hysteresis: 0.05               # 层级滞回，防边界抖动
+  batch: 2000
+
+extract:
+  every_n_turns: 5
+  window_tokens: 1200
+  prescreen: true
+  # rules      只认词表（M4 原行为）
+  # heuristic  规则命中即放；不中时按信息量启发式（M29 默认）
+  # off        全放，每 5 轮都抽（成本最高）
+  prescreen_mode: heuristic
+  # heuristic 的字数门槛；带数字的短句不受此限
+  heuristic_min_chars: 8
+  # 规则预筛：只抽命中词表的句子，省 token。
+  # 真实对话（消费决策 / 技术讨论 / 创作项目）里词表覆盖不足时，可能
+  # 出现"聊了很久什么都没记"——R-28.4 实测 120 轮真实对话里 95% 的窗口
+  # 被这条挡住。抽不到东西就把这里改 false（成本约每 5 轮一次模型调用）。
+  # 留空用内置词表；想自己调就指向一份 lexicon.yaml
+  lexicon_path: ""
+
+doubts:
+  max_per_turn: 1
+  cooldown_turns: 8
+  max_ask_count: 2
+  expire_days: 7
+  max_active: 20
+
+affect:
+  baseline: {joy: 60, sadness: 10, anger: 5, fear: 5, disgust: 5, surprise: 20}
+  # M21.2 校准：fear 30→14, sadness 360→480, surprise 3→5（直觉拟合，见 R-21.2）
+  tau_minutes: {joy: 180, sadness: 480, anger: 10, fear: 14, disgust: 240, surprise: 5}
+  delta_cap: 20
+
+curiosity:
+  daily_quota: 3
+  only_readonly: true
+  quiet_hours: [23, 8]
+  queue_size: 5
+  busy_minutes: 30
+  response_hours: 24
+  pending_hours: 6
+  refractory_days: 3
+  stale_days: 30
+
+giveup:
+  levels: [retry_alt, ask_help, partial, decline]
+  require_reason_on: decline
+
+heartbeat:
+  interval_seconds: 60
+  max_llm_calls_per_day: 10
+  # 各步频率（M24.1）：情绪 5 分钟落一次库、分层 60 分钟重算、
+  # 巩固每天 03:00。三步全是 SQL/算术，不调模型。
+  mood_seconds: 300
+  tier_seconds: 3600
+  consolidate_hour: 3
+  # 升级调用（M24.3）：白名单只有 plan / curiosity / user_message
+  escalate_max_context: 300
+  escalate_max_tokens: 120
+  escalate_temperature: 0.8
+
+# 上游定价（元 / 百万 token）。DeepSeek 会调价，改这里而不是改代码。
+# 只影响 metrics.cost 的展示，不影响任何逻辑。
+pricing:
+  input_miss_per_m: 2.0
+  input_hit_per_m: 0.5
+  output_per_m: 8.0

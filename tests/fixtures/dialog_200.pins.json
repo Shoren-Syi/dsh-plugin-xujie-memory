@@ -1,0 +1,631 @@
+{
+ "P01": {
+  "kind": "fact",
+  "key": "city",
+  "value": "杭州",
+  "q": "我现在住在哪个城市？",
+  "a": "杭州",
+  "first_turn": 3,
+  "mentions": [
+   3,
+   115
+  ],
+  "n_mentions": 2
+ },
+ "P02": {
+  "kind": "fact",
+  "key": "district",
+  "value": "城西",
+  "q": "我住在这个城市的哪个片区？",
+  "a": "城西",
+  "first_turn": 3,
+  "mentions": [
+   3,
+   170
+  ],
+  "n_mentions": 2
+ },
+ "P03": {
+  "kind": "fact",
+  "key": "commute",
+  "value": "骑车二十分钟",
+  "q": "我平时怎么通勤？",
+  "a": "骑车",
+  "first_turn": 8,
+  "mentions": [
+   8,
+   185
+  ],
+  "n_mentions": 2
+ },
+ "P04": {
+  "kind": "fact",
+  "key": "allergy",
+  "value": "花生",
+  "q": "我对什么东西过敏？",
+  "a": "花生",
+  "first_turn": 11,
+  "mentions": [
+   11
+  ],
+  "n_mentions": 1
+ },
+ "P05": {
+  "kind": "fact",
+  "key": "diet",
+  "value": "不吃香菜",
+  "q": "我吃香菜吗？",
+  "a": "香菜",
+  "first_turn": 15,
+  "mentions": [
+   15
+  ],
+  "n_mentions": 1
+ },
+ "P06": {
+  "kind": "fact",
+  "key": "birthday",
+  "value": "3月14",
+  "q": "我生日是哪天？",
+  "a": "3月14",
+  "first_turn": 165,
+  "mentions": [
+   165
+  ],
+  "n_mentions": 1
+ },
+ "P07": {
+  "kind": "fact",
+  "key": "school",
+  "value": "浙江大学",
+  "q": "我本科在哪个学校读的？",
+  "a": "浙大",
+  "first_turn": 46,
+  "mentions": [
+   46
+  ],
+  "n_mentions": 1
+ },
+ "P08": {
+  "kind": "fact",
+  "key": "major",
+  "value": "计算机",
+  "q": "我大学学的是什么专业？",
+  "a": "计算机",
+  "first_turn": 46,
+  "mentions": [
+   46
+  ],
+  "n_mentions": 1
+ },
+ "P09": {
+  "kind": "fact",
+  "key": "age",
+  "value": "30",
+  "q": "我今年多大？",
+  "a": "三十",
+  "first_turn": 33,
+  "mentions": [
+   33,
+   176
+  ],
+  "n_mentions": 2
+ },
+ "P10": {
+  "kind": "fact",
+  "key": "sleep",
+  "value": "凌晨一点",
+  "q": "我平时几点睡？",
+  "a": "一点",
+  "first_turn": 31,
+  "mentions": [
+   31
+  ],
+  "n_mentions": 1
+ },
+ "P11": {
+  "kind": "fact",
+  "key": "diet_pref",
+  "value": "每天两杯美式",
+  "q": "我每天喝多少咖啡？",
+  "a": "两杯",
+  "first_turn": 26,
+  "mentions": [
+   26,
+   95
+  ],
+  "n_mentions": 2
+ },
+ "P12": {
+  "kind": "fact",
+  "key": "title",
+  "value": "后端工程师",
+  "q": "我是做什么工作的？",
+  "a": "后端",
+  "first_turn": 48,
+  "mentions": [
+   48
+  ],
+  "n_mentions": 1
+ },
+ "P13": {
+  "kind": "fact",
+  "key": "condition",
+  "value": "慢性胃炎",
+  "q": "我有什么老毛病？",
+  "a": "胃炎",
+  "first_turn": 91,
+  "mentions": [
+   91,
+   128
+  ],
+  "n_mentions": 2
+ },
+ "P14": {
+  "kind": "fact",
+  "key": "employer",
+  "value": "做企业服务的公司",
+  "q": "我在什么公司上班？",
+  "a": "企业服务",
+  "first_turn": 48,
+  "mentions": [
+   48
+  ],
+  "n_mentions": 1
+ },
+ "P15": {
+  "kind": "fact",
+  "key": "family",
+  "value": "四口人",
+  "q": "我家几口人？",
+  "a": "四口",
+  "first_turn": 153,
+  "mentions": [
+   153
+  ],
+  "n_mentions": 1
+ },
+ "P16": {
+  "kw": "老王 前同事 跳槽",
+  "kind": "rel",
+  "q": "老王是谁？",
+  "a": "前同事",
+  "value": "老王是我的前同事，去年跳槽走了",
+  "first_turn": 56,
+  "mentions": [
+   56,
+   196
+  ],
+  "n_mentions": 2
+ },
+ "P17": {
+  "kw": "妹妹 读研 浙大",
+  "kind": "rel",
+  "q": "我妹妹在做什么？",
+  "a": "读研",
+  "value": "我妹妹在浙大读研，导师催得紧",
+  "first_turn": 10,
+  "mentions": [
+   10,
+   105
+  ],
+  "n_mentions": 2
+ },
+ "P18": {
+  "kw": "妈妈 高血压 体检",
+  "kind": "rel",
+  "q": "我妈身体怎么样？",
+  "a": "高血压",
+  "value": "我妈查出高血压，医生说先控制饮食",
+  "first_turn": 81,
+  "mentions": [
+   81,
+   198
+  ],
+  "n_mentions": 2
+ },
+ "P19": {
+  "kw": "爸爸 退休 钓鱼",
+  "kind": "rel",
+  "q": "我爸现在在做什么？",
+  "a": "退休",
+  "value": "我爸退休了，天天去钓鱼",
+  "first_turn": 86,
+  "mentions": [
+   86
+  ],
+  "n_mentions": 1
+ },
+ "P20": {
+  "kw": "小李 同事 后端",
+  "kind": "rel",
+  "q": "小李是谁？",
+  "a": "同事",
+  "value": "小李是我同事，跟我一个组，做后端",
+  "first_turn": 50,
+  "mentions": [
+   50,
+   51,
+   160
+  ],
+  "n_mentions": 3
+ },
+ "P21": {
+  "kw": "张姐 房东 押金",
+  "kind": "rel",
+  "q": "我的房东是谁？",
+  "a": "张姐",
+  "value": "房东是张姐，在银行上班，押金退我了",
+  "first_turn": 16,
+  "mentions": [
+   16
+  ],
+  "n_mentions": 1
+ },
+ "P22": {
+  "kw": "阿May 室友 大学",
+  "kind": "rel",
+  "q": "阿May是谁？",
+  "a": "大学室友",
+  "value": "阿May是我大学室友，两年没见了",
+  "first_turn": 121,
+  "mentions": [
+   121
+  ],
+  "n_mentions": 1
+ },
+ "P23": {
+  "kw": "陈医生 社区医院 复查",
+  "kind": "rel",
+  "q": "我平时看哪个医生？",
+  "a": "陈医生",
+  "value": "复查约的是陈医生，社区医院的，看了三年",
+  "first_turn": 101,
+  "mentions": [
+   101
+  ],
+  "n_mentions": 1
+ },
+ "P24": {
+  "kw": "舅舅 餐馆 绍兴",
+  "kind": "rel",
+  "q": "我舅舅是做什么的？",
+  "a": "开餐馆",
+  "value": "我舅舅在绍兴开餐馆，做本地菜",
+  "first_turn": 111,
+  "mentions": [
+   111,
+   175
+  ],
+  "n_mentions": 2
+ },
+ "P25": {
+  "kw": "前女友 分手 狗",
+  "kind": "rel",
+  "q": "我前女友是什么情况？",
+  "a": "分手两年",
+  "value": "前女友分手两年了，狗归她",
+  "first_turn": 140,
+  "mentions": [
+   140
+  ],
+  "n_mentions": 1
+ },
+ "P26": {
+  "kw": "猫 豆豆 橘猫",
+  "kind": "rel",
+  "q": "我养的猫叫什么？",
+  "a": "豆豆",
+  "value": "我养的猫叫豆豆，三岁的橘猫，胆子小",
+  "first_turn": 21,
+  "mentions": [
+   21,
+   68,
+   141
+  ],
+  "n_mentions": 3
+ },
+ "P27": {
+  "kw": "邻居 周 搬东西",
+  "kind": "rel",
+  "q": "我邻居姓什么？",
+  "a": "周",
+  "value": "邻居姓周，半夜搬东西，说过一次也不改",
+  "first_turn": 146,
+  "mentions": [
+   146
+  ],
+  "n_mentions": 1
+ },
+ "P28": {
+  "kw": "电话 不喜欢 通话",
+  "kind": "pref",
+  "q": "我喜欢打电话吗？",
+  "a": "不喜欢",
+  "value": "我特别不喜欢打电话，能打字绝不通话",
+  "first_turn": 131,
+  "mentions": [
+   131
+  ],
+  "n_mentions": 1
+ },
+ "P29": {
+  "kw": "纸质书 电子书 看书",
+  "kind": "pref",
+  "q": "我看电子书还是纸质书？",
+  "a": "纸质",
+  "value": "我不看电子书，只买纸质书，有一柜子",
+  "first_turn": 163,
+  "mentions": [
+   163
+  ],
+  "n_mentions": 1
+ },
+ "P30": {
+  "kw": "喜欢 川菜 吃辣",
+  "kind": "pref",
+  "q": "我喜欢吃什么菜？",
+  "a": "川菜",
+  "value": "我挺喜欢吃川菜，就是胃受不了",
+  "first_turn": 126,
+  "mentions": [
+   126
+  ],
+  "n_mentions": 1
+ },
+ "P31": {
+  "kw": "开会 烦 效率",
+  "kind": "pref",
+  "q": "我喜欢开会吗？",
+  "a": "烦",
+  "value": "我最烦开会，能发消息解决的非得拉人",
+  "first_turn": 41,
+  "mentions": [
+   41,
+   55
+  ],
+  "n_mentions": 2
+ },
+ "P32": {
+  "kw": "跑步 运动 五公里",
+  "kind": "pref",
+  "q": "我平时运动吗？",
+  "a": "跑步",
+  "value": "我最近开始跑步，一周三次，每次五公里",
+  "first_turn": 186,
+  "mentions": [
+   186
+  ],
+  "n_mentions": 1
+ },
+ "P33": {
+  "kw": "播客 听 着急",
+  "kind": "pref",
+  "q": "我听播客吗？",
+  "a": "不听",
+  "value": "我不听播客，说话太慢，我着急",
+  "first_turn": 195,
+  "mentions": [
+   195
+  ],
+  "n_mentions": 1
+ },
+ "P34": {
+  "kw": "阴天 天气 阳台",
+  "kind": "pref",
+  "q": "我喜欢什么天气？",
+  "a": "阴天",
+  "value": "我喜欢阴天，会在阳台坐一下午",
+  "first_turn": 195,
+  "mentions": [
+   195
+  ],
+  "n_mentions": 1
+ },
+ "P35": {
+  "kw": "电梯 广告 烦",
+  "kind": "pref",
+  "q": "我怎么看电梯里的广告？",
+  "a": "烦",
+  "value": "电梯里老放广告，烦死了",
+  "first_turn": 150,
+  "mentions": [
+   150
+  ],
+  "n_mentions": 1
+ },
+ "P36": {
+  "kw": "手冲 咖啡 周末",
+  "kind": "pref",
+  "q": "我喝手冲咖啡吗？",
+  "a": "手冲",
+  "value": "周末会做手冲，工作日就速溶凑合",
+  "first_turn": 30,
+  "mentions": [
+   30
+  ],
+  "n_mentions": 1
+ },
+ "P37": {
+  "kw": "短视频 刷 烦",
+  "kind": "pref",
+  "q": "我刷短视频吗？",
+  "a": "短视频",
+  "value": "我不怎么看短视频，刷十分钟就烦",
+  "first_turn": 191,
+  "mentions": [
+   191
+  ],
+  "n_mentions": 1
+ },
+ "P38": {
+  "kw": "搬家 下个月 房子",
+  "kind": "plan",
+  "q": "我什么时候搬家？",
+  "a": "下个月",
+  "value": "下个月十号搬家",
+  "first_turn": 1,
+  "mentions": [
+   1,
+   20,
+   45,
+   80,
+   90,
+   110,
+   125,
+   145,
+   161,
+   180,
+   200
+  ],
+  "n_mentions": 11
+ },
+ "P39": {
+  "kw": "PMP 考试 年底",
+  "kind": "plan",
+  "q": "我年底有什么打算？",
+  "a": "PMP",
+  "value": "年底想考个 PMP",
+  "first_turn": 76,
+  "mentions": [
+   76
+  ],
+  "n_mentions": 1
+ },
+ "P40": {
+  "kw": "成都 十月 旅行",
+  "kind": "plan",
+  "q": "我十月要去哪？",
+  "a": "成都",
+  "value": "十月打算去成都玩四五天",
+  "first_turn": 171,
+  "mentions": [
+   171
+  ],
+  "n_mentions": 1
+ },
+ "P41": {
+  "kw": "换工作 跳槽 老王",
+  "kind": "plan",
+  "q": "我想换工作吗？",
+  "a": "有点",
+  "value": "老王那边缺人，我有点动心但还没定",
+  "first_turn": 61,
+  "mentions": [
+   61,
+   196
+  ],
+  "n_mentions": 2
+ },
+ "P42": {
+  "kw": "妹妹 结婚 婚礼",
+  "kind": "plan",
+  "q": "我妹妹什么时候结婚？",
+  "a": "五月",
+  "value": "我妹明年五月结婚，在绍兴办",
+  "first_turn": 151,
+  "mentions": [
+   151
+  ],
+  "n_mentions": 1
+ },
+ "P43": {
+  "kw": "胃镜 复查 下周三",
+  "kind": "plan",
+  "q": "我约的胃镜复查是什么时候？",
+  "a": "胃镜",
+  "value": "下周三去做胃镜复查",
+  "first_turn": 96,
+  "mentions": [
+   96,
+   200
+  ],
+  "n_mentions": 2
+ },
+ "P44": {
+  "kw": "游泳 学 班",
+  "kind": "plan",
+  "q": "我最近在学什么？",
+  "a": "游泳",
+  "value": "报了游泳班，三十岁才学",
+  "first_turn": 176,
+  "mentions": [
+   176
+  ],
+  "n_mentions": 1
+ },
+ "P45": {
+  "kw": "买车 车 攒钱",
+  "kind": "plan",
+  "q": "我想买什么大件？",
+  "a": "车",
+  "value": "再攒两年想买辆车，十万左右",
+  "first_turn": 181,
+  "mentions": [
+   181
+  ],
+  "n_mentions": 1
+ },
+ "P46": {
+  "kw": "养猫 豆豆 作伴",
+  "kind": "seed",
+  "q": "我想再养一只猫吗？",
+  "a": "想",
+  "value": "想再养只猫给豆豆作伴，等搬完家再说",
+  "first_turn": 141,
+  "mentions": [
+   141
+  ],
+  "n_mentions": 1
+ },
+ "P47": {
+  "kw": "绍兴 老家 房子",
+  "kind": "seed",
+  "q": "我老家在哪？",
+  "a": "绍兴",
+  "value": "我老家在绍兴，那边房子便宜",
+  "first_turn": 36,
+  "mentions": [
+   36,
+   85,
+   156
+  ],
+  "n_mentions": 3
+ },
+ "P48": {
+  "kw": "创业 宠物殡葬 生意",
+  "kind": "seed",
+  "q": "我有什么创业想法？",
+  "a": "宠物殡葬",
+  "value": "想做宠物殡葬的小生意，杭州需求不少",
+  "first_turn": 66,
+  "mentions": [
+   66
+  ],
+  "n_mentions": 1
+ },
+ "P49": {
+  "kw": "手术 白内障 排期",
+  "kind": "seed",
+  "q": "我妈要做什么手术？",
+  "a": "白内障",
+  "value": "我妈白内障手术还在排期",
+  "first_turn": 106,
+  "mentions": [
+   106
+  ],
+  "n_mentions": 1
+ },
+ "P50": {
+  "kw": "狗 金毛 大福",
+  "kind": "seed",
+  "q": "我以前养过什么动物？",
+  "a": "狗",
+  "value": "以前养过一条金毛叫大福，后来送人了",
+  "first_turn": 136,
+  "mentions": [
+   136
+  ],
+  "n_mentions": 1
+ }
+}

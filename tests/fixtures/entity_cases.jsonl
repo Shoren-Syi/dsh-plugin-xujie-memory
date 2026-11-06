@@ -1,0 +1,24 @@
+{"id": "w1", "same": true, "note": "模型把三个称呼都给了 aliases", "mentions": [{"name": "老王", "type": "person", "aliases": ["王哥", "王建国"]}, {"name": "王哥", "type": "person"}, {"name": "隔壁老王", "type": "person"}]}
+{"id": "w2", "same": true, "note": "全名+昵称", "mentions": [{"name": "李子豪", "type": "person", "aliases": ["小李"]}, {"name": "小李", "type": "person"}]}
+{"id": "w3", "same": true, "note": "职务称呼", "mentions": [{"name": "张伟", "type": "person", "aliases": ["张总"]}, {"name": "张总", "type": "person"}]}
+{"id": "w4", "same": true, "note": "中英混用", "mentions": [{"name": "李美仪", "type": "person", "aliases": ["阿May"]}, {"name": "阿May", "type": "person"}]}
+{"id": "w5", "same": true, "note": "亲属称谓", "mentions": [{"name": "妈妈", "type": "person", "aliases": ["我妈", "母亲"]}, {"name": "我妈", "type": "person"}, {"name": "母亲", "type": "person"}]}
+{"id": "w6", "same": true, "note": "限定语归一", "mentions": [{"name": "老板", "type": "person", "aliases": []}, {"name": "我们老板", "type": "person"}]}
+{"id": "w7", "same": true, "note": "幂等重复", "mentions": [{"name": "年糕", "type": "thing"}, {"name": "年糕", "type": "thing"}]}
+{"id": "w8", "same": true, "note": "尊称后缀", "mentions": [{"name": "王建国", "type": "person", "aliases": []}, {"name": "王建国老师", "type": "person"}]}
+{"id": "w9", "same": true, "note": "全角空格", "mentions": [{"name": "陈晨", "type": "person"}, {"name": "陈　晨", "type": "person"}]}
+{"id": "w10", "same": true, "note": "别名", "mentions": [{"name": "刘德华", "type": "person", "aliases": ["华仔"]}, {"name": "华仔", "type": "person"}]}
+{"id": "w11", "same": true, "note": "别名反向出现（先昵称后全名）", "mentions": [{"name": "小张", "type": "person"}, {"name": "张敏", "type": "person", "aliases": ["小张"]}]}
+{"id": "w12", "same": true, "note": "别名带前缀", "mentions": [{"name": "老陈", "type": "person", "aliases": ["陈建国"]}, {"name": "陈建国", "type": "person"}]}
+{"id": "n1", "same": false, "note": "老/小李经典陷阱", "mentions": [{"name": "小李", "type": "person"}, {"name": "老李", "type": "person"}]}
+{"id": "n2", "same": false, "note": "同姓同长差一字", "mentions": [{"name": "王建国", "type": "person"}, {"name": "王建军", "type": "person"}]}
+{"id": "n3", "same": false, "note": "同音不同字", "mentions": [{"name": "张三", "type": "person"}, {"name": "张珊", "type": "person"}]}
+{"id": "n4", "same": false, "note": "老王小王是两个同事", "mentions": [{"name": "老王", "type": "person"}, {"name": "小王", "type": "person"}]}
+{"id": "n5", "same": false, "note": "同音", "mentions": [{"name": "陈晨", "type": "person"}, {"name": "陈辰", "type": "person"}]}
+{"id": "n6", "same": false, "note": "形近", "mentions": [{"name": "张伟", "type": "person"}, {"name": "张玮", "type": "person"}]}
+{"id": "n7", "same": false, "note": "前缀包含但可能是两个人", "mentions": [{"name": "李娜", "type": "person"}, {"name": "李娜娜", "type": "person"}]}
+{"id": "n8", "same": false, "note": "同名不同类（地名/人名）", "mentions": [{"name": "朝阳", "type": "place"}, {"name": "朝阳", "type": "person"}]}
+{"id": "x1", "same": true, "hard": true, "note": "口语叠词 vs 书面词，规则判不出来，只能靠模型给 aliases", "mentions": [{"name": "妈妈", "type": "person"}, {"name": "妈妈咪", "type": "person"}]}
+{"id": "x2", "same": true, "hard": true, "note": "中英混称", "mentions": [{"name": "老板", "type": "person"}, {"name": "Boss", "type": "person"}]}
+{"id": "x3", "same": true, "hard": true, "note": "姓+尊称 vs 姓+老", "mentions": [{"name": "老王", "type": "person"}, {"name": "王老师", "type": "person"}]}
+{"id": "x4", "same": false, "hard": true, "note": "单字名不能当实体：'妈'归一后只有 1 字，任何相似度都不可靠", "mentions": [{"name": "妈", "type": "person"}, {"name": "马", "type": "person"}]}

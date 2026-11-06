@@ -1,0 +1,28 @@
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+build/
+dist/
+.venv/
+venv/
+.pytest_cache/
+.ruff_cache/
+
+# 本地运行产物
+*.db
+*.db-wal
+*.db-shm
+*.log
+logs/
+backups/
+archive/
+
+# 探查/临时
+_probe/
+_incoming/
+*.tmp
+*.bak
+
+# Node
+node_modules/

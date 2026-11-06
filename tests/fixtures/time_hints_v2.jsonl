@@ -1,0 +1,60 @@
+{"hint": "昨天", "start": "2026-11-04", "end": "2026-11-05", "precision": "day", "kind": "relative"}
+{"hint": "前天", "start": "2026-11-03", "end": "2026-11-04", "precision": "day", "kind": "relative"}
+{"hint": "大前天", "start": "2026-11-02", "end": "2026-11-03", "precision": "day", "kind": "relative"}
+{"hint": "今天", "start": "2026-11-05", "end": "2026-11-06", "precision": "day", "kind": "relative"}
+{"hint": "明天", "start": "2026-11-06", "end": "2026-11-07", "precision": "day", "kind": "relative"}
+{"hint": "上周", "start": "2026-10-26", "end": "2026-11-02", "precision": "week", "kind": "relative"}
+{"hint": "这周", "start": "2026-11-02", "end": "2026-11-09", "precision": "week", "kind": "relative"}
+{"hint": "下周", "start": "2026-11-09", "end": "2026-11-16", "precision": "week", "kind": "relative"}
+{"hint": "上周三", "start": "2026-10-28", "end": "2026-10-29", "precision": "day", "kind": "relative"}
+{"hint": "上星期五", "start": "2026-10-30", "end": "2026-10-31", "precision": "day", "kind": "relative"}
+{"hint": "下周三", "start": "2026-11-11", "end": "2026-11-12", "precision": "day", "kind": "relative"}
+{"hint": "上个月", "start": "2026-10-01", "end": "2026-11-01", "precision": "month", "kind": "relative"}
+{"hint": "这个月", "start": "2026-11-01", "end": "2026-12-01", "precision": "month", "kind": "relative"}
+{"hint": "下个月", "start": "2026-12-01", "end": "2027-01-01", "precision": "month", "kind": "relative"}
+{"hint": "上上个月", "start": "2026-09-01", "end": "2026-10-01", "precision": "month", "kind": "relative"}
+{"hint": "去年", "start": "2025-01-01", "end": "2026-01-01", "precision": "year", "kind": "relative"}
+{"hint": "今年", "start": "2026-01-01", "end": "2027-01-01", "precision": "year", "kind": "relative"}
+{"hint": "前年", "start": "2024-01-01", "end": "2025-01-01", "precision": "year", "kind": "relative"}
+{"hint": "去年冬天", "start": "2025-12-01", "end": "2026-03-01", "precision": "season", "kind": "season"}
+{"hint": "今年冬天", "start": "2026-12-01", "end": "2027-03-01", "precision": "season", "kind": "season"}
+{"hint": "冬天", "start": "2025-12-01", "end": "2026-03-01", "precision": "season", "kind": "season"}
+{"hint": "夏天", "start": "2026-06-01", "end": "2026-09-01", "precision": "season", "kind": "season"}
+{"hint": "春天", "start": "2026-03-01", "end": "2026-06-01", "precision": "season", "kind": "season"}
+{"hint": "去年夏天", "start": "2025-06-01", "end": "2025-09-01", "precision": "season", "kind": "season"}
+{"hint": "2026-03-15", "start": "2026-03-15", "end": "2026-03-16", "precision": "day", "kind": "absolute"}
+{"hint": "2025年3月", "start": "2025-03-01", "end": "2025-04-01", "precision": "month", "kind": "absolute"}
+{"hint": "3月5日", "start": "2027-03-05", "end": "2027-03-06", "precision": "day", "kind": "absolute"}
+{"hint": "12月", "start": "2026-12-01", "end": "2027-01-01", "precision": "month", "kind": "absolute"}
+{"hint": "前天下午", "start": "2026-11-03", "end": "2026-11-04", "precision": "day", "kind": "relative"}
+{"hint": "上周六晚上", "start": "2026-10-31", "end": "2026-11-01", "precision": "day", "kind": "relative"}
+{"hint": "前几天", "start": "2026-10-30", "end": "2026-11-05", "precision": "fuzzy", "kind": "fuzzy"}
+{"hint": "最近", "start": "2026-10-30", "end": "2026-11-05", "precision": "fuzzy", "kind": "fuzzy"}
+{"hint": "以前", "start": null, "end": null, "precision": "none", "kind": "fuzzy"}
+{"hint": "两天前", "start": "2026-11-03", "end": "2026-11-04", "precision": "day", "kind": "before"}
+{"hint": "半个月前", "start": "2026-10-21", "end": "2026-10-22", "precision": "day", "kind": "before"}
+{"hint": "三个月前", "start": "2026-08-01", "end": "2026-09-01", "precision": "month", "kind": "before"}
+{"hint": "半年前", "start": "2026-05-01", "end": "2026-06-01", "precision": "month", "kind": "before"}
+{"hint": "两年前", "start": "2024-01-01", "end": "2025-01-01", "precision": "year", "kind": "before"}
+{"hint": "三小时前", "start": "2026-11-05", "end": "2026-11-05", "precision": "hour", "kind": "before"}
+{"hint": "下下个月", "start": "2027-01-01", "end": "2027-02-01", "precision": "month", "kind": "relative"}
+{"hint": "元旦", "start": "2027-01-01", "end": "2027-01-02", "precision": "day", "kind": "absolute"}
+{"hint": "春节", "start": null, "end": null, "precision": "none", "kind": "fuzzy"}
+{"hint": "上上周一", "start": "2026-10-19", "end": "2026-10-20", "precision": "day", "kind": "relative"}
+{"hint": "小时候", "start": "1999-01-01", "end": "2009-01-01", "precision": "fuzzy", "kind": "life_stage", "age": 30, "guessed": 0}
+{"hint": "童年", "start": "1999-01-01", "end": "2009-01-01", "precision": "fuzzy", "kind": "life_stage", "age": 30, "guessed": 0}
+{"hint": "小学的时候", "start": "2003-01-01", "end": "2009-01-01", "precision": "fuzzy", "kind": "life_stage", "age": 30, "guessed": 0}
+{"hint": "初中那会儿", "start": "2008-01-01", "end": "2012-01-01", "precision": "fuzzy", "kind": "life_stage", "age": 30, "guessed": 0}
+{"hint": "高中时住校", "start": "2011-01-01", "end": "2015-01-01", "precision": "fuzzy", "kind": "life_stage", "age": 30, "guessed": 0}
+{"hint": "大学时", "start": "2014-01-01", "end": "2019-01-01", "precision": "fuzzy", "kind": "life_stage", "age": 30, "guessed": 0}
+{"hint": "刚毕业那会儿", "start": "2018-01-01", "end": "2022-01-01", "precision": "fuzzy", "kind": "life_stage", "age": 30, "guessed": 0}
+{"hint": "疫情那会儿", "start": "2020-01-01", "end": "2023-01-01", "precision": "fuzzy", "kind": "anchor", "guessed": 0}
+{"hint": "非典那年", "start": "2003-03-01", "end": "2003-08-01", "precision": "fuzzy", "kind": "anchor", "guessed": 0}
+{"hint": "汶川地震那年", "start": "2008-05-01", "end": "2008-06-01", "precision": "fuzzy", "kind": "anchor", "guessed": 0}
+{"hint": "奥运会那年", "start": "2008-08-01", "end": "2008-09-01", "precision": "fuzzy", "kind": "anchor", "guessed": 0}
+{"hint": "金融危机那阵子", "start": "2008-09-01", "end": "2009-06-01", "precision": "fuzzy", "kind": "anchor", "guessed": 0}
+{"hint": "明天早上7点半", "start": "2026-11-06", "end": "2026-11-06", "precision": "minute", "kind": "edge", "guessed": 0}
+{"hint": "上周日晚上8点", "start": "2026-11-01", "end": "2026-11-01", "precision": "hour", "kind": "edge", "guessed": 0}
+{"hint": "2024年12月31日", "start": "2024-12-31", "end": "2025-01-01", "precision": "day", "kind": "edge", "guessed": 1}
+{"hint": "下下周三", "start": "2026-11-18", "end": "2026-11-19", "precision": "day", "kind": "edge", "guessed": 1}
+{"hint": "两个半月前", "start": "2026-08-22", "end": "2026-08-23", "precision": "day", "kind": "edge", "guessed": 1}

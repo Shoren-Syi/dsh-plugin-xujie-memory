@@ -1,0 +1,43 @@
+{"q": "我住处是哪", "need": [20, 31, 32], "kind": "synonym"}
+{"q": "我换了地方住", "need": [1, 32], "kind": "synonym"}
+{"q": "我干的活是什么", "need": [16, 17], "kind": "synonym"}
+{"q": "我几点休息", "need": [9], "kind": "synonym"}
+{"q": "我养的小动物叫什么", "need": [18], "kind": "synonym"}
+{"q": "我伴侣做什么职业", "need": [19], "kind": "synonym"}
+{"q": "我娃上学的事", "need": [42], "kind": "synonym"}
+{"q": "我岁数多大", "need": [33, 34, 42], "kind": "synonym"}
+{"q": "我坐什么交通工具上班", "need": [10], "kind": "synonym"}
+{"q": "我要坐飞机去吗", "need": [37, 38, 39], "kind": "synonym"}
+{"q": "我胃不舒服", "need": [29], "kind": "synonym"}
+{"q": "我那个毛病要检查", "need": [22, 23], "kind": "synonym"}
+{"q": "我要交的那份东西写了吗", "need": [4], "kind": "synonym"}
+{"q": "我住房在哪", "need": [20, 31, 32], "kind": "synonym"}
+{"q": "我领导骂我", "need": [11, 12, 13], "kind": "synonym"}
+
+{"q": "字节", "need": [16, 43], "kind": "abbrev"}
+{"q": "北大人民医院", "need": [23], "kind": "abbrev"}
+{"q": "甲状腺复查", "need": [22, 23], "kind": "abbrev"}
+{"q": "年终", "need": [15, 16], "kind": "abbrev"}
+{"q": "海淀", "need": [1, 20, 32], "kind": "abbrev"}
+{"q": "老王深圳", "need": [2], "kind": "abbrev"}
+{"q": "小李恐飞", "need": [38], "kind": "abbrev"}
+{"q": "Go", "need": [17], "kind": "abbrev"}
+{"q": "年糕", "need": [18], "kind": "abbrev"}
+{"q": "offer", "need": [43], "kind": "abbrev"}
+
+{"q": "老汪最近怎么样", "need": [2, 3, 4, 36, 39, 40], "kind": "typo"}
+{"q": "搬加", "need": [1], "kind": "typo"}
+{"q": "辞值", "need": [14, 15], "kind": "typo"}
+{"q": "房组", "need": [1, 20], "kind": "typo"}
+{"q": "甲壮腺", "need": [23], "kind": "typo"}
+{"q": "吉它", "need": [24], "kind": "typo"}
+{"q": "香采", "need": [8], "kind": "typo"}
+{"q": "胃通", "need": [29], "kind": "typo"}
+{"q": "拖沿", "need": [5], "kind": "typo"}
+{"q": "房代", "need": [14, 42], "kind": "typo"}
+
+{"q": "我的貓叫什麼", "need": [18], "kind": "trad"}
+{"q": "老王的飛機", "need": [39, 37], "kind": "trad"}
+{"q": "復查", "need": [22, 23], "kind": "trad"}
+{"q": "年終獎", "need": [15], "kind": "trad"}
+{"q": "這個月搬家", "need": [1], "kind": "trad"}

@@ -1,0 +1,142 @@
+{"raw": "地铁四号线故障，迟到了", "summary": "地铁四号线故障，迟到了", "keywords": ["地铁", "故障"], "ts": 1793779200, "truth": null, "day": 1, "mention": 1, "id": 1}
+{"raw": "水果店的橙子很甜", "summary": "水果店的橙子很甜", "keywords": ["橙子", "水果店"], "ts": 1793793600, "truth": null, "day": 1, "mention": 1, "id": 2}
+{"raw": "早晚高峰挤不上去", "summary": "早晚高峰挤不上去", "keywords": ["早高峰", "拥挤"], "ts": 1793808000, "truth": null, "day": 1, "mention": 1, "id": 3}
+{"raw": "我在字节做后端，今年是第三年了", "summary": "用户在字节做后端，今年第三年", "keywords": ["字节", "后端", "工作年限"], "ts": 1793811600, "truth": "job", "day": 1, "mention": 4, "id": 4}
+{"raw": "帮同事把矿泉水搬上楼", "summary": "帮同事把矿泉水搬上楼", "keywords": ["矿泉水", "搭把手"], "ts": 1793815200, "truth": null, "day": 1, "mention": 1, "id": 5}
+{"raw": "下午做了个技术分享", "summary": "下午做了个技术分享", "keywords": ["技术分享", "下午"], "ts": 1793829600, "truth": null, "day": 1, "mention": 1, "id": 6}
+{"raw": "总之就是不吃辣，别放辣椒", "summary": "用户再次强调不吃辣，要求别放辣椒", "keywords": ["提醒", "不吃辣"], "ts": 1793883600, "truth": "spicy", "day": 2, "mention": 6, "id": 7}
+{"raw": "雨天打车溢价两倍", "summary": "雨天打车溢价两倍", "keywords": ["溢价", "雨天"], "ts": 1793905200, "truth": null, "day": 2, "mention": 1, "id": 8}
+{"raw": "借了本书，看了两章", "summary": "借了本书，看了两章", "keywords": ["借书", "阅读"], "ts": 1793977200, "truth": null, "day": 3, "mention": 1, "id": 9}
+{"raw": "交了物业费，涨了五十", "summary": "交了物业费，涨了五十", "keywords": ["物业费", "交费"], "ts": 1793980800, "truth": null, "day": 3, "mention": 1, "id": 10}
+{"raw": "手机内存满了，删了一堆照片", "summary": "手机内存满了，删了一堆照片", "keywords": ["内存", "照片"], "ts": 1793980800, "truth": null, "day": 3, "mention": 1, "id": 11}
+{"raw": "总之就是不吃辣，别放辣椒", "summary": "用户再次强调不吃辣，要求别放辣椒", "keywords": ["辣椒", "不吃辣"], "ts": 1793988000, "truth": "spicy", "day": 3, "mention": 1, "id": 12}
+{"raw": "我住在朝阳", "summary": "用户最初说自己住在朝阳区", "keywords": ["朝阳", "居住"], "ts": 1793991600, "truth": "addr_old", "day": 3, "mention": 1, "id": 13}
+{"raw": "早上买了个煎饼果子，加蛋", "summary": "早上买了个煎饼果子，加蛋", "keywords": ["煎饼", "早饭"], "ts": 1793995200, "truth": null, "day": 3, "mention": 1, "id": 14}
+{"raw": "不对，我说错了，是海淀", "summary": "用户更正居住地，实际住在海淀", "keywords": ["居住", "海淀", "更正"], "ts": 1794052800, "truth": "addr_fix", "day": 4, "mention": 1, "id": 15}
+{"raw": "身份证快过期了，得去换", "summary": "身份证快过期了，得去换", "keywords": ["身份证", "换证"], "ts": 1794063600, "truth": null, "day": 4, "mention": 1, "id": 16}
+{"raw": "去看了场球赛，主队输了", "summary": "去看了场球赛，主队输了", "keywords": ["球赛", "主队"], "ts": 1794081600, "truth": null, "day": 4, "mention": 1, "id": 17}
+{"raw": "带饭了，微波炉热了一下", "summary": "带饭了，微波炉热了一下", "keywords": ["带饭", "微波炉"], "ts": 1794139200, "truth": null, "day": 5, "mention": 1, "id": 18}
+{"raw": "代码评审被打回，说命名不规范", "summary": "代码评审被打回，说命名不规范", "keywords": ["代码评审", "命名"], "ts": 1794139200, "truth": null, "day": 5, "mention": 1, "id": 19}
+{"raw": "跟着视频做了二十分钟瑜伽", "summary": "跟着视频做了二十分钟瑜伽", "keywords": ["瑜伽", "跟练"], "ts": 1794153600, "truth": null, "day": 5, "mention": 1, "id": 20}
+{"raw": "我老婆是护士，上夜班比较多", "summary": "用户的老婆是护士，常上夜班", "keywords": ["护士", "夜班"], "ts": 1794171600, "truth": "wife", "day": 5, "mention": 2, "id": 21}
+{"raw": "听了张老专辑，挺好", "summary": "听了张老专辑，挺好", "keywords": ["专辑", "听歌"], "ts": 1794171600, "truth": null, "day": 5, "mention": 1, "id": 22}
+{"raw": "我们组最近在重做召回链路", "summary": "用户所在团队在重做召回链路", "keywords": ["链路", "召回"], "ts": 1794225600, "truth": "job", "day": 6, "mention": 3, "id": 23}
+{"raw": "叫了份炸鸡，吃撑了", "summary": "叫了份炸鸡，吃撑了", "keywords": ["炸鸡", "外卖"], "ts": 1794225600, "truth": null, "day": 6, "mention": 1, "id": 24}
+{"raw": "打印机又卡纸了", "summary": "打印机又卡纸了", "keywords": ["打印机", "卡纸"], "ts": 1794225600, "truth": null, "day": 6, "mention": 1, "id": 25}
+{"raw": "我不喝冰的，胃不好", "summary": "用户因胃不好不喝冰饮", "keywords": ["忌口", "冰饮"], "ts": 1794236400, "truth": "cold_drink", "day": 6, "mention": 1, "id": 26}
+{"raw": "表姐生了个女儿", "summary": "表姐生了个女儿", "keywords": ["表姐", "生孩子"], "ts": 1794236400, "truth": null, "day": 6, "mention": 1, "id": 27}
+{"raw": "朋友失恋了，陪他喝了两杯", "summary": "朋友失恋了，陪他喝了两杯", "keywords": ["失恋", "陪"], "ts": 1794258000, "truth": null, "day": 6, "mention": 1, "id": 28}
+{"raw": "我现在就想辞职，但房贷还有二十年", "summary": "用户想辞职，但房贷还有二十年", "keywords": ["房贷", "辞职", "二十年"], "ts": 1794315600, "truth": "quit", "day": 7, "mention": 3, "id": 29}
+{"raw": "冰箱除霜，弄了一地水", "summary": "冰箱除霜，弄了一地水", "keywords": ["冰箱", "除霜"], "ts": 1794326400, "truth": null, "day": 7, "mention": 1, "id": 30}
+{"raw": "车厢里有人外放，很吵", "summary": "车厢里有人外放，很吵", "keywords": ["外放", "噪音"], "ts": 1794330000, "truth": null, "day": 7, "mention": 1, "id": 31}
+{"raw": "周末去了趟美术馆", "summary": "周末去了趟美术馆", "keywords": ["美术馆", "展览"], "ts": 1794330000, "truth": null, "day": 7, "mention": 1, "id": 32}
+{"raw": "下周日是我妈生日，得提前订蛋糕", "summary": "用户妈妈下周日生日，要订蛋糕", "keywords": ["蛋糕", "妈妈生日", "下周日"], "ts": 1794333600, "truth": "mom_bday", "day": 7, "mention": 1, "id": 33}
+{"raw": "邻居送了盒月饼", "summary": "邻居送了盒月饼", "keywords": ["月饼", "送礼"], "ts": 1794337200, "truth": null, "day": 7, "mention": 1, "id": 34}
+{"raw": "搬家真是累，不过海淀这边房租贵两千", "summary": "用户搬家很累，新址房租贵两千", "keywords": ["房租", "海淀", "搬家"], "ts": 1794394800, "truth": "move", "day": 8, "mention": 3, "id": 35}
+{"raw": "楼上装修，电钻响一天", "summary": "楼上装修，电钻响一天", "keywords": ["装修", "电钻"], "ts": 1794405600, "truth": null, "day": 8, "mention": 1, "id": 36}
+{"raw": "上次吃火锅辣得我眼泪直流", "summary": "用户上次吃火锅被辣到流泪", "keywords": ["眼泪", "火锅", "吃辣"], "ts": 1794427200, "truth": "spicy", "day": 8, "mention": 5, "id": 37}
+{"raw": "阳台的绿萝蔫了", "summary": "阳台的绿萝蔫了", "keywords": ["绿萝", "阳台"], "ts": 1794474000, "truth": null, "day": 9, "mention": 1, "id": 38}
+{"raw": "体检报告出来了，血脂偏高", "summary": "体检报告出来了，血脂偏高", "keywords": ["体检", "血脂"], "ts": 1794474000, "truth": null, "day": 9, "mention": 1, "id": 39}
+{"raw": "微辣还行，中辣就不行了", "summary": "用户能吃微辣但中辣不行", "keywords": ["微辣", "中辣", "界限"], "ts": 1794484800, "truth": "nospicy_mild", "day": 9, "mention": 1, "id": 40}
+{"raw": "医保报销跑了三趟", "summary": "医保报销跑了三趟", "keywords": ["医保", "报销"], "ts": 1794484800, "truth": null, "day": 9, "mention": 1, "id": 41}
+{"raw": "我家那只三岁的老猫又闹腾", "summary": "用户的猫（三岁）又闹腾", "keywords": ["三岁", "猫", "宠物"], "ts": 1794502800, "truth": "cat", "day": 9, "mention": 2, "id": 42}
+{"raw": "周五下午三点要去医院复查", "summary": "用户周五下午三点去医院复查", "keywords": ["复查", "医院"], "ts": 1794502800, "truth": "thyroid", "day": 9, "mention": 3, "id": 43}
+{"raw": "走路回家，四十分钟", "summary": "走路回家，四十分钟", "keywords": ["走路", "回家"], "ts": 1794517200, "truth": null, "day": 9, "mention": 1, "id": 44}
+{"raw": "周五下午三点要去医院复查", "summary": "用户周五下午三点去医院复查", "keywords": ["周五", "复查", "医院"], "ts": 1794574800, "truth": "thyroid", "day": 10, "mention": 1, "id": 45}
+{"raw": "年终奖今年估计悬了，部门预算砍了一半", "summary": "用户预计年终奖不理想，部门预算砍半", "keywords": ["预算", "年终奖", "部门"], "ts": 1794589200, "truth": "salary", "day": 10, "mention": 1, "id": 46}
+{"raw": "最气的是他自己上周还夸过这个方案", "summary": "老板上周还夸过这个方案，前后不一致", "keywords": ["上周", "老板", "前后不一致", "方案"], "ts": 1794596400, "truth": "boss_scold", "day": 10, "mention": 1, "id": 47}
+{"raw": "今天被老板当众骂了一顿，说我方案做得像垃圾", "summary": "用户被老板当众骂，方案被说成像垃圾", "keywords": ["老板", "当众"], "ts": 1794650400, "truth": "boss_scold", "day": 11, "mention": 3, "id": 48}
+{"raw": "家庭群里我妈又发养生文章", "summary": "家庭群里我妈又发养生文章", "keywords": ["家庭群", "养生"], "ts": 1794650400, "truth": null, "day": 11, "mention": 1, "id": 49}
+{"raw": "这次还是去北大人民医院查甲状腺", "summary": "用户去北大人民医院复查甲状腺", "keywords": ["北大人民医院", "复查"], "ts": 1794668400, "truth": "thyroid", "day": 11, "mention": 2, "id": 50}
+{"raw": "整个组十几个人都在，我脸都烧起来了", "summary": "被骂时全组十几人在场，用户很难堪", "keywords": ["十几个人", "当众", "尴尬"], "ts": 1794672000, "truth": "boss_scold", "day": 11, "mention": 2, "id": 51}
+{"raw": "老王和小李下周三要一起来北京", "summary": "老王和小李下周三一起来北京", "keywords": ["小李", "北京", "老王"], "ts": 1794679200, "truth": "visit", "day": 11, "mention": 3, "id": 52}
+{"raw": "加上初中同学的微信了", "summary": "加上初中同学的微信了", "keywords": ["初中同学", "加好友"], "ts": 1794690000, "truth": null, "day": 11, "mention": 1, "id": 53}
+{"raw": "电脑风扇响得像起飞", "summary": "电脑风扇响得像起飞", "keywords": ["电脑", "风扇"], "ts": 1794700800, "truth": null, "day": 11, "mention": 1, "id": 54}
+{"raw": "做推荐系统的召回，主要用 Go", "summary": "用户做推荐系统召回方向，主要用 Go", "keywords": ["推荐系统", "Go", "召回"], "ts": 1794772800, "truth": "job", "day": 12, "mention": 2, "id": 55}
+{"raw": "订了张下个月回老家的票", "summary": "订了张下个月回老家的票", "keywords": ["火车票", "老家"], "ts": 1794830400, "truth": null, "day": 13, "mention": 1, "id": 56}
+{"raw": "手机欠费了，网断了", "summary": "手机欠费了，网断了", "keywords": ["欠费", "断网"], "ts": 1794852000, "truth": null, "day": 13, "mention": 1, "id": 57}
+{"raw": "微信群里又吵起来了", "summary": "微信群里又吵起来了", "keywords": ["微信群", "吵"], "ts": 1794870000, "truth": null, "day": 13, "mention": 1, "id": 58}
+{"raw": "公园里有人弹吉他，挺好听", "summary": "公园里有人弹吉他，挺好听", "keywords": ["公园", "弹唱"], "ts": 1794909600, "truth": null, "day": 14, "mention": 1, "id": 59}
+{"raw": "骑车上班，风太大", "summary": "骑车上班，风太大", "keywords": ["骑车", "大风"], "ts": 1794924000, "truth": null, "day": 14, "mention": 1, "id": 60}
+{"raw": "真的，我一点辣都吃不了", "summary": "用户强调自己一点辣都吃不了", "keywords": ["吃不了辣", "忌口"], "ts": 1794931200, "truth": "spicy", "day": 14, "mention": 3, "id": 61}
+{"raw": "公司食堂今天的排骨不错", "summary": "公司食堂今天的排骨不错", "keywords": ["食堂", "排骨"], "ts": 1794938400, "truth": null, "day": 14, "mention": 1, "id": 62}
+{"raw": "线上出了个 P2 故障，排查两小时", "summary": "线上出了个 P2 故障，排查两小时", "keywords": ["线上", "排查"], "ts": 1794960000, "truth": null, "day": 14, "mention": 1, "id": 63}
+{"raw": "弟妹问我借了两万块", "summary": "弟妹问我借了两万块", "keywords": ["借钱", "弟妹"], "ts": 1794988800, "truth": null, "day": 15, "mention": 1, "id": 64}
+{"raw": "玩了个新出的解谜游戏", "summary": "玩了个新出的解谜游戏", "keywords": ["解谜游戏", "新出"], "ts": 1795014000, "truth": null, "day": 15, "mention": 1, "id": 65}
+{"raw": "老王和小李下周三要一起来北京", "summary": "老王和小李下周三一起来北京", "keywords": ["老王", "下周三", "北京"], "ts": 1795021200, "truth": "visit", "day": 15, "mention": 1, "id": 66}
+{"raw": "水管漏水，物业来修了", "summary": "水管漏水，物业来修了", "keywords": ["水管", "物业"], "ts": 1795024800, "truth": null, "day": 15, "mention": 1, "id": 67}
+{"raw": "刷短视频刷到两点", "summary": "刷短视频刷到两点", "keywords": ["短视频", "熬夜"], "ts": 1795024800, "truth": null, "day": 15, "mention": 1, "id": 68}
+{"raw": "算了，先忍着吧，等年终奖下来再说", "summary": "用户决定先不辞职，等年终奖", "keywords": ["年终奖", "忍着"], "ts": 1795028400, "truth": "quit", "day": 15, "mention": 1, "id": 69}
+{"raw": "冰箱里的牛奶过期了", "summary": "冰箱里的牛奶过期了", "keywords": ["牛奶", "过期"], "ts": 1795032000, "truth": null, "day": 15, "mention": 1, "id": 70}
+{"raw": "隔壁那条狗叫了一晚上", "summary": "隔壁那条狗叫了一晚上", "keywords": ["狗", "隔壁"], "ts": 1795046400, "truth": null, "day": 15, "mention": 1, "id": 71}
+{"raw": "面了个候选人，感觉还行", "summary": "面了个候选人，感觉还行", "keywords": ["面试", "候选人"], "ts": 1795086000, "truth": null, "day": 16, "mention": 1, "id": 72}
+{"raw": "晚上点了份麻辣烫，太咸", "summary": "晚上点了份麻辣烫，太咸", "keywords": ["麻辣烫", "晚饭"], "ts": 1795093200, "truth": null, "day": 16, "mention": 1, "id": 73}
+{"raw": "算了，先忍着吧，等年终奖下来再说", "summary": "用户决定先不辞职，等年终奖", "keywords": ["辞职", "年终奖", "忍着"], "ts": 1795114800, "truth": "quit", "day": 16, "mention": 4, "id": 74}
+{"raw": "上次说的搬家，我从朝阳挪到海淀了", "summary": "用户从朝阳搬到海淀", "keywords": ["朝阳", "海淀", "搬家"], "ts": 1795118400, "truth": "move", "day": 16, "mention": 1, "id": 75}
+{"raw": "去银行排了一小时队", "summary": "去银行排了一小时队", "keywords": ["银行", "柜台"], "ts": 1795168800, "truth": null, "day": 17, "mention": 1, "id": 76}
+{"raw": "公交上睡着了，坐过站", "summary": "公交上睡着了，坐过站", "keywords": ["公交", "坐过站"], "ts": 1795176000, "truth": null, "day": 17, "mention": 1, "id": 77}
+{"raw": "停车位又找不到了", "summary": "停车位又找不到了", "keywords": ["停车", "车位"], "ts": 1795186800, "truth": null, "day": 17, "mention": 1, "id": 78}
+{"raw": "卫生间的灯坏了", "summary": "卫生间的灯坏了", "keywords": ["灯", "卫生间"], "ts": 1795186800, "truth": null, "day": 17, "mention": 1, "id": 79}
+{"raw": "银行卡被限额了", "summary": "银行卡被限额了", "keywords": ["银行卡", "限额"], "ts": 1795194000, "truth": null, "day": 17, "mention": 1, "id": 80}
+{"raw": "同事结婚，随了份子", "summary": "同事结婚，随了份子", "keywords": ["结婚", "份子钱"], "ts": 1795204800, "truth": null, "day": 17, "mention": 1, "id": 81}
+{"raw": "空调滤网该洗了", "summary": "空调滤网该洗了", "keywords": ["空调", "滤网"], "ts": 1795212000, "truth": null, "day": 17, "mention": 1, "id": 82}
+{"raw": "加班到九点，楼下只剩便利店", "summary": "加班到九点，楼下只剩便利店", "keywords": ["加班", "九点"], "ts": 1795215600, "truth": null, "day": 17, "mention": 1, "id": 83}
+{"raw": "新来的实习生问了很多基础问题", "summary": "新来的实习生问了很多基础问题", "keywords": ["实习生", "新人"], "ts": 1795219200, "truth": null, "day": 17, "mention": 1, "id": 84}
+{"raw": "垃圾分类又搞错了", "summary": "垃圾分类又搞错了", "keywords": ["垃圾分类", "搞错"], "ts": 1795248000, "truth": null, "day": 18, "mention": 1, "id": 85}
+{"raw": "领导让我下周去趟杭州", "summary": "领导让我下周去趟杭州", "keywords": ["出差", "杭州"], "ts": 1795251600, "truth": null, "day": 18, "mention": 1, "id": 86}
+{"raw": "我吃辣会胃疼，所以基本不碰", "summary": "用户吃辣会胃疼，因此忌辣", "keywords": ["健康", "吃辣"], "ts": 1795276800, "truth": "spicy", "day": 18, "mention": 4, "id": 87}
+{"raw": "和一个网友争论了半天", "summary": "和一个网友争论了半天", "keywords": ["网友", "争论"], "ts": 1795298400, "truth": null, "day": 18, "mention": 1, "id": 88}
+{"raw": "新买的书架装了两个小时", "summary": "新买的书架装了两个小时", "keywords": ["书架", "组装"], "ts": 1795302000, "truth": null, "day": 18, "mention": 1, "id": 89}
+{"raw": "水杯落在会议室了", "summary": "水杯落在会议室了", "keywords": ["水杯", "会议室"], "ts": 1795305600, "truth": null, "day": 18, "mention": 1, "id": 90}
+{"raw": "老王从深圳飞过来，小李从上海坐高铁", "summary": "老王从深圳飞，小李从上海坐高铁来北京", "keywords": ["高铁", "上海", "深圳", "航班"], "ts": 1795359600, "truth": "visit", "day": 19, "mention": 2, "id": 91}
+{"raw": "我昨天下午搬家了，从朝阳搬到海淀，房租涨了两千，累死了", "summary": "用户从朝阳搬到海淀，房租涨了两千，搬家很累", "keywords": ["海淀", "搬家", "房租"], "ts": 1795366800, "truth": "move", "day": 19, "mention": 2, "id": 92}
+{"raw": "晚上没吃饭，就啃了个苹果", "summary": "晚上没吃饭，就啃了个苹果", "keywords": ["苹果", "凑合"], "ts": 1795384800, "truth": null, "day": 19, "mention": 1, "id": 93}
+{"raw": "眼镜腿断了，用胶粘上", "summary": "眼镜腿断了，用胶粘上", "keywords": ["眼镜", "断腿"], "ts": 1795388400, "truth": null, "day": 19, "mention": 1, "id": 94}
+{"raw": "周报写了半小时，没什么可写", "summary": "周报写了半小时，没什么可写", "keywords": ["周报", "凑字数"], "ts": 1795420800, "truth": null, "day": 20, "mention": 1, "id": 95}
+{"raw": "她这周又连着三个夜班", "summary": "用户老婆这周连上三个夜班", "keywords": ["护士", "这周", "夜班"], "ts": 1795431600, "truth": "wife", "day": 20, "mention": 1, "id": 96}
+{"raw": "我养了只猫，叫年糕，三岁了", "summary": "用户养了一只叫年糕的三岁猫", "keywords": ["猫", "年糕", "宠物"], "ts": 1795453200, "truth": "cat", "day": 20, "mention": 1, "id": 97}
+{"raw": "吉他课上了两次，手指头疼", "summary": "用户上了两次吉他课，手指疼", "keywords": ["吉他", "上课"], "ts": 1795471200, "truth": "guitar", "day": 20, "mention": 3, "id": 98}
+{"raw": "咖啡喝多了，心跳快", "summary": "咖啡喝多了，心跳快", "keywords": ["咖啡", "心悸"], "ts": 1795474800, "truth": null, "day": 20, "mention": 1, "id": 99}
+{"raw": "买了台扫地机器人", "summary": "买了台扫地机器人", "keywords": ["扫地机器人", "扫地"], "ts": 1795478400, "truth": null, "day": 20, "mention": 1, "id": 100}
+{"raw": "窗帘掉了，得重新装", "summary": "窗帘掉了，得重新装", "keywords": ["窗帘", "掉落"], "ts": 1795478400, "truth": null, "day": 20, "mention": 1, "id": 101}
+{"raw": "奶茶店排队太久，放弃了", "summary": "奶茶店排队太久，放弃了", "keywords": ["奶茶", "排队"], "ts": 1795633200, "truth": null, "day": 22, "mention": 1, "id": 102}
+{"raw": "需求又改了第三版", "summary": "需求又改了第三版", "keywords": ["需求", "改版"], "ts": 1795651200, "truth": null, "day": 22, "mention": 1, "id": 103}
+{"raw": "有时候真想一走了之，可是不敢", "summary": "用户偶尔想辞职但不敢", "keywords": ["辞职", "不敢", "犹豫"], "ts": 1795694400, "truth": "quit", "day": 23, "mention": 2, "id": 104}
+{"raw": "吉他课上了两次，手指头疼", "summary": "用户上了两次吉他课，手指疼", "keywords": ["上课", "吉他", "手指"], "ts": 1795701600, "truth": "guitar", "day": 23, "mention": 1, "id": 105}
+{"raw": "我养了只猫，叫年糕，三岁了", "summary": "用户养了一只叫年糕的三岁猫", "keywords": ["猫", "年糕", "宠物"], "ts": 1795708800, "truth": "cat", "day": 23, "mention": 4, "id": 106}
+{"raw": "钥匙又锁屋里了，找开锁的", "summary": "钥匙又锁屋里了，找开锁的", "keywords": ["钥匙", "开锁"], "ts": 1795716000, "truth": null, "day": 23, "mention": 1, "id": 107}
+{"raw": "泡了个澡，放松", "summary": "泡了个澡，放松", "keywords": ["泡澡", "放松"], "ts": 1795719600, "truth": null, "day": 23, "mention": 1, "id": 108}
+{"raw": "把冬天的衣服收起来了", "summary": "把冬天的衣服收起来了", "keywords": ["冬衣", "收纳"], "ts": 1795737600, "truth": null, "day": 23, "mention": 1, "id": 109}
+{"raw": "煮了锅粥，糊了", "summary": "煮了锅粥，糊了", "keywords": ["煮粥", "糊锅"], "ts": 1795773600, "truth": null, "day": 24, "mention": 1, "id": 110}
+{"raw": "大学室友来出差，一起吃了顿饭", "summary": "大学室友来出差，一起吃了顿饭", "keywords": ["室友", "叙旧"], "ts": 1795777200, "truth": null, "day": 24, "mention": 1, "id": 111}
+{"raw": "便利店的关东煮涨价了", "summary": "便利店的关东煮涨价了", "keywords": ["关东煮", "便利店"], "ts": 1795784400, "truth": null, "day": 24, "mention": 1, "id": 112}
+{"raw": "老同学约周末打球", "summary": "老同学约周末打球", "keywords": ["老同学", "打球"], "ts": 1795806000, "truth": null, "day": 24, "mention": 1, "id": 113}
+{"raw": "年糕今天又把杯子扒下去了", "summary": "用户的猫年糕把杯子扒到地上", "keywords": ["杯子", "猫", "年糕"], "ts": 1795813200, "truth": "cat", "day": 24, "mention": 3, "id": 114}
+{"raw": "电费这个月涨了不少", "summary": "电费这个月涨了不少", "keywords": ["电费", "账单"], "ts": 1795860000, "truth": null, "day": 25, "mention": 1, "id": 115}
+{"raw": "换了新的床单，舒服", "summary": "换了新的床单，舒服", "keywords": ["床单", "换洗"], "ts": 1795863600, "truth": null, "day": 25, "mention": 1, "id": 116}
+{"raw": "隔壁组搬工位，吵了一下午", "summary": "隔壁组搬工位，吵了一下午", "keywords": ["搬工位", "吵"], "ts": 1795867200, "truth": null, "day": 25, "mention": 1, "id": 117}
+{"raw": "下个月开始每周三晚上去学吉他", "summary": "用户下个月起每周三晚上学吉他", "keywords": ["学吉他", "每周三", "吉他"], "ts": 1795870800, "truth": "guitar", "day": 25, "mention": 2, "id": 118}
+{"raw": "邮件积了八十封没看", "summary": "邮件积了八十封没看", "keywords": ["邮件", "积压"], "ts": 1795870800, "truth": null, "day": 25, "mention": 1, "id": 119}
+{"raw": "共享单车全是坏的", "summary": "共享单车全是坏的", "keywords": ["共享单车", "坏车"], "ts": 1795888800, "truth": null, "day": 25, "mention": 1, "id": 120}
+{"raw": "打车遇上堵车，多花了半小时", "summary": "打车遇上堵车，多花了半小时", "keywords": ["打车", "堵车"], "ts": 1795950000, "truth": null, "day": 26, "mention": 1, "id": 121}
+{"raw": "同事请了陪产假，活分给我了", "summary": "同事请了陪产假，活分给我了", "keywords": ["陪产假", "接手"], "ts": 1795950000, "truth": null, "day": 26, "mention": 1, "id": 122}
+{"raw": "试着画了张速写，很丑", "summary": "试着画了张速写，很丑", "keywords": ["速写", "画"], "ts": 1795950000, "truth": null, "day": 26, "mention": 1, "id": 123}
+{"raw": "试着自己做了个番茄炒蛋", "summary": "试着自己做了个番茄炒蛋", "keywords": ["番茄炒蛋", "做饭"], "ts": 1795953600, "truth": null, "day": 26, "mention": 1, "id": 124}
+{"raw": "楼下新开的面馆味道一般", "summary": "楼下新开的面馆味道一般", "keywords": ["面馆", "楼下"], "ts": 1795960800, "truth": null, "day": 26, "mention": 1, "id": 125}
+{"raw": "地铁卡余额不足被拦了", "summary": "地铁卡余额不足被拦了", "keywords": ["地铁卡", "余额"], "ts": 1796040000, "truth": null, "day": 27, "mention": 1, "id": 126}
+{"raw": "换了条路线，快十分钟", "summary": "换了条路线，快十分钟", "keywords": ["路线", "绕行"], "ts": 1796047200, "truth": null, "day": 27, "mention": 1, "id": 127}
+{"raw": "汽车年检忘了，被罚了", "summary": "汽车年检忘了，被罚了", "keywords": ["年检", "罚款"], "ts": 1796072400, "truth": null, "day": 27, "mention": 1, "id": 128}
+{"raw": "打了会儿游戏，连输五把", "summary": "打了会儿游戏，连输五把", "keywords": ["游戏", "连输"], "ts": 1796076000, "truth": null, "day": 27, "mention": 1, "id": 129}
+{"raw": "护照找不到了", "summary": "护照找不到了", "keywords": ["护照", "找不到"], "ts": 1796140800, "truth": null, "day": 28, "mention": 1, "id": 130}
+{"raw": "洗衣机不脱水了，得叫人修", "summary": "洗衣机不脱水了，得叫人修", "keywords": ["洗衣机", "脱水"], "ts": 1796202000, "truth": null, "day": 29, "mention": 1, "id": 131}
+{"raw": "快递被放到了隔壁楼", "summary": "快递被放到了隔壁楼", "keywords": ["快递", "放错"], "ts": 1796209200, "truth": null, "day": 29, "mention": 1, "id": 132}
+{"raw": "我在字节做后端，今年是第三年了", "summary": "用户在字节做后端，今年第三年", "keywords": ["工作年限", "后端", "字节"], "ts": 1796212800, "truth": "job", "day": 29, "mention": 1, "id": 133}
+{"raw": "拼了个一千片的拼图", "summary": "拼了个一千片的拼图", "keywords": ["拼图", "一千片"], "ts": 1796212800, "truth": null, "day": 29, "mention": 1, "id": 134}
+{"raw": "演唱会门票没抢到", "summary": "演唱会门票没抢到", "keywords": ["演唱会", "抢票"], "ts": 1796212800, "truth": null, "day": 29, "mention": 1, "id": 135}
+{"raw": "牙疼，约了牙医", "summary": "牙疼，约了牙医", "keywords": ["牙疼", "牙医"], "ts": 1796216400, "truth": null, "day": 29, "mention": 1, "id": 136}
+{"raw": "看了场电影，剧情一般", "summary": "看了场电影，剧情一般", "keywords": ["电影", "剧情"], "ts": 1796227200, "truth": null, "day": 29, "mention": 1, "id": 137}
+{"raw": "开会开到六点半，脑子木了", "summary": "开会开到六点半，脑子木了", "keywords": ["开会", "加班"], "ts": 1796248800, "truth": null, "day": 29, "mention": 1, "id": 138}
+{"raw": "追的剧更新了，一口气看了三集", "summary": "追的剧更新了，一口气看了三集", "keywords": ["追剧", "更新"], "ts": 1796306400, "truth": null, "day": 30, "mention": 1, "id": 139}
+{"raw": "她这周又连着三个夜班", "summary": "用户老婆这周连上三个夜班", "keywords": ["护士", "夜班"], "ts": 1796317200, "truth": "wife", "day": 30, "mention": 3, "id": 140}
+{"raw": "我吃不了辣，一点都受不了", "summary": "用户不吃辣，一点都受不了", "keywords": ["吃不了辣", "饮食"], "ts": 1796320800, "truth": "spicy", "day": 30, "mention": 2, "id": 141}
+{"raw": "中午吃了碗牛肉面，还行", "summary": "中午吃了碗牛肉面，还行", "keywords": ["牛肉面", "午饭"], "ts": 1796328000, "truth": null, "day": 30, "mention": 1, "id": 142}

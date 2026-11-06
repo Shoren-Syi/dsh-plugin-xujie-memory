@@ -1,0 +1,22 @@
+# hippocampus-deepseek · DSH 插件 bundle
+#
+# 安装（本机）：
+#   dsh plugin --profile <你的profile> add link:<本目录>
+# 安装后重启 DSH Web，侧栏出现「记忆」相关能力即成功；不需要改 base_url、
+# 不需要手动起服务、不需要 pip install（插件自动拉起包内/DSH 自带 Python 内核）。
+#
+# DSH 0.2.x 要求 patch 文件是顶层数组，整份内容放在一个 `- insert:` 列表项里。
+- insert:
+    - id: hippocampus-deepseek
+      name: dsh-plugin-hippocampus-deepseek
+      config:
+        # 内核监听端口（本地回环，不对外）
+        port: 8766
+        # 记忆库路径；留空 = ~/.hippo/mem.db
+        dbPath: ""
+        # 抽取用的 DeepSeek key；留空自动从 DSH 凭据 / 环境变量 / ~/.hippo/config.yaml 找
+        apiKey: ""
+        # 包内自带解释器优先；留空 = 自动探测（包内 runtime → DSH 自带 runtime → PATH）
+        pythonPath: ""
+        # 由插件拉起内核进程
+        autoStart: true
