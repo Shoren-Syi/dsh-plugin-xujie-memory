@@ -29,6 +29,8 @@ from pathlib import Path
 
 import httpx
 from fastapi import FastAPI
+from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import HTMLResponse, Response
 from pydantic import BaseModel
 
 from . import __version__
@@ -41,6 +43,8 @@ from .core.store import Store
 from .log import get_logger, setup
 
 log = get_logger("dsh_kernel")
+
+_BOARD_HTML = Path(__file__).resolve().parent / "data" / "board.html"
 
 
 class EventBody(BaseModel):
@@ -76,6 +80,13 @@ def create_kernel(cfg: Config, api_key: str = "") -> FastAPI:
             task.cancel()
 
     app = FastAPI(title="hippo-dsh-kernel", lifespan=lifespan)
+    # 看板页面同源；DSH 侧栏 client（不同端口）需要跨域读 /board/data。
+    app.add_middleware(
+        CORSMiddleware,
+        allow_origins=["*"],
+        allow_methods=["GET", "POST"],
+        allow_headers=["*"],
+    )
     app.state.db = db
     app.state.cfg = cfg
 
@@ -85,6 +96,32 @@ def create_kernel(cfg: Config, api_key: str = "") -> FastAPI:
     @app.get("/health")
     def health() -> dict:
         return {"ok": True, "version": __version__, "db": str(db), "extract": bool(api_key)}
+
+    # ------------------------------------------------------------ 记忆看板（M30）
+    @app.get("/board/data")
+    def board_data() -> dict:
+        store = _store()
+        try:
+            snap = store.board_snapshot()
+            snap["db"] = str(db)
+            return {"ok": True, **snap}
+        except Exception as exc:  # noqa: BLE001
+            log.warning("kernel.board.failed", extra={"fields": {"err": repr(exc)}})
+            return {"ok": False, "error": repr(exc)}
+        finally:
+            store.close()
+
+    @app.get("/board", response_class=HTMLResponse)
+    def board_page() -> str:
+        try:
+            return _BOARD_HTML.read_text(encoding="utf-8")
+        except OSError:
+            return "<h1>board.html 缺失</h1>"
+
+    @app.get("/favicon.ico")
+    def favicon() -> Response:
+        # 看板页面没有图标，浏览器会请求 favicon；给 204 消掉控制台 404。
+        return Response(status_code=204)
 
     @app.post("/event")
     async def event(body: EventBody) -> dict:

@@ -1,0 +1,2027 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>海马体 · 记忆看板</title>
+<style>
+  /* 视觉体系移植 dsh-plugin-xujie-memory 0.8 的 panel.css：
+     14px 字号、44px 控件、深色 instrument 视口、卡片规格、语义三色。
+     布局形态：三维场铺满 + 右侧悬浮管理抽屉 + 底部状态仪表条。 */
+  :root {
+    --fg: #edf5f7; --fg2: #ccdce1; --fg3: #adbec7;
+    --bg: #0a1119; --surface: #101b25;
+    --line: rgba(151, 187, 199, .24); --line-soft: rgba(151, 187, 199, .13);
+    --hover: #1a303c;
+    --sem: #a8c2ff; --epi: #efc683; --work: #75dfd0;
+    --danger: #ff8787; --warn: #e6b970;
+    color-scheme: dark;
+  }
+  * { box-sizing: border-box; }
+  html, body { height: 100%; margin: 0; }
+  body {
+    background: #080d13; color: var(--fg);
+    font-family: ui-sans-serif, system-ui, -apple-system, "Segoe UI", "PingFang SC", "Microsoft YaHei", sans-serif;
+    font-size: 14px; line-height: 1.5; -webkit-font-smoothing: antialiased; overflow: hidden;
+  }
+  button, input, select { font: inherit; color: inherit; }
+  :focus-visible { outline: 2px solid #4c8dff; outline-offset: 2px; }
+  [data-layer="0"] { --lc: var(--sem); }
+  [data-layer="1"] { --lc: var(--epi); }
+  [data-layer="2"] { --lc: var(--work); }
+
+  .shell { position: relative; width: 100%; height: 100%; min-height: 0; background: #080d13; }
+
+  /* ---------- stage：深色 instrument 视口（图谱铺满工作区） ---------- */
+  .stage {
+    position: absolute; inset: 0 100px 122px 0; overflow: hidden; color-scheme: dark;
+    background:
+      radial-gradient(70% 60% at 50% 48%, rgba(74, 96, 150, .16) 0%, rgba(74, 96, 150, 0) 70%),
+      radial-gradient(120% 95% at 50% 45%, #10151f 0%, #0a0d13 55%, #06070a 100%);
+    box-shadow: inset 0 0 0 1px rgba(255, 255, 255, .06);
+  }
+  .stage::before { content: ""; position: absolute; inset: 0; z-index: 1; pointer-events: none;
+    background:
+      linear-gradient(180deg, rgba(7, 9, 13, .78) 0, rgba(7, 9, 13, .32) 76px, rgba(7, 9, 13, 0) 120px),
+      linear-gradient(0deg, rgba(7, 9, 13, .8) 0, rgba(7, 9, 13, .3) 40px, rgba(7, 9, 13, 0) 76px); }
+  .stage::after { content: ""; position: absolute; inset: 0; z-index: 1; pointer-events: none;
+    background: radial-gradient(110% 90% at 50% 50%, transparent 62%, rgba(0, 0, 0, .38) 100%); }
+  .field { position: absolute; inset: 0; }
+  .canvas { display: block; width: 100%; height: 100%; cursor: grab; touch-action: none; outline: none; }
+  .canvas:active { cursor: grabbing; }
+  .canvas:focus-visible { box-shadow: inset 0 0 0 2px rgba(138, 174, 255, .55); }
+  .field-fallback { position: absolute; inset: auto 24px 50% 24px; margin: 0; text-align: center; color: rgba(225, 232, 245, .75); font-size: 14px; }
+
+  /* 悬停提示（引擎写入 transform 定位） */
+  .tip {
+    position: absolute; left: 0; top: 0; z-index: 4;
+    display: flex; flex-direction: column; gap: 2px;
+    max-width: 280px; padding: 8px 10px; border-radius: 8px;
+    background: rgba(13, 17, 26, .9);
+    box-shadow: 0 0 0 1px rgba(255, 255, 255, .1), 0 8px 24px rgba(0, 0, 0, .35);
+    backdrop-filter: blur(8px); color: rgba(236, 241, 250, .94);
+    font-size: 14px; line-height: 1.5; pointer-events: none;
+  }
+  .tip[hidden] { display: none; }
+  .tip-kind { font-size: 14px; font-weight: 600; letter-spacing: .04em; }
+  .tip-kind[data-layer="0"] { color: #a3bdff; }
+  .tip-kind[data-layer="1"] { color: #f1cd92; }
+  .tip-kind[data-layer="2"] { color: #7fe6d4; }
+  .tip-text { word-break: break-word; }
+
+  /* 顶部标题与视图工具条 */
+  .stage-top { position: absolute; top: 14px; left: 22px; right: 14px; z-index: 2;
+    display: flex; flex-wrap: wrap; align-items: flex-start; justify-content: space-between; gap: 8px 16px; pointer-events: none; }
+  .stage-head { min-width: 0; padding-top: 4px; pointer-events: none; }
+  .eyebrow { margin: 0; font-size: 14px; font-weight: 600; letter-spacing: .12em; color: rgba(170, 188, 220, .86); }
+  .title { margin: 2px 0 0; font-size: 22px; line-height: 1.3; font-weight: 600; color: #eef2f9; }
+  .sub { margin: 2px 0 0; font-size: 14px; color: rgba(206, 215, 232, .8); font-variant-numeric: tabular-nums; }
+  .controls { margin-left: auto; pointer-events: auto; display: flex; align-items: center; gap: 2px; padding: 3px;
+    border-radius: 10px; background: rgba(15, 19, 28, .72); box-shadow: inset 0 0 0 1px rgba(255, 255, 255, .08); backdrop-filter: blur(10px); }
+  .tool { display: grid; place-items: center; width: 44px; height: 44px; padding: 0; border: 0; border-radius: 8px;
+    background: transparent; color: rgba(224, 231, 244, .82); cursor: pointer; }
+  .tool:hover:not(:disabled) { background: rgba(255, 255, 255, .08); color: #fff; }
+  .tool:disabled { opacity: .38; cursor: default; }
+  .tool-sep { width: 1px; height: 22px; margin: 0 3px; background: rgba(255, 255, 255, .12); }
+
+  /* 左下图例 */
+  .legend { position: absolute; left: 22px; bottom: 16px; z-index: 2; display: flex; flex-wrap: wrap; align-items: center;
+    gap: 6px 16px; max-width: calc(100% - 44px); font-size: 14px; color: #d6deec; pointer-events: none; }
+  .legend span { display: inline-flex; align-items: center; gap: 7px; white-space: nowrap; }
+  .legend .legend-quiet { color: #c4cddd; white-space: normal; }
+  .g-dot { width: 7px; height: 7px; border-radius: 50%; background: #e4eaf7; box-shadow: 0 0 6px rgba(200, 215, 255, .7); }
+  .g-diamond { width: 7px; height: 7px; transform: rotate(45deg); box-shadow: inset 0 0 0 1.5px #e4eaf7; }
+  .g-link { width: 18px; height: 1.5px; border-radius: 1px; background: linear-gradient(90deg, #efc683, #8aaeff); }
+
+  /* 中央状态卡（加载 / 错误 / 空库） */
+  .overlay { position: absolute; inset: 0; z-index: 3; display: grid; place-items: center; padding: 24px; pointer-events: none; }
+  .overlay[hidden] { display: none; }
+  .overlay .status-card {
+    pointer-events: auto; max-width: 380px; padding: 22px 26px; border-radius: 12px;
+    background: rgba(11, 14, 21, .78); box-shadow: inset 0 0 0 1px rgba(255, 255, 255, .1), 0 16px 40px rgba(0, 0, 0, .35);
+    backdrop-filter: blur(12px); color: #e9eef7; text-align: center;
+  }
+  .status-card .status-title { margin: 6px 0 0; font-size: 15px; font-weight: 600; }
+  .status-card .status-body { margin: 6px 0 0; font-size: 14px; line-height: 1.65; color: rgba(214, 222, 238, .72); }
+  .status-card .status-cmd { margin: 10px 0 0; padding: 8px 10px; border-radius: 8px; background: rgba(255,255,255,.05);
+    font: 12px/1.6 ui-monospace, Consolas, monospace; color: #a9c0d8; text-align: left; word-break: break-all; }
+  .status-icon { color: #f0c987; display: inline-flex; }
+  .overlay .spinner { color: #a9c0ff; }
+  .spinner { display: inline-block; width: 18px; height: 18px; border-radius: 50%;
+    border: 2px solid rgba(169, 192, 255, .22); border-top-color: currentColor; animation: spin .9s linear infinite; }
+  .spinner-sm { width: 14px; height: 14px; flex: none; }
+  @keyframes spin { to { transform: rotate(360deg); } }
+
+  /* ---------- 右侧管理抽屉（深色 instrument 风格） ---------- */
+  .inspector {
+    position: absolute; z-index: 5; top: 12px; right: 12px; bottom: 134px;
+    width: 76px; min-height: 0; display: flex; flex-direction: row; overflow: hidden;
+    border: 1px solid #354d59; border-radius: 16px;
+    background: linear-gradient(155deg, #101b25, #090f16 65%);
+    box-shadow: 0 18px 70px rgba(0, 0, 0, .3);
+    transition: width .18s ease;
+  }
+  .drawer-main { display: flex; flex: 1 1 auto; min-width: 0; min-height: 0; flex-direction: column; background: rgba(8, 15, 22, .65); }
+  .drawer-main[hidden] { display: none; }
+  .insp-head { display: flex; flex-direction: column; gap: 10px; padding: 14px 14px 0; }
+  .drawer-title { display: flex; align-items: center; justify-content: space-between; padding: 4px 0 7px; }
+  .drawer-title span { font-size: 10px; font-weight: 700; letter-spacing: .16em; color: #98c4cb; }
+  .drawer-title h2 { margin: 2px 0 0; font-size: 20px; letter-spacing: .03em; }
+  .workbench-toggle { padding: 6px 9px; border: 1px solid #38525a; border-radius: 3px; background: transparent; color: #c3d9dc; font-size: 12px; cursor: pointer; }
+  .workbench-toggle:hover { border-color: #8fb9bd; color: #fff; }
+  .search { display: flex; align-items: center; gap: 8px; height: 44px; padding: 0 4px 0 12px;
+    border: 1px solid var(--line); border-radius: 8px; background: var(--surface); color: var(--fg3); }
+  .search:focus-within { border-color: var(--fg3); box-shadow: 0 0 0 2px rgba(173, 190, 199, .28); }
+  .search-input { flex: 1 1 auto; min-width: 0; height: calc(100% + 2px); margin: -1px 0; padding: 0; border: 0; outline: none;
+    background: transparent; color: var(--fg); font-size: 14px; }
+  .search-input::placeholder { color: var(--fg3); opacity: 1; }
+  .search-input::-webkit-search-cancel-button { display: none; }
+  .insp-body { flex: 1 1 auto; min-height: 0; overflow: auto; padding: 12px 14px 24px; scrollbar-gutter: stable; }
+  .drawer-footer { display: flex; gap: 8px; padding: 10px 14px; border-top: 1px solid var(--line); }
+  .drawer-footer .btn { flex: 1; justify-content: center; }
+
+  .drawer-nav { display: flex; flex: 0 0 76px; flex-direction: column; gap: 6px; padding: 18px 8px;
+    border-left: 1px solid var(--line); background: #0b151e; }
+  .nav-item { min-height: 44px; padding: 6px 3px; border: 0; border-radius: 8px; background: transparent;
+    color: var(--fg2); font-size: 13px; cursor: pointer; }
+  .nav-item:hover { background: var(--hover); }
+  .nav-item[aria-current="page"] { color: #b3e9e8; background: #1a3943; box-shadow: inset 2px 0 #75d0d1; font-weight: 600; }
+  .nav-item .nav-count { display: block; margin-top: 1px; font: 500 11px/1.2 ui-monospace, Consolas, monospace; color: var(--fg3); }
+  .nav-item[aria-current="page"] .nav-count { color: #8ed3d2; }
+
+  /* 列表行（44px 最小触控，左 2px tier 色条） */
+  .list { display: flex; flex-direction: column; gap: 2px; margin: 0; padding: 0; list-style: none; }
+  .row { display: flex; flex-direction: column; gap: 3px; width: 100%; min-height: 44px; padding: 10px 10px;
+    border: 0; border-radius: 8px; background: transparent; text-align: left; cursor: pointer; }
+  .row:hover { background: var(--hover); }
+  .row[aria-current="true"] { background: var(--hover); box-shadow: inset 2px 0 0 var(--fg2); }
+  .row[data-tier="hot"]  { box-shadow: inset 2px 0 0 #75dfd0; }
+  .row[data-tier="warm"] { box-shadow: inset 2px 0 0 #efc683; }
+  .row[data-tier="cold"] { box-shadow: inset 2px 0 0 #5f7185; }
+  .row[data-tier="hot"][aria-current="true"]  { box-shadow: inset 2px 0 0 #75dfd0, inset 0 0 0 999px rgba(117,223,208,.06); }
+  .row[data-tier="warm"][aria-current="true"] { box-shadow: inset 2px 0 0 #efc683, inset 0 0 0 999px rgba(239,198,131,.06); }
+  .row[data-tier="cold"][aria-current="true"] { box-shadow: inset 2px 0 0 #5f7185, inset 0 0 0 999px rgba(143,152,170,.05); }
+  .row-lead { display: flex; align-items: center; gap: 8px; min-width: 0; }
+  .row-text { display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2; overflow: hidden;
+    font-size: 14px; line-height: 1.5; word-break: break-word; color: var(--fg); }
+  .row-text-1 { -webkit-line-clamp: 1; color: var(--fg2); }
+  .row-meta { display: flex; align-items: center; flex-wrap: wrap; gap: 6px; font-size: 13px; color: var(--fg3); font-variant-numeric: tabular-nums; }
+  .badge { display: inline-flex; align-items: center; height: 22px; padding: 0 7px; border-radius: 5px;
+    background: rgba(237, 245, 247, .07); color: var(--fg2); font-size: 12px; font-weight: 500; white-space: nowrap; }
+  .badge-muted { background: transparent; box-shadow: inset 0 0 0 1px var(--line); color: var(--fg3); }
+  .badge[data-tier="hot"]  { color: #8ee9da; background: rgba(117, 223, 208, .1); }
+  .badge[data-tier="warm"] { color: #f2cf97; background: rgba(239, 198, 131, .1); }
+  .badge[data-tier="cold"] { color: #a9b6c6; background: rgba(143, 152, 170, .12); }
+  .kw { color: #e8c98e; opacity: .85; }
+  .mark { padding: 0 1px; border-radius: 2px; background: rgba(239, 198, 131, .45); color: inherit; }
+  .result-count { margin: 0 0 6px; font-size: 13px; color: var(--fg3); }
+  .empty-line { margin: 6px 0; font-size: 14px; color: var(--fg3); }
+
+  /* 人物行（头像 + 名称） */
+  .avatar { display: grid; place-items: center; flex: none; width: 28px; height: 28px; border-radius: 50%;
+    background: rgba(168, 194, 255, .15); color: var(--sem); font-size: 14px; font-weight: 600; }
+
+  /* 详情视图 */
+  .detail-head { display: flex; align-items: center; gap: 8px; margin: -4px 0 12px; min-width: 0; }
+  .chip { display: inline-flex; align-items: center; gap: 6px; font-size: 14px; font-weight: 600; color: var(--lc); white-space: nowrap; }
+  .chip .dot { width: 6px; height: 6px; border-radius: 50%; background: var(--lc); }
+  .kind-label { font-size: 14px; color: var(--fg2); white-space: nowrap; }
+  .spacer { flex: 1 1 auto; }
+  .icon-btn { display: grid; place-items: center; flex: none; width: 44px; height: 44px; padding: 0; border: 0;
+    border-radius: 8px; background: transparent; color: var(--fg2); cursor: pointer; }
+  .icon-btn:hover { background: var(--hover); color: var(--fg); }
+  .content { margin: 0 0 12px; padding: 12px 14px; border: 1px solid var(--line-soft); border-radius: 10px;
+    background: rgba(237, 245, 247, .035); font-size: 15px; line-height: 1.65; white-space: pre-wrap; word-break: break-word; }
+  .meta { display: grid; grid-template-columns: auto minmax(0, 1fr); gap: 6px 16px; margin: 0 0 18px; font-size: 14px; }
+  .meta > div { display: contents; }
+  .meta dt { color: var(--fg3); }
+  .meta dd { margin: 0; color: var(--fg2); font-variant-numeric: tabular-nums; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .mono { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; font-size: 13px; }
+  .section-h { margin: 0 0 8px; font-size: 14px; font-weight: 600; color: var(--fg3); letter-spacing: .02em; }
+  .section + .section { margin-top: 18px; }
+
+  /* 空状态块 */
+  .status { display: flex; flex-direction: column; align-items: center; gap: 6px; padding: 28px 12px; text-align: center; }
+  .status .status-title { margin: 0; font-size: 15px; font-weight: 600; }
+  .status .status-body { margin: 0; font-size: 14px; line-height: 1.6; color: var(--fg2); }
+
+  .btn { display: inline-flex; align-items: center; justify-content: center; gap: 6px; min-height: 44px; padding: 0 16px;
+    border: 1px solid var(--line); border-radius: 8px; background: var(--surface);
+    font-size: 14px; font-weight: 500; white-space: nowrap; cursor: pointer; }
+  .btn:hover:not(:disabled) { background: var(--hover); }
+  .btn:disabled { opacity: .45; cursor: default; }
+  .btn-primary { border-color: transparent; background: #3b8791; color: #fff; }
+  .btn-primary:hover:not(:disabled) { background: #4c9ca5; }
+
+  /* ---------- 底部状态仪表条（真实快照数据） ---------- */
+  .console {
+    position: absolute; z-index: 6; left: 0; right: 0; bottom: 0; height: 122px;
+    display: grid; grid-template-columns: 1.15fr 1fr 1fr 1fr 1.8fr 1fr;
+    overflow-x: auto; overflow-y: hidden; color-scheme: dark;
+    color: #e6eef3; background: #080b0e; border-top: 1px solid #33414a;
+    box-shadow: 0 -14px 36px rgba(0, 0, 0, .3); font-variant-numeric: tabular-nums;
+  }
+  .console-cell { position: relative; display: flex; flex-direction: column; align-items: flex-start; justify-content: center;
+    min-width: 124px; gap: 4px; padding: 13px 18px; border: 0; border-right: 1px solid #27323a; background: transparent; text-align: left; }
+  .console-cell::before { content: ""; position: absolute; top: 0; left: 18px; width: 25px; height: 2px; background: #6d949a; }
+  .console-intro { min-width: 150px; }
+  .console-intro strong { font-size: 17px; letter-spacing: .1em; font-weight: 600; }
+  .console-kicker, .console-label small { color: #a6b8bd; font: 600 10px/1.4 ui-monospace, Consolas, monospace; letter-spacing: .08em; }
+  .console-label { color: #d7e3e6; font-size: 13px; font-weight: 600; white-space: nowrap; }
+  .console-label small { margin-left: 5px; font-size: 9px; }
+  .console-number { color: #f2f6f6; font: 500 27px/1.1 ui-monospace, Consolas, monospace; letter-spacing: -.04em; }
+  .console-cyan { color: #8ddfdb; }
+  .console-amber { color: #f0c184; }
+  .console-blue { color: #a8c2ff; }
+  .console-muted { color: #a9bac0; font-size: 12px; white-space: nowrap; }
+  .console-layers { min-width: 215px; }
+  .console-layer-list { display: grid; grid-template-columns: repeat(3, auto); gap: 12px; width: 100%; }
+  .console-layer-list span { display: grid; grid-template-columns: 6px auto; align-items: center; gap: 3px 5px;
+    color: #c5d1d5; font-size: 11px; white-space: nowrap; }
+  .console-layer-list i { width: 5px; height: 5px; border-radius: 50%; background: var(--lc); }
+  .console-layer-list b { grid-column: 2; color: #eff7f8; font: 500 19px/1.2 ui-monospace, Consolas, monospace; }
+
+  /* 抽屉展开后 stage 让位（与 xujie 0.8 同一比例） */
+  @media (min-width: 761px) {
+    .shell.expanded .stage { right: min(520px, 50%); }
+    .shell.expanded .inspector { width: min(496px, calc(50% - 24px)); }
+    .shell.expanded .drawer-nav { border-left: 1px solid var(--line); }
+  }
+  @media (max-width: 760px) {
+    .stage { inset: 0 0 calc(50% + 61px) 0; }
+    .inspector { top: auto; left: 8px; right: 8px; bottom: 130px; width: auto; height: min(calc(48% - 61px), 460px); }
+    .inspector:has(.drawer-main[hidden]) { height: auto; }
+    .console { grid-template-columns: repeat(6, max-content); }
+    .legend { left: 16px; bottom: 12px; max-width: calc(100% - 32px); gap: 4px 12px; }
+    .stage-top { top: 10px; left: 16px; right: 10px; }
+    .title { font-size: 20px; }
+  }
+  @media (prefers-reduced-motion: reduce) {
+    .spinner { animation: none; }
+    .inspector { transition: none; }
+  }
+</style>
+</head>
+<body>
+<div class="shell" id="shell">
+
+  <!-- 三维记忆场 -->
+  <section class="stage" aria-label="三层神经记忆图">
+    <div class="field" id="fieldWrap">
+      <canvas class="canvas" id="cv" tabindex="0"
+        aria-label="三层记忆神经图：拖动旋转，滚轮缩放，方向键也可旋转，点击节点查看详情。"></canvas>
+      <div class="tip" id="tip" hidden aria-hidden="true"></div>
+    </div>
+    <div class="stage-top">
+      <header class="stage-head">
+        <p class="eyebrow">HIPPOCAMPUS · MEMORY FIELD</p>
+        <h1 class="title">记忆看板</h1>
+        <p class="sub" id="sub"> </p>
+      </header>
+      <div class="controls" role="toolbar" aria-label="视图">
+        <button type="button" class="tool" id="btnRotate" aria-label="暂停自转" aria-pressed="true"></button>
+        <span class="tool-sep" aria-hidden="true"></span>
+        <button type="button" class="tool" id="btnZoomOut" aria-label="缩小"></button>
+        <button type="button" class="tool" id="btnZoomIn" aria-label="放大"></button>
+        <button type="button" class="tool" id="btnReset" aria-label="重置视角"></button>
+        <span class="tool-sep" aria-hidden="true"></span>
+        <button type="button" class="tool" id="btnRefresh" aria-label="刷新数据"></button>
+      </div>
+    </div>
+    <div class="legend" id="legend">
+      <span><i class="g-dot"></i>事件 · 原话</span>
+      <span><i class="g-diamond"></i>事实 · 人物 · 派生</span>
+      <span><i class="g-link"></i>记忆关联</span>
+      <span class="legend-quiet">圆环表示邻近节点聚合，点击放大；纤维与脉冲不代表记录</span>
+    </div>
+    <div class="overlay" id="overlay" hidden></div>
+  </section>
+
+  <!-- 右侧管理抽屉 -->
+  <aside class="inspector" aria-label="记忆管理">
+    <div class="drawer-main" id="drawerMain" hidden>
+      <div class="insp-head">
+        <div class="drawer-title">
+          <div><span>MEMORY BOARD</span><h2 id="drawerTitle">事件</h2></div>
+          <button type="button" class="workbench-toggle" id="btnCollapse">收起</button>
+        </div>
+        <div class="search" role="search">
+          <span id="searchIcon"></span>
+          <input class="search-input" id="q" type="search" placeholder="搜索当前视图…" aria-label="搜索记忆" />
+          <span class="spinner spinner-sm" id="searchSpin" hidden aria-hidden="true"></span>
+          <button type="button" class="icon-btn" id="btnClearQ" aria-label="清除搜索" hidden style="width:36px;height:36px"></button>
+        </div>
+      </div>
+      <div class="insp-body" id="inspBody"></div>
+      <div class="drawer-footer">
+        <button type="button" class="btn" id="btnFocusSearch">搜索记忆</button>
+        <button type="button" class="btn" id="btnGraph">回到全图</button>
+      </div>
+    </div>
+    <nav class="drawer-nav" aria-label="记忆管理导航">
+      <button type="button" class="nav-item" data-tab="events">事件<span class="nav-count" data-count="events"></span></button>
+      <button type="button" class="nav-item" data-tab="facts">事实<span class="nav-count" data-count="facts"></span></button>
+      <button type="button" class="nav-item" data-tab="entities">人物<span class="nav-count" data-count="entities"></span></button>
+    </nav>
+  </aside>
+
+  <!-- 底部状态仪表条 -->
+  <section class="console" aria-label="记忆状态总览" id="console"></section>
+</div>
+
+<script>
+(() => {
+"use strict";
+
+/* ======================================================================
+   三维引擎：1:1 移植 dsh-plugin-xujie-memory 0.8 的 neural/engine.ts
+   （morphology.ts 三层形态 + 渲染引擎），仅去掉 TypeScript 类型标注。
+   结构装饰（纤维/粒子/脉冲）不代表记录；真实记忆节点与关联由快照驱动。
+   ====================================================================== */
+
+const TAU = Math.PI * 2;
+/** 语义：冷蓝。情节：淡琥珀。工作：青。主干：银。 */
+const LAYER_RGB = [[132, 168, 255], [238, 196, 128], [96, 220, 200], [206, 216, 236]];
+const BANDS = 6, LIGHT_CLASSES = 3, WIDTH_CLASSES = 4, GROUPS = 4, EDGE_SAMPLES = 20;
+
+// ---------- morphology.ts：三层立体神经形态 ----------
+const STRATA = [
+  { y: -185, radius: 265 }, { y: 0, radius: 300 }, { y: 185, radius: 265 },
+];
+const SOMA_RADIUS = 40;
+
+function buildMorphology(seed = 0x7a11e) {
+  let state = seed >>> 0;
+  const random = () => {
+    state = (state + 0x6d2b79f5) >>> 0;
+    let t = state;
+    t = Math.imul(t ^ (t >>> 15), t | 1);
+    t ^= t + Math.imul(t ^ (t >>> 7), t | 61);
+    return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+  };
+  const xs = [], ys = [], zs = [], radii = [], parents = [], groups = [], kinds = [], as = [], bs = [];
+  const sites = [[], [], []];
+  const add = (x, y, z, radius, parent, group) => {
+    const i = xs.length;
+    xs.push(x); ys.push(y); zs.push(z); radii.push(radius); parents.push(parent); groups.push(group); kinds.push(0);
+    if (parent >= 0) { as.push(parent); bs.push(i); }
+    return i;
+  };
+  // 层内从局部节点生长分支，只有少数主干跨层，避免所有纤维汇聚成亮团。
+  const siteCount = 720;
+  for (let layer = 0; layer < STRATA.length; layer++) {
+    const stratum = STRATA[layer], local = [];
+    for (let i = 0; i < siteCount; i++) {
+      const angle = random() * TAU, radius = Math.sqrt(random()) * stratum.radius;
+      const x = Math.cos(angle) * radius, y = stratum.y + (random() - 0.5) * 28, z = Math.sin(angle) * radius;
+      let parent = -1, nearest = 65 * 65;
+      if (i < 24 && layer > 0) {
+        const previous = sites[layer - 1];
+        parent = previous[Math.floor(i * previous.length / 24)];
+      } else if (i % 3 !== 0) {
+        for (const candidate of local) {
+          const d = (xs[candidate] - x) ** 2 + (ys[candidate] - y) ** 2 + (zs[candidate] - z) ** 2;
+          if (d < nearest) { nearest = d; parent = candidate; }
+        }
+      }
+      if (parent >= 0) {
+        const bend = (random() - 0.5) * 18;
+        parent = add((xs[parent] + x) / 2 + bend, (ys[parent] + y) / 2 + bend * .3,
+          (zs[parent] + z) / 2 - bend, 0.28, parent, layer);
+      }
+      const point = add(x, y, z, 0.38, parent, layer);
+      local.push(point);
+      sites[layer].push(point);
+    }
+  }
+  const dust = STRATA.map(stratum => {
+    const points = new Float32Array(240 * 4);
+    for (let i = 0; i < points.length; i += 4) {
+      const angle = random() * TAU, radius = Math.sqrt(random()) * stratum.radius;
+      points[i] = Math.cos(angle) * radius; points[i + 1] = stratum.y + (random() - 0.5) * 30;
+      points[i + 2] = Math.sin(angle) * radius; points[i + 3] = random() * TAU;
+    }
+    return points;
+  });
+  return {
+    count: xs.length, x: Float32Array.from(xs), y: Float32Array.from(ys), z: Float32Array.from(zs),
+    r: Float32Array.from(radii), parent: Int32Array.from(parents), group: Uint8Array.from(groups),
+    kind: Uint8Array.from(kinds),
+    segA: Int32Array.from(as), segB: Int32Array.from(bs), segCount: as.length,
+    sites: sites.map(s => Int32Array.from(s)), dust,
+  };
+}
+
+// ---------- 内核光点云：仅表现空间深度，真实记忆由快照单独绘制 ----------
+function makeCoreCloud() {
+  let seed = 0x1a473;
+  const random = () => {
+    seed = (Math.imul(seed, 1664525) + 1013904223) >>> 0;
+    return seed / 4294967296;
+  };
+  const points = [];
+  const edges = [];
+  const count = 200;
+  for (let layer = 0; layer < 3; layer++) {
+    const start = points.length, stratum = STRATA[layer];
+    for (let n = 0; n < count; n++) {
+      const angle = random() * TAU, radius = Math.sqrt(random()) * stratum.radius * 0.9;
+      const point = { x: Math.cos(angle) * radius, y: stratum.y + (random() - 0.5) * 42, z: Math.sin(angle) * radius, color: layer };
+      const nearest = [];
+      for (let i = start; i < points.length; i++) {
+        const p = points[i], distance = (p.x - point.x) ** 2 + (p.y - point.y) ** 2 + (p.z - point.z) ** 2;
+        if (distance < 70 ** 2) nearest.push({ index: i, distance });
+      }
+      nearest.sort((a, b) => a.distance - b.distance);
+      for (const match of nearest.slice(0, 3)) edges.push([points.length, match.index]);
+      if (layer > 0 && n % 5 === 0) edges.push([points.length, (layer - 1) * count + n]);
+      points.push(point);
+    }
+  }
+  return { points, edges };
+}
+const CORE_CLOUD = makeCoreCloud();
+
+function sprite(rgb, core) {
+  const c = document.createElement("canvas");
+  c.width = c.height = 64;
+  const g = c.getContext("2d");
+  const grd = g.createRadialGradient(32, 32, 0, 32, 32, 32);
+  grd.addColorStop(0, `rgba(255,255,255,${core})`);
+  grd.addColorStop(0.12, `rgba(${rgb[0]},${rgb[1]},${rgb[2]},0.9)`);
+  grd.addColorStop(0.35, `rgba(${rgb[0]},${rgb[1]},${rgb[2]},0.28)`);
+  grd.addColorStop(1, `rgba(${rgb[0]},${rgb[1]},${rgb[2]},0)`);
+  g.fillStyle = grd;
+  g.fillRect(0, 0, 64, 64);
+  return c;
+}
+
+/* Canvas 渲染器：每个顶点经 yaw/pitch 旋转 + 透视投影，
+   按深度分带回画，soma 遮挡其后的纤维与记录。 */
+class NeuralEngine {
+  constructor(canvas, tooltip, opts) {
+    this.canvas = canvas;
+    this.tooltip = tooltip;
+    this.opts = opts;
+    const ctx = canvas.getContext("2d", { alpha: true });
+    if (!ctx) throw new Error("canvas_2d_unavailable");
+    this.ctx = ctx;
+    this.m = buildMorphology();
+    const n = this.m.count;
+    this.sx = new Float32Array(n); this.sy = new Float32Array(n); this.sz = new Float32Array(n); this.sp = new Float32Array(n);
+    this.light = new Float32Array(n);
+    this.segWidth = new Uint8Array(this.m.segCount);
+    for (let i = 0; i < this.m.segCount; i++) {
+      const b = this.m.segB[i], rad = this.m.r[b];
+      this.segWidth[i] = this.m.kind[b] === 1 ? 3 : rad >= 2.6 ? 0 : rad >= 1.3 ? 1 : rad >= 0.6 ? 2 : 3;
+    }
+    const bucketCount = GROUPS * BANDS * WIDTH_CLASSES * LIGHT_CLASSES;
+    this.buckets = Array.from({ length: bucketCount }, () => new Int32Array(this.m.segCount));
+    this.bucketLen = new Int32Array(bucketCount);
+    this.sprites = LAYER_RGB.map(rgb => sprite(rgb, 0.95));
+    this.whiteSprite = sprite([235, 242, 255], 1);
+
+    this.nodes = [];
+    this.nodeIndex = new Map();
+    this.nodeVertex = new Int32Array(0);
+    this.nx = new Float32Array(0); this.ny = new Float32Array(0); this.nz = new Float32Array(0);
+    this.nsx = new Float32Array(0); this.nsy = new Float32Array(0); this.nsz = new Float32Array(0);
+    this.nsp = new Float32Array(0);
+    this.flash = new Float32Array(0);
+    this.clusters = new Uint16Array(0);
+    this.order = [];
+    this.edges = [];
+    this.edgePts = new Float32Array(0);
+    this.edgeScr = new Float32Array(0);
+    this.neighbours = new Set();
+    this.pulses = [];
+    this.edgePulses = [];
+    this.pathCache = new Map();
+
+    this.width = 1; this.height = 1; this.dpr = 1;
+    this.yaw = 0.55; this.pitch = 0.34;
+    this.yawVel = 0; this.pitchVel = 0;
+    this.zoom = 1; this.panX = 0; this.panY = 0;
+    this.yawTarget = null; this.focusTarget = null;
+    this.returning = false;
+    this.autoRotate = !opts.reducedMotion;
+    this.time = 0; this.ringPhase = 0; this.last = 0;
+    this.raf = 0; this.running = false; this.dirty = true; this.visible = true;
+    this.selected = -1; this.hover = -1;
+    this.fading = -1; this.fadeUntil = 0;
+    this.highlight = null; this.dimmed = false;
+    this.pointers = new Map();
+    this.press = null;
+    this.pinch = 0;
+    this.disposers = [];
+    this.somaScreen = { x: 0, y: 0, r: 0, z: 0 };
+    this.fBase = 1;
+    this.captionBoxes = [];
+
+    this.bindInput();
+    this.seedPulses();
+  }
+
+  // ---------- public API ----------
+
+  setOptions(opts) {
+    const motionChanged = opts.reducedMotion !== this.opts.reducedMotion;
+    this.opts = opts;
+    if (motionChanged) {
+      this.autoRotate = !opts.reducedMotion; this.pulses = []; this.edgePulses = [];
+      if (opts.reducedMotion && this.returning) this.resetView();
+      if (!opts.reducedMotion) this.seedPulses();
+    }
+    this.invalidate();
+  }
+
+  setData(nodes, edges) {
+    const selectedId = this.selected >= 0 ? (this.nodes[this.selected] || {}).id : undefined;
+    const hl = this.highlight ? [...this.highlight].map(i => (this.nodes[i] || {}).id).filter(Boolean) : null;
+    this.nodes = nodes;
+    this.hover = -1; this.fading = -1; this.fadeUntil = 0;
+    this.nodeIndex = new Map(nodes.map((nd, i) => [nd.id, i]));
+    const count = nodes.length;
+    this.nodeVertex = new Int32Array(count);
+    this.nx = new Float32Array(count); this.ny = new Float32Array(count); this.nz = new Float32Array(count);
+    this.nsx = new Float32Array(count); this.nsy = new Float32Array(count); this.nsz = new Float32Array(count);
+    this.nsp = new Float32Array(count);
+    this.flash = new Float32Array(count);
+    this.clusters = new Uint16Array(count);
+    this.placeNodes();
+    this.edges = [];
+    for (const e of edges) {
+      const s = this.nodeIndex.get(e.source), t = this.nodeIndex.get(e.target);
+      if (s === undefined || t === undefined || s === t) continue;
+      this.edges.push({ s, t, layer: nodes[t].layer });
+    }
+    this.buildEdgeCurves();
+    this.selected = selectedId !== undefined ? (this.nodeIndex.get(selectedId) ?? -1) : -1;
+    this.highlight = hl ? new Set(hl.map(id => this.nodeIndex.get(id)).filter(v => v !== undefined)) : null;
+    this.refreshNeighbours();
+    this.pathCache.clear();
+    this.pulses = []; this.edgePulses = [];
+    if (!this.opts.reducedMotion) this.seedPulses();
+    this.invalidate();
+  }
+
+  setSelected(id, focus = true) {
+    const idx = id === null ? -1 : (this.nodeIndex.get(id) ?? -1);
+    this.selected = idx;
+    this.hideTooltip();
+    this.refreshNeighbours();
+    if (idx >= 0 && focus) {
+      this.returning = false;
+      const target = Math.atan2(-this.nx[idx], -this.nz[idx]);
+      this.autoRotate = false;
+      this.yawVel = this.pitchVel = 0;
+      this.focusTarget = idx;
+      if (this.opts.reducedMotion) { this.yaw = target; this.yawTarget = null; } else this.yawTarget = target;
+      this.flash[idx] = 1;
+    } else if (idx < 0) this.focusTarget = null;
+    this.invalidate();
+  }
+
+  /** 强调搜索命中；null 清除。返回场中命中数。 */
+  setHighlight(ids) {
+    if (!ids) { this.highlight = null; this.invalidate(); return 0; }
+    const set = new Set();
+    for (const id of ids) {
+      const i = this.nodeIndex.get(id);
+      if (i !== undefined) set.add(i);
+    }
+    this.highlight = set;
+    this.invalidate();
+    return set.size;
+  }
+
+  setDimmed(dimmed) { this.dimmed = dimmed; this.invalidate(); }
+
+  fadeNode(id) {
+    const index = this.nodeIndex.get(id);
+    if (index === undefined || this.opts.reducedMotion) return Promise.resolve();
+    this.fading = index;
+    this.fadeUntil = performance.now() + 300;
+    this.invalidate();
+    return new Promise(resolve => setTimeout(() => { this.fading = -1; this.invalidate(); resolve(); }, 300));
+  }
+
+  setAutoRotate(on) { this.autoRotate = on && !this.opts.reducedMotion; this.invalidate(); }
+  get isAutoRotating() { return this.autoRotate; }
+  zoomBy(k) { this.zoomAt(this.width / 2, this.height / 2, k); }
+
+  resetView() {
+    this.yawTarget = null; this.focusTarget = null; this.yawVel = this.pitchVel = 0;
+    if (this.opts.reducedMotion) {
+      this.yaw = 0.55; this.pitch = 0.34; this.zoom = 1; this.panX = this.panY = 0;
+      this.returning = false;
+    } else this.returning = true;
+    this.invalidate();
+  }
+
+  resize(width, height) {
+    this.dpr = Math.min(2, window.devicePixelRatio || 1);
+    this.width = Math.max(1, width); this.height = Math.max(1, height);
+    this.canvas.width = Math.round(this.width * this.dpr);
+    this.canvas.height = Math.round(this.height * this.dpr);
+    this.fBase = Math.min(this.width / 1060, this.height / 900);
+    this.invalidate();
+  }
+
+  start() {
+    if (this.running) return;
+    this.running = true;
+    this.last = performance.now();
+    const loop = (now) => {
+      if (!this.running) return;
+      this.raf = requestAnimationFrame(loop);
+      const dt = Math.min(0.05, (now - this.last) / 1000);
+      this.last = now;
+      if (!this.visible || document.hidden) return;
+      const animating = !this.opts.reducedMotion;
+      if (animating || this.dirty || this.press || Math.abs(this.yawVel) > 1e-4 || Math.abs(this.pitchVel) > 1e-4 || this.yawTarget !== null) {
+        this.step(dt);
+        this.render();
+        this.dirty = false;
+      }
+    };
+    this.raf = requestAnimationFrame(loop);
+  }
+
+  setVisible(v) { this.visible = v; if (v) this.invalidate(); }
+
+  dispose() {
+    this.running = false;
+    cancelAnimationFrame(this.raf);
+    for (const d of this.disposers) d();
+    this.disposers.length = 0;
+  }
+
+  /** QA 钩子：节点的投影屏幕坐标。 */
+  screenOf(id) {
+    const i = this.nodeIndex.get(id);
+    return i === undefined ? null : { x: this.nsx[i], y: this.nsy[i] };
+  }
+
+  cameraState() { return { yaw: this.yaw, pitch: this.pitch, zoom: this.zoom }; }
+
+  // ---------- 数据布置 ----------
+
+  placeNodes() {
+    const used = new Set();
+    const placed = [];
+    const hash = (s) => { let h = 2166136261; for (let i = 0; i < s.length; i++) { h ^= s.charCodeAt(i); h = Math.imul(h, 16777619); } return h >>> 0; };
+    const minGap = 13;
+    this.nodes.forEach((node, i) => {
+      const sites = this.m.sites[node.layer];
+      let h = hash(node.id), chosen = -1;
+      for (let attempt = 0; attempt < sites.length && attempt < 900; attempt++) {
+        const v = sites[(h + attempt * 2654435761) % sites.length >>> 0];
+        if (used.has(v)) continue;
+        const px = this.m.x[v], py = this.m.y[v], pz = this.m.z[v];
+        const gap = attempt < 400 ? minGap : minGap * 0.4;
+        if (placed.some(p => (p[0] - px) ** 2 + (p[1] - py) ** 2 + (p[2] - pz) ** 2 < gap * gap)) continue;
+        chosen = v;
+        break;
+      }
+      if (chosen < 0) chosen = sites[h % Math.max(1, sites.length)] ?? 0;
+      used.add(chosen);
+      // bouton 贴在树突旁，沿一个稳定方向偏移。
+      const a = ((h >>> 8) % 628) / 100, b = ((h >>> 3) % 314) / 100 - 1.57;
+      const off = 3.5 + this.m.r[chosen];
+      this.nodeVertex[i] = chosen;
+      this.nx[i] = this.m.x[chosen] + Math.cos(a) * Math.cos(b) * off;
+      this.ny[i] = this.m.y[chosen] + Math.sin(b) * off;
+      this.nz[i] = this.m.z[chosen] + Math.sin(a) * Math.cos(b) * off;
+      placed.push([this.nx[i], this.ny[i], this.nz[i]]);
+    });
+  }
+
+  buildEdgeCurves() {
+    const e = this.edges.length;
+    this.edgePts = new Float32Array(e * EDGE_SAMPLES * 3);
+    this.edgeScr = new Float32Array(e * EDGE_SAMPLES * 3);
+    this.edges.forEach((edge, k) => {
+      const ax = this.nx[edge.s], ay = this.ny[edge.s], az = this.nz[edge.s];
+      const bx = this.nx[edge.t], by = this.ny[edge.t], bz = this.nz[edge.t];
+      // 弧线向神经轴弯曲，跨层关联读起来像穿过内核。
+      const cx = (ax + bx) * 0.28, cy = (ay + by) * 0.5, cz = (az + bz) * 0.28;
+      for (let j = 0; j < EDGE_SAMPLES; j++) {
+        const t = j / (EDGE_SAMPLES - 1), u = 1 - t;
+        const o = (k * EDGE_SAMPLES + j) * 3;
+        this.edgePts[o] = u * u * ax + 2 * u * t * cx + t * t * bx;
+        this.edgePts[o + 1] = u * u * ay + 2 * u * t * cy + t * t * by;
+        this.edgePts[o + 2] = u * u * az + 2 * u * t * cz + t * t * bz;
+      }
+    });
+  }
+
+  refreshNeighbours() {
+    this.neighbours = new Set();
+    const focus = this.hover >= 0 ? this.hover : this.selected;
+    if (focus < 0) return;
+    for (const e of this.edges) {
+      if (e.s === focus) this.neighbours.add(e.t);
+      if (e.t === focus) this.neighbours.add(e.s);
+    }
+  }
+
+  // ---------- 脉冲 ----------
+
+  pathTo(v) {
+    let cached = this.pathCache.get(v);
+    if (cached) return cached;
+    const list = [];
+    for (let c = v; c >= 0 && list.length < 400; c = this.m.parent[c]) list.push(c);
+    list.reverse();
+    const path = Int32Array.from(list);
+    const cum = new Float32Array(path.length);
+    // 信号从纤维起点出发，不凭空穿过中心。
+    let total = 0;
+    cum[0] = total;
+    for (let i = 1; i < path.length; i++) {
+      const a = path[i - 1], b = path[i];
+      total += Math.hypot(this.m.x[b] - this.m.x[a], this.m.y[b] - this.m.y[a], this.m.z[b] - this.m.z[a]);
+      cum[i] = total;
+    }
+    cached = { path, cum, total };
+    this.pathCache.set(v, cached);
+    return cached;
+  }
+
+  spawnPulse() {
+    const r = Math.random();
+    let v, node = -1;
+    if (this.nodes.length && r < 0.55) {
+      node = Math.floor(Math.random() * this.nodes.length);
+      v = this.nodeVertex[node];
+      if (this.m.parent[v] < 0) { node = -1; v = this.m.sites[1][3 * Math.floor(Math.random() * (this.m.sites[1].length / 3))]; }
+    } else {
+      const layer = 1 + Math.floor(Math.random() * 2);
+      const sites = this.m.sites[layer];
+      v = sites[3 * Math.floor(Math.random() * (sites.length / 3))] ?? 0;
+    }
+    const p = this.pathTo(v);
+    return { ...p, t: Math.random() * 0.15 * p.total, speed: 32 + Math.random() * 30, group: this.m.group[v], node };
+  }
+
+  seedPulses() {
+    const target = 4;
+    this.pulses = Array.from({ length: target }, () => { const p = this.spawnPulse(); p.t = Math.random() * p.total; return p; });
+    this.edgePulses = [];
+  }
+
+  // ---------- 输入 ----------
+
+  bindInput() {
+    const c = this.canvas;
+    const on = (el, type, fn, opt) => {
+      el.addEventListener(type, fn, opt);
+      this.disposers.push(() => el.removeEventListener(type, fn, opt));
+    };
+    const local = (e) => { const b = c.getBoundingClientRect(); return { x: e.clientX - b.left, y: e.clientY - b.top }; };
+    on(c, "pointerdown", e => {
+      c.setPointerCapture(e.pointerId);
+      const p = local(e);
+      this.pointers.set(e.pointerId, p);
+      if (this.pointers.size === 2) {
+        const [a, b] = [...this.pointers.values()];
+        this.pinch = Math.hypot(a.x - b.x, a.y - b.y);
+      }
+      this.press = { x: p.x, y: p.y, t: performance.now(), moved: false, button: e.button, shift: e.shiftKey };
+      this.yawTarget = null;
+      this.focusTarget = null;
+      this.returning = false;
+      this.yawVel = this.pitchVel = 0;
+    });
+    on(c, "pointermove", e => {
+      const p = local(e);
+      const prev = this.pointers.get(e.pointerId);
+      if (!prev) { this.updateHover(p.x, p.y); return; }
+      this.pointers.set(e.pointerId, p);
+      if (this.pointers.size === 2) {
+        const [a, b] = [...this.pointers.values()];
+        const d = Math.hypot(a.x - b.x, a.y - b.y);
+        if (this.pinch > 0) this.zoomAt((a.x + b.x) / 2, (a.y + b.y) / 2, d / this.pinch);
+        this.pinch = d;
+        if (this.press) this.press.moved = true;
+        return;
+      }
+      const dx = p.x - prev.x, dy = p.y - prev.y;
+      if (this.press && Math.hypot(p.x - this.press.x, p.y - this.press.y) > 4) this.press.moved = true;
+      if (this.press && (this.press.button === 1 || this.press.button === 2 || this.press.shift)) {
+        this.panX += dx; this.panY += dy;
+      } else {
+        this.yaw += dx * 0.0062;
+        this.pitch = Math.max(-1.25, Math.min(1.25, this.pitch + dy * 0.0055));
+        this.yawVel = dx * 0.0062 * 60;
+        this.pitchVel = dy * 0.0055 * 60;
+      }
+      this.hideTooltip();
+      this.invalidate();
+    });
+    const end = (e) => {
+      const press = this.press;
+      this.pointers.delete(e.pointerId);
+      if (this.pointers.size < 2) this.pinch = 0;
+      if (this.pointers.size === 0) this.press = null;
+      // pointercancel = 浏览器接管了手势：绝不当成点击。
+      if (e.type !== "pointercancel" && press && !press.moved && performance.now() - press.t < 600 && press.button === 0) {
+        const p = local(e);
+        const hit = this.pick(p.x, p.y);
+        if (hit >= 0 && this.clusters[hit] > 1 && this.zoom < 3) {
+          this.zoomAt(this.nsx[hit], this.nsy[hit], 1.7);
+          return;
+        }
+        this.opts.onSelect(hit >= 0 ? this.nodes[hit].id : null);
+      }
+      if (this.opts.reducedMotion) { this.yawVel = this.pitchVel = 0; }
+    };
+    on(c, "pointerup", end);
+    on(c, "pointercancel", end);
+    on(c, "pointerleave", () => { if (!this.press) { this.hover = -1; this.refreshNeighbours(); this.hideTooltip(); this.invalidate(); } });
+    on(c, "contextmenu", e => e.preventDefault());
+    on(c, "wheel", e => {
+      e.preventDefault();
+      const p = local(e);
+      this.zoomAt(p.x, p.y, Math.exp(-e.deltaY * (e.ctrlKey ? 0.01 : 0.0014)));
+    }, { passive: false });
+    on(c, "dblclick", () => this.resetView());
+    on(c, "keydown", e => {
+      const k = e.key;
+      if (k === "ArrowLeft") this.yaw -= 0.12;
+      else if (k === "ArrowRight") this.yaw += 0.12;
+      else if (k === "ArrowUp") this.pitch = Math.max(-1.25, this.pitch - 0.1);
+      else if (k === "ArrowDown") this.pitch = Math.min(1.25, this.pitch + 0.1);
+      else if (k === "+" || k === "=") this.zoomBy(1.15);
+      else if (k === "-" || k === "_") this.zoomBy(1 / 1.15);
+      else if (k === "0") this.resetView();
+      else return;
+      e.preventDefault();
+      this.yawTarget = null;
+      this.invalidate();
+    });
+  }
+
+  zoomAt(mx, my, k) {
+    // 手动缩放优先于自动聚焦或归位，避免刚缩放就被动画拉回。
+    this.returning = false;
+    this.focusTarget = null;
+    this.yawTarget = null;
+    const next = Math.max(0.55, Math.min(6, this.zoom * k));
+    const kk = next / this.zoom;
+    const cx = this.width / 2, cy = this.height / 2;
+    this.panX = mx - cx - (mx - cx - this.panX) * kk;
+    this.panY = my - cy - (my - cy - this.panY) * kk;
+    if (next <= 1.0001) { this.panX *= 0.85; this.panY *= 0.85; }
+    this.zoom = next;
+    this.invalidate();
+  }
+
+  pick(x, y) {
+    let best = -1, bestScore = Infinity;
+    for (let i = 0; i < this.nodes.length; i++) {
+      if (!this.clusters[i]) continue;
+      const d = Math.hypot(this.nsx[i] - x, this.nsy[i] - y);
+      const reach = Math.max(12, this.nodeRadius(i) + 8);
+      if (d > reach) continue;
+      const score = d + this.nsz[i] * 0.004;
+      if (score < bestScore) { bestScore = score; best = i; }
+    }
+    return best;
+  }
+
+  updateHover(x, y) {
+    const hit = this.pick(x, y);
+    if (hit !== this.hover) { this.hover = hit; this.refreshNeighbours(); this.invalidate(); }
+    this.canvas.style.cursor = hit >= 0 ? "pointer" : "grab";
+    if (hit < 0) { this.hideTooltip(); return; }
+    const node = this.nodes[hit];
+    const tip = this.tooltip;
+    const clusterSize = this.clusters[hit];
+    const tipId = `${node.id}:${clusterSize}`;
+    if (tip.dataset.id !== tipId) {
+      tip.dataset.id = tipId;
+      tip.replaceChildren();
+      const kind = document.createElement("span");
+      kind.className = "tip-kind";
+      kind.dataset.layer = String(node.layer);
+      kind.textContent = clusterSize > 1 ? `邻近的 ${clusterSize} 个节点 · 点击放大` : node.kindLabel;
+      const text = document.createElement("span");
+      text.className = "tip-text";
+      text.textContent = clusterSize > 1 ? "放大后查看各条记忆" : node.label.length > 90 ? node.label.slice(0, 90) + "…" : node.label;
+      tip.append(kind, text);
+    }
+    const tx = Math.min(this.width - 300, x + 14), ty = Math.max(8, y - 44);
+    tip.style.transform = `translate(${Math.max(8, tx)}px, ${ty}px)`;
+    tip.hidden = false;
+  }
+
+  hideTooltip() { this.tooltip.hidden = true; delete this.tooltip.dataset.id; }
+
+  invalidate() { this.dirty = true; }
+
+  // ---------- 模拟 ----------
+
+  step(dt) {
+    this.time += dt;
+    if (this.autoRotate && !this.opts.reducedMotion) this.ringPhase += dt * 0.08;
+    const dragging = this.press !== null && this.pointers.size > 0;
+    if (this.returning && !dragging) {
+      const rate = Math.min(1, dt * 5);
+      const angle = Math.atan2(Math.sin(0.55 - this.yaw), Math.cos(0.55 - this.yaw));
+      this.yaw += angle * rate;
+      this.pitch += (0.34 - this.pitch) * rate;
+      this.zoom += (1 - this.zoom) * rate;
+      this.panX *= 1 - rate; this.panY *= 1 - rate;
+      if (Math.abs(angle) < 0.002 && Math.abs(this.pitch - 0.34) < 0.002 && Math.abs(this.zoom - 1) < 0.002 && Math.abs(this.panX) < 0.5 && Math.abs(this.panY) < 0.5) {
+        this.yaw = 0.55; this.pitch = 0.34; this.zoom = 1; this.panX = this.panY = 0;
+        this.returning = false;
+      }
+    } else if (this.yawTarget !== null) {
+      let d = this.yawTarget - this.yaw;
+      d = Math.atan2(Math.sin(d), Math.cos(d));
+      this.yaw += d * Math.min(1, dt * 4.2);
+      if (Math.abs(d) < 0.002) this.yawTarget = null;
+    } else if (!dragging) {
+      if (Math.abs(this.yawVel) > 1e-4 || Math.abs(this.pitchVel) > 1e-4) {
+        this.yaw += this.yawVel * dt;
+        this.pitch = Math.max(-1.25, Math.min(1.25, this.pitch + this.pitchVel * dt));
+        const decay = Math.exp(-dt * 3.2);
+        this.yawVel *= decay; this.pitchVel *= decay;
+      }
+      if (this.autoRotate) this.yaw += dt * 0.085;
+    }
+    if (this.focusTarget !== null && !dragging) {
+      const i = this.focusTarget;
+      const rate = this.opts.reducedMotion ? 1 : Math.min(1, dt * 4.5);
+      const desiredZoom = Math.max(this.zoom, 1.65);
+      this.zoom += (desiredZoom - this.zoom) * rate;
+      const cyaw = Math.cos(this.yaw), syaw = Math.sin(this.yaw);
+      const x = this.nx[i] * cyaw - this.nz[i] * syaw;
+      const z = this.nx[i] * syaw + this.nz[i] * cyaw;
+      const y = this.ny[i] * Math.cos(this.pitch) - z * Math.sin(this.pitch);
+      const depth = this.ny[i] * Math.sin(this.pitch) + z * Math.cos(this.pitch);
+      const scale = this.fBase * this.zoom * 1500 / (1500 + depth);
+      const nextX = -x * scale, nextY = -y * scale;
+      this.panX += (nextX - this.panX) * rate;
+      this.panY += (nextY - this.panY) * rate;
+      if (this.yawTarget === null && Math.abs(desiredZoom - this.zoom) < 0.002 && Math.abs(nextX - this.panX) < 0.5 && Math.abs(nextY - this.panY) < 0.5) this.focusTarget = null;
+    }
+    if (this.opts.reducedMotion) return;
+    for (let i = 0; i < this.flash.length; i++) if (this.flash[i] > 0) this.flash[i] = Math.max(0, this.flash[i] - dt * 1.4);
+    for (let i = 0; i < this.pulses.length; i++) {
+      const p = this.pulses[i];
+      p.t += p.speed * dt;
+      if (p.t >= p.total) {
+        if (p.node >= 0 && p.node < this.flash.length) this.flash[p.node] = 1;
+        this.pulses[i] = this.spawnPulse();
+      }
+    }
+    if (this.edges.length) {
+      const want = Math.min(2, Math.ceil(this.edges.length * 0.05));
+      while (this.edgePulses.length < want) this.edgePulses.push({ edge: Math.floor(Math.random() * this.edges.length), t: -Math.random() * 5, speed: 0.12 + Math.random() * 0.08 });
+      for (let i = this.edgePulses.length - 1; i >= 0; i--) {
+        const ep = this.edgePulses[i];
+        ep.t += ep.speed * dt;
+        if (ep.t >= 1) {
+          const e = this.edges[ep.edge];
+          if (e) this.flash[e.t] = Math.max(this.flash[e.t], 0.8);
+          this.edgePulses.splice(i, 1);
+        }
+      }
+    }
+  }
+
+  // ---------- 渲染 ----------
+
+  nodeRadius(i) {
+    const nd = this.nodes[i];
+    return (1.6 + nd.weight * 2.0) * Math.max(0.6, this.nsp[i] * this.fBase * this.zoom * 1.15);
+  }
+
+  render() {
+    const { ctx, m } = this;
+    const W = this.width, H = this.height;
+    ctx.setTransform(this.dpr, 0, 0, this.dpr, 0, 0);
+    ctx.clearRect(0, 0, W, H);
+
+    const f = this.fBase * this.zoom;
+    const cx = W / 2 + this.panX, cy = H / 2 + this.panY + 8 * f;
+    const cyaw = Math.cos(this.yaw), syaw = Math.sin(this.yaw);
+    const cp = Math.cos(this.pitch), spt = Math.sin(this.pitch);
+    const D = 1500;
+    const project = (x, y, z, out, o) => {
+      const x1 = x * cyaw - z * syaw;
+      const z1 = x * syaw + z * cyaw;
+      const y2 = y * cp - z1 * spt;
+      const z2 = y * spt + z1 * cp;
+      const k = D / (D + z2);
+      out[o] = cx + x1 * f * k;
+      out[o + 1] = cy + y2 * f * k;
+      out[o + 2] = z2;
+      return k;
+    };
+    const tmp = new Float32Array(3);
+
+    // 世界坐标里的轨道点光源；亮度随真实 3D 距离衰减。
+    const lt = this.time * 0.22;
+    const lx = Math.cos(lt) * 300, ly = -120 + Math.sin(lt * 0.7) * 110, lz = Math.sin(lt) * 300;
+    for (let i = 0; i < m.count; i++) {
+      this.sp[i] = project(m.x[i], m.y[i], m.z[i], tmp, 0);
+      this.sx[i] = tmp[0]; this.sy[i] = tmp[1]; this.sz[i] = tmp[2];
+      const dx = m.x[i] - lx, dy = m.y[i] - ly, dz = m.z[i] - lz;
+      const ds = m.x[i] ** 2 + m.y[i] ** 2 + m.z[i] ** 2;
+      this.light[i] = 0.42 + 0.95 / (1 + (dx * dx + dy * dy + dz * dz) / 52000) + 0.55 / (1 + ds / 26000);
+    }
+    const somaK = project(0, 0, 0, tmp, 0);
+    this.somaScreen = { x: tmp[0], y: tmp[1], r: SOMA_RADIUS * f * somaK, z: tmp[2] };
+    const lightK = project(lx, ly, lz, tmp, 0);
+    const lightScreen = { x: tmp[0], y: tmp[1], z: tmp[2], k: lightK };
+
+    // 相对 soma 的深度带：0..2 在它后面，3..5 在它前面。
+    const somaZ = this.somaScreen.z;
+    const band = (z) => {
+      const d = z - somaZ;
+      return d > 230 ? 0 : d > 110 ? 1 : d > 0 ? 2 : d > -110 ? 3 : d > -230 ? 4 : 5;
+    };
+    const fogOf = (b) => [0.3, 0.48, 0.68, 0.84, 0.95, 1][b];
+
+    this.bucketLen.fill(0);
+    for (let s = 0; s < m.segCount; s++) {
+      const a = m.segA[s], b = m.segB[s];
+      const bd = band((this.sz[a] + this.sz[b]) * 0.5);
+      const li = (this.light[a] + this.light[b]) * 0.5;
+      const lc = li < 0.78 ? 0 : li < 1.12 ? 1 : 2;
+      const key = ((m.group[b] * BANDS + bd) * WIDTH_CLASSES + this.segWidth[s]) * LIGHT_CLASSES + lc;
+      this.buckets[key][this.bucketLen[key]++] = s;
+    }
+
+    // 记录节点投影。
+    const nCount = this.nodes.length;
+    for (let i = 0; i < nCount; i++) {
+      this.nsp[i] = project(this.nx[i], this.ny[i], this.nz[i], tmp, 0);
+      this.nsx[i] = tmp[0]; this.nsy[i] = tmp[1]; this.nsz[i] = tmp[2];
+    }
+    this.clusters.fill(0);
+    const cells = new Map();
+    const size = this.zoom >= 3 ? 0 : 20 / Math.max(1, this.zoom);
+    const ranked = Array.from({ length: nCount }, (_, i) => i).sort((a, b) => this.nodes[b].weight - this.nodes[a].weight);
+    for (const i of ranked) {
+      if (!size || i === this.selected || (this.highlight && this.highlight.has(i))) { this.clusters[i] = 1; continue; }
+      const key = `${this.nodes[i].layer}:${Math.floor(this.nsx[i] / size)}:${Math.floor(this.nsy[i] / size)}`;
+      const representative = cells.get(key);
+      if (representative === undefined) { cells.set(key, i); this.clusters[i] = 1; }
+      else this.clusters[representative] = Math.min(65535, this.clusters[representative] + 1);
+    }
+    for (let e = 0; e < this.edges.length; e++) {
+      for (let j = 0; j < EDGE_SAMPLES; j++) {
+        const o = (e * EDGE_SAMPLES + j) * 3;
+        project(this.edgePts[o], this.edgePts[o + 1], this.edgePts[o + 2], this.edgeScr, o);
+      }
+    }
+    this.order = ranked.filter(i => this.clusters[i]).sort((a, b) => this.nsz[b] - this.nsz[a]);
+
+    const dim = this.dimmed ? 0.45 : 1;
+    const zoomW = Math.max(0.7, Math.min(2.4, f * 1.25));
+    this.drawCoreFrame(f, dim);
+    this.drawCoreCloud(project, dim);
+    this.drawStrata(project, dim, true);
+    this.drawDust(project, dim);
+
+    let nodeCursor = 0;
+    for (let bd = 0; bd < BANDS; bd++) {
+      this.drawFibreBand(bd, fogOf(bd) * dim, zoomW);
+      this.drawEdgeBand(bd, band, fogOf(bd) * dim, zoomW);
+      // 本深度带的记录节点，由远及近。
+      while (nodeCursor < this.order.length && band(this.nsz[this.order[nodeCursor]]) <= bd) {
+        this.drawNode(this.order[nodeCursor], fogOf(bd), dim);
+        nodeCursor++;
+      }
+      if (bd === 2) { this.drawPulses(project, false, somaZ); this.drawSoma(lightScreen, dim); }
+    }
+    this.drawPulses(project, true, somaZ);
+    this.drawStrata(project, dim, false);
+    this.drawSelection();
+  }
+
+  drawCoreFrame(scale, dim) {
+    const { ctx } = this;
+    const { x, y } = this.somaScreen;
+    const radius = 300 * scale;
+    if (radius < 2) return;
+    // 多层刻度和轨道只构成界面外框。
+    for (const [ratio, alpha, width] of [[1.025, 0.28, 0.8], [1.055, 0.12, 0.7], [1.105, 0.3, 0.8], [1.145, 0.1, 0.6], [1.17, 0.22, 0.7]]) {
+      ctx.beginPath(); ctx.arc(x, y, radius * ratio, 0, TAU);
+      ctx.lineWidth = Math.max(0.55, width * scale);
+      ctx.strokeStyle = `rgba(169,202,214,${alpha * dim})`; ctx.stroke();
+    }
+    const offset = this.ringPhase + this.yaw * 0.08;
+    for (let i = 0; i < 144; i++) {
+      const angle = i / 144 * TAU + offset, major = i % 12 === 0, medium = i % 4 === 0;
+      const inner = radius * 1.06, outer = radius * (major ? 1.102 : medium ? 1.09 : 1.077);
+      ctx.beginPath(); ctx.moveTo(x + Math.cos(angle) * inner, y + Math.sin(angle) * inner);
+      ctx.lineTo(x + Math.cos(angle) * outer, y + Math.sin(angle) * outer);
+      ctx.lineWidth = Math.max(0.55, scale * (major ? 1.8 : 0.65));
+      ctx.strokeStyle = `rgba(194,226,233,${dim * (major ? 0.72 : medium ? 0.38 : 0.16)})`; ctx.stroke();
+    }
+    for (let i = 0; i < 72; i++) {
+      const a = i / 72 * TAU - offset * 0.7;
+      const length = (i % 9 === 0 ? 0.6 : 0.3) * TAU / 72;
+      ctx.beginPath(); ctx.arc(x, y, radius * 1.125, a, a + length);
+      ctx.lineWidth = Math.max(1, 3 * scale);
+      const rgb = i % 18 === 0 ? "181,225,224" : "180,196,205";
+      ctx.strokeStyle = `rgba(${rgb},${dim * (i % 9 === 0 ? 0.65 : 0.24)})`; ctx.stroke();
+    }
+    ctx.setLineDash([Math.max(1, scale * 1.2), Math.max(3, scale * 4)]);
+    ctx.beginPath(); ctx.arc(x, y, radius * 1.155, offset, TAU + offset);
+    ctx.strokeStyle = `rgba(157,196,202,${0.27 * dim})`; ctx.lineWidth = Math.max(0.55, scale * 0.7); ctx.stroke();
+    ctx.setLineDash([]);
+    for (let i = 0; i < 4; i++) {
+      const angle = i * Math.PI / 2 + offset, length = TAU * (i % 2 ? 0.045 : 0.065);
+      ctx.beginPath(); ctx.arc(x, y, radius * 1.025, angle, angle + length);
+      ctx.strokeStyle = `rgba(218,242,244,${0.7 * dim})`; ctx.lineWidth = Math.max(1, 1.8 * scale); ctx.stroke();
+    }
+  }
+
+  drawCoreCloud(project, dim) {
+    const { ctx } = this;
+    const positions = new Float32Array(CORE_CLOUD.points.length * 3);
+    CORE_CLOUD.points.forEach((point, i) => project(point.x, point.y, point.z, positions, i * 3));
+    const colors = [[150, 193, 231], [219, 172, 222], [140, 218, 192]];
+    ctx.lineWidth = 0.55;
+    for (let group = 0; group < colors.length; group++) {
+      ctx.beginPath();
+      for (const [a, b] of CORE_CLOUD.edges) {
+        if (CORE_CLOUD.points[a].color !== group) continue;
+        ctx.moveTo(positions[a * 3], positions[a * 3 + 1]);
+        ctx.lineTo(positions[b * 3], positions[b * 3 + 1]);
+      }
+      const color = colors[group];
+      ctx.strokeStyle = `rgba(${color[0]},${color[1]},${color[2]},${(0.24 * dim).toFixed(3)})`;
+      ctx.stroke();
+    }
+    ctx.fillStyle = `rgba(219,235,255,${0.45 * dim})`;
+    for (let i = 0; i < CORE_CLOUD.points.length; i += 2) {
+      const pulse = 0.5 + 0.5 * Math.sin(this.time * 1.2 + i * 0.37);
+      ctx.globalAlpha = 0.35 + pulse * 0.55;
+      ctx.fillRect(positions[i * 3], positions[i * 3 + 1], 1.1, 1.1);
+    }
+    ctx.globalAlpha = 1;
+  }
+
+  drawFibreBand(bd, fog, zoomW) {
+    const { ctx, m } = this;
+    const widths = [2.5, 1.35, 0.78, 0.42];
+    const lightAlpha = [0.34, 0.56, 0.86];
+    ctx.lineCap = "round";
+    for (let g = 0; g < GROUPS; g++) {
+      const rgb = LAYER_RGB[g];
+      for (let w = 0; w < WIDTH_CLASSES; w++) {
+        for (let lc = 0; lc < LIGHT_CLASSES; lc++) {
+          const key = ((g * BANDS + bd) * WIDTH_CLASSES + w) * LIGHT_CLASSES + lc;
+          const len = this.bucketLen[key];
+          if (!len) continue;
+          const list = this.buckets[key];
+          ctx.beginPath();
+          for (let i = 0; i < len; i++) {
+            const s = list[i], a = m.segA[s], b = m.segB[s];
+            ctx.moveTo(this.sx[a], this.sy[a]);
+            ctx.lineTo(this.sx[b], this.sy[b]);
+          }
+          const alpha = lightAlpha[lc] * fog * (w === 3 ? 0.18 : 0.3);
+          const lw = widths[w] * zoomW * (0.82 + bd * 0.05);
+          if (w <= 1) {
+            ctx.globalCompositeOperation = "lighter";
+            ctx.strokeStyle = `rgba(${rgb[0]},${rgb[1]},${rgb[2]},${(alpha * 0.07).toFixed(3)})`;
+            ctx.lineWidth = lw * 4.2;
+            ctx.stroke();
+          }
+          ctx.globalCompositeOperation = bd >= 3 ? "lighter" : "source-over";
+          // 受光面更白：粗主干上的点光源感。
+          const lift = lc === 2 ? 0.32 : lc === 1 ? 0.12 : 0;
+          const r = Math.round(rgb[0] + (255 - rgb[0]) * lift), gg = Math.round(rgb[1] + (255 - rgb[1]) * lift), b2 = Math.round(rgb[2] + (255 - rgb[2]) * lift);
+          ctx.strokeStyle = `rgba(${r},${gg},${b2},${alpha.toFixed(3)})`;
+          ctx.lineWidth = lw;
+          ctx.stroke();
+        }
+      }
+    }
+    ctx.globalCompositeOperation = "source-over";
+  }
+
+  drawEdgeBand(bd, band, fog, zoomW) {
+    if (!this.edges.length) return;
+    const { ctx } = this;
+    const sel = this.hover >= 0 ? this.hover : this.selected;
+    ctx.lineCap = "round";
+    for (let pass = 0; pass < 3; pass++) {
+      for (let layer = 0; layer < 3; layer++) {
+        ctx.beginPath();
+        let any = false;
+        for (let e = 0; e < this.edges.length; e++) {
+          const edge = this.edges[e];
+          if (!this.clusters[edge.s] || !this.clusters[edge.t]) continue;
+          if (edge.layer !== layer) continue;
+          const active = sel >= 0 && (edge.s === sel || edge.t === sel);
+          const hl = this.highlight !== null && (this.highlight.has(edge.s) || this.highlight.has(edge.t));
+          const fading = this.fading >= 0 && (edge.s === this.fading || edge.t === this.fading);
+          if ((fading ? 2 : active || hl ? 1 : 0) !== pass) continue;
+          let pen = false;
+          for (let j = 0; j < EDGE_SAMPLES - 1; j++) {
+            const o = (e * EDGE_SAMPLES + j) * 3;
+            const z = (this.edgeScr[o + 2] + this.edgeScr[o + 5]) * 0.5;
+            if (band(z) !== bd) { pen = false; continue; }
+            if (!pen) { ctx.moveTo(this.edgeScr[o], this.edgeScr[o + 1]); pen = true; }
+            ctx.lineTo(this.edgeScr[o + 3], this.edgeScr[o + 4]);
+            any = true;
+          }
+        }
+        if (!any) continue;
+        const rgb = LAYER_RGB[layer];
+        const quiet = sel >= 0 || this.highlight !== null;
+        const fade = Math.max(0, Math.min(1, (this.fadeUntil - performance.now()) / 300));
+        const alpha = pass === 2 ? 0.9 * fade : pass === 1 ? 0.9 : quiet ? 0.1 : 0.27;
+        ctx.globalCompositeOperation = "lighter";
+        ctx.strokeStyle = `rgba(${rgb[0]},${rgb[1]},${rgb[2]},${(alpha * fog * 0.35).toFixed(3)})`;
+        ctx.lineWidth = (pass === 1 ? 5 : 3) * zoomW;
+        ctx.stroke();
+        ctx.strokeStyle = `rgba(${Math.min(255, rgb[0] + 40)},${Math.min(255, rgb[1] + 30)},${Math.min(255, rgb[2] + 30)},${(alpha * fog).toFixed(3)})`;
+        ctx.lineWidth = (pass === 1 ? 1.4 : 0.8) * zoomW;
+        ctx.stroke();
+      }
+    }
+    ctx.globalCompositeOperation = "source-over";
+  }
+
+  drawNode(i, fog, dim) {
+    const { ctx } = this;
+    const nd = this.nodes[i];
+    const x = this.nsx[i], y = this.nsy[i];
+    let alpha = fog * (0.22 + 0.78 * nd.weight);
+    if (alpha <= 0) return;
+    const focusSet = this.highlight;
+    const isSel = i === this.selected, isHover = i === this.hover;
+    const focus = this.hover >= 0 ? this.hover : this.selected;
+    const related = i === focus || this.neighbours.has(i);
+    if (focusSet && !focusSet.has(i)) alpha *= 0.22;
+    else if (focus >= 0 && !related) alpha *= 0.3;
+    if (i === this.fading) alpha *= Math.max(0, Math.min(1, (this.fadeUntil - performance.now()) / 300));
+    alpha *= dim;
+    const r = this.nodeRadius(i) * (isHover || isSel ? 1.35 : 1);
+    const fl = this.flash[i];
+    ctx.globalCompositeOperation = "lighter";
+    ctx.globalAlpha = Math.min(1, alpha * (0.38 + fl * 0.6 + (focusSet && focusSet.has(i) ? 0.4 : 0)));
+    const halo = r * (3.2 + fl * 3);
+    ctx.drawImage(this.sprites[nd.layer], x - halo, y - halo, halo * 2, halo * 2);
+    ctx.globalAlpha = Math.min(1, alpha);
+    ctx.globalCompositeOperation = "source-over";
+    const rgb = LAYER_RGB[nd.layer];
+    ctx.fillStyle = `rgb(${Math.round(rgb[0] * 0.35 + 165)},${Math.round(rgb[1] * 0.35 + 165)},${Math.round(rgb[2] * 0.35 + 165)})`;
+    if (nd.derived) {
+      // 派生/只读记录：菱形轮廓，绝不与原始记录同形。
+      ctx.beginPath();
+      ctx.moveTo(x, y - r * 1.25); ctx.lineTo(x + r * 1.25, y); ctx.lineTo(x, y + r * 1.25); ctx.lineTo(x - r * 1.25, y); ctx.closePath();
+      ctx.strokeStyle = ctx.fillStyle;
+      ctx.lineWidth = Math.max(1, r * 0.42);
+      ctx.stroke();
+    } else {
+      ctx.beginPath();
+      ctx.arc(x, y, r, 0, TAU);
+      ctx.fill();
+    }
+    if (this.clusters[i] > 1) {
+      ctx.strokeStyle = `rgba(${rgb[0]},${rgb[1]},${rgb[2]},${alpha * 0.6})`;
+      ctx.lineWidth = 0.8;
+      ctx.beginPath();
+      ctx.arc(x, y, r + 3, 0, TAU);
+      ctx.stroke();
+    }
+    ctx.globalAlpha = 1;
+  }
+
+  drawSoma(_light, dim) {
+    const { ctx } = this;
+    const { x, y, r } = this.somaScreen;
+    // 中心以柔和光场表现神经活动，记忆节点仍由各层真实记录决定。
+    const glow = ctx.createRadialGradient(x, y, 0, x, y, r * 3.5);
+    glow.addColorStop(0, `rgba(245,250,255,${0.8 * dim})`);
+    glow.addColorStop(0.08, `rgba(207,228,255,${0.45 * dim})`);
+    glow.addColorStop(0.4, `rgba(148,190,241,${0.12 * dim})`);
+    glow.addColorStop(1, "rgba(100,150,220,0)");
+    ctx.globalCompositeOperation = "lighter";
+    ctx.fillStyle = glow;
+    ctx.beginPath(); ctx.arc(x, y, r * 3.5, 0, TAU); ctx.fill();
+    ctx.globalCompositeOperation = "source-over";
+  }
+
+  drawPulses(project, front, somaZ) {
+    if (this.opts.reducedMotion) return;
+    const { ctx, m } = this;
+    const tmp = new Float32Array(3);
+    ctx.globalCompositeOperation = "lighter";
+    const at = (p, t) => {
+      if (t < 0) return null;
+      const cum = p.cum;
+      let lo = 0, hi = cum.length - 1;
+      if (t <= cum[0]) {
+        const v = p.path[0];
+        return [m.x[v], m.y[v], m.z[v]];
+      }
+      while (lo < hi - 1) { const mid = (lo + hi) >> 1; if (cum[mid] < t) lo = mid; else hi = mid; }
+      const a = p.path[lo], b = p.path[hi];
+      const k = (t - cum[lo]) / Math.max(1e-3, cum[hi] - cum[lo]);
+      return [m.x[a] + (m.x[b] - m.x[a]) * k, m.y[a] + (m.y[b] - m.y[a]) * k, m.z[a] + (m.z[b] - m.z[a]) * k];
+    };
+    for (const p of this.pulses) {
+      const head = at(p, p.t);
+      if (!head) continue;
+      const k = project(head[0], head[1], head[2], tmp, 0);
+      if ((tmp[2] <= somaZ) !== front) continue;
+      const hx = tmp[0], hy = tmp[1];
+      const fade = Math.min(1, p.t / 60) * Math.min(1, (p.total - p.t) / 40 + 0.3);
+      const s = 5 * k * Math.max(0.7, this.fBase * this.zoom);
+      ctx.globalAlpha = 0.9 * fade;
+      ctx.drawImage(this.whiteSprite, hx - s, hy - s, s * 2, s * 2);
+      ctx.globalAlpha = 1;
+    }
+    for (const ep of this.edgePulses) {
+      if (ep.t < 0) continue;
+      const pos = ep.t * (EDGE_SAMPLES - 1), j = Math.min(EDGE_SAMPLES - 2, Math.floor(pos)), u = pos - j;
+      const o = (ep.edge * EDGE_SAMPLES + j) * 3;
+      const x = this.edgeScr[o] + (this.edgeScr[o + 3] - this.edgeScr[o]) * u;
+      const y = this.edgeScr[o + 1] + (this.edgeScr[o + 4] - this.edgeScr[o + 1]) * u;
+      const z = this.edgeScr[o + 2];
+      if ((z <= somaZ) !== front) continue;
+      const edge = this.edges[ep.edge];
+      const s = 6 * Math.max(0.7, this.fBase * this.zoom);
+      ctx.globalAlpha = 0.85;
+      ctx.drawImage(this.sprites[edge.layer], x - s, y - s, s * 2, s * 2);
+      ctx.globalAlpha = 1;
+    }
+    ctx.globalCompositeOperation = "source-over";
+  }
+
+  drawDust(project, dim) {
+    const { ctx } = this;
+    const tmp = new Float32Array(3);
+    ctx.globalCompositeOperation = "lighter";
+    for (let li = 0; li < 3; li++) {
+      const d = this.m.dust[li];
+      const rgb = LAYER_RGB[li];
+      ctx.fillStyle = `rgb(${rgb[0]},${rgb[1]},${rgb[2]})`;
+      for (let i = 0; i < d.length; i += 4) {
+        const k = project(d[i], d[i + 1], d[i + 2], tmp, 0);
+        const tw = this.opts.reducedMotion ? 0.7 : 0.55 + 0.45 * Math.sin(this.time * 0.9 + d[i + 3]);
+        const depth = Math.max(0.15, Math.min(1, 1 - (tmp[2] - this.somaScreen.z) / 700));
+        ctx.globalAlpha = 0.32 * tw * depth * dim;
+        const s = Math.max(0.8, 1.5 * k * this.fBase * this.zoom);
+        ctx.fillRect(tmp[0] - s / 2, tmp[1] - s / 2, s, s);
+      }
+    }
+    ctx.globalAlpha = 1;
+    ctx.globalCompositeOperation = "source-over";
+  }
+
+  /** 层边界环：后半环先画，前半环最后画，附带层标签。 */
+  drawStrata(project, dim, back) {
+    const { ctx } = this;
+    const point = new Float32Array(3);
+    const captions = [];
+    for (let layer = 0; layer < STRATA.length; layer++) {
+      const stratum = STRATA[layer], rgb = LAYER_RGB[layer];
+      for (const ratio of [1, 1.035]) {
+        ctx.beginPath();
+        let drawing = false;
+        for (let i = 0; i <= 160; i++) {
+          const angle = i / 160 * TAU;
+          project(Math.cos(angle) * stratum.radius * ratio, stratum.y, Math.sin(angle) * stratum.radius * ratio, point, 0);
+          if ((point[2] > this.somaScreen.z) !== back) { drawing = false; continue; }
+          if (drawing) ctx.lineTo(point[0], point[1]); else { ctx.moveTo(point[0], point[1]); drawing = true; }
+        }
+        ctx.strokeStyle = `rgba(${rgb[0]},${rgb[1]},${rgb[2]},${(dim * (back ? 0.13 : 0.36)).toFixed(3)})`;
+        ctx.lineWidth = 0.8; ctx.stroke();
+      }
+      if (!back) {
+        let right = -Infinity, rightY = 0;
+        for (let i = 0; i < 80; i++) {
+          const angle = i / 80 * TAU;
+          project(Math.cos(angle) * stratum.radius, stratum.y, Math.sin(angle) * stratum.radius, point, 0);
+          if (point[0] > right) { right = point[0]; rightY = point[1]; }
+        }
+        const label = this.opts.layerCaptions[layer];
+        ctx.font = '600 14px ui-sans-serif, system-ui, "Microsoft YaHei", sans-serif';
+        const width = ctx.measureText(label).width;
+        captions.push({ label, layer, x: Math.max(12, Math.min(this.width - width - 18, right + 12)), y: rightY, width });
+      }
+    }
+    if (back) return;
+    captions.sort((a, b) => a.y - b.y);
+    const minY = Math.min(this.height * 0.35, this.width < 450 ? 174 : 116);
+    const maxY = Math.max(minY + 64, this.height - 104);
+    for (let i = 0; i < captions.length; i++) captions[i].y = Math.max(minY, Math.min(maxY - (captions.length - 1 - i) * 32, captions[i].y), i ? captions[i - 1].y + 32 : minY);
+    this.captionBoxes = [];
+    for (const c of captions) {
+      const rgb = LAYER_RGB[c.layer];
+      ctx.fillStyle = "rgba(8,10,16,0.85)";
+      ctx.beginPath();
+      if (ctx.roundRect) ctx.roundRect(c.x - 8, c.y - 16, c.width + 16, 23, 6); else ctx.rect(c.x - 8, c.y - 16, c.width + 16, 23);
+      ctx.fill();
+      ctx.font = '600 14px ui-sans-serif, system-ui, "Microsoft YaHei", sans-serif';
+      ctx.fillStyle = `rgba(${rgb[0]},${rgb[1]},${rgb[2]},0.97)`;
+      ctx.fillText(c.label, c.x, c.y);
+      this.captionBoxes.push({ x: c.x - 8, y: c.y - 16, width: c.width + 16, height: 23 });
+    }
+  }
+
+  drawSelection() {
+    const { ctx } = this;
+    const mark = (i, strong) => {
+      if (i < 0 || i >= this.nodes.length) return;
+      const x = this.nsx[i], y = this.nsy[i], r = this.nodeRadius(i) * 1.35 + 7;
+      const rgb = LAYER_RGB[this.nodes[i].layer];
+      ctx.strokeStyle = `rgba(${Math.min(255, rgb[0] + 60)},${Math.min(255, rgb[1] + 50)},${Math.min(255, rgb[2] + 40)},${strong ? 0.95 : 0.6})`;
+      ctx.lineWidth = strong ? 1.5 : 1;
+      ctx.beginPath(); ctx.arc(x, y, r, 0, TAU); ctx.stroke();
+      if (strong) {
+        ctx.beginPath();
+        for (const [dx, dy] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) {
+          ctx.moveTo(x + dx * (r + 3), y + dy * (r + 3)); ctx.lineTo(x + dx * (r + 9), y + dy * (r + 9));
+        }
+        ctx.stroke();
+      }
+    };
+    if (this.highlight) for (const i of this.highlight) if (i !== this.selected) mark(i, false);
+    mark(this.selected, true);
+  }
+}
+
+/* ======================================================================
+   看板 UI：数据只来自内核 GET /board/data（store.board_snapshot）。
+   ====================================================================== */
+
+// ---------- 小图标（16px stroke） ----------
+const svg = (inner) => `<svg viewBox="0 0 16 16" width="16" height="16" aria-hidden="true">${inner}</svg>`;
+const ICON = {
+  pause: svg('<path d="M5 3v10M11 3v10" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/>'),
+  play: svg('<path d="M5.5 3.8v8.4l7-4.2z" fill="currentColor"/>'),
+  minus: svg('<path d="M3 8h10" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/>'),
+  plus: svg('<path d="M8 3v10M3 8h10" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/>'),
+  reset: svg('<path d="M13.4 8A5.4 5.4 0 1 1 8 2.6c1.9 0 3.5.9 4.5 2.4M12.9 2.4v2.8h-2.8" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>'),
+  refresh: svg('<path d="M2.6 8a5.4 5.4 0 1 0 1.6-3.8M2.6 2.5v2.7h2.7" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/><circle cx="8" cy="8" r="1.1" fill="currentColor"/>'),
+  back: svg('<path d="M10 3L5 8l5 5" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/>'),
+  close: svg('<path d="M4 4l8 8M12 4l-8 8" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/>'),
+  search: svg('<circle cx="7" cy="7" r="4.2" fill="none" stroke="currentColor" stroke-width="1.6"/><path d="M10.2 10.2L13.8 13.8" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/>'),
+  alert: svg('<path d="M8 2.2L14.6 13H1.4z" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linejoin="round"/><path d="M8 6.4v3.2M8 11.2v.1" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/>'),
+};
+
+// ---------- 常量 ----------
+const LAYER_INDEX = { semantic: 0, episodic: 1, working: 2 };
+const LAYER_NAME = ["语义", "情节", "工作"];
+const LAYER_EN = ["SEMANTIC", "EPISODIC", "WORKING"];
+const KIND_LABEL = { event: "事件", fact: "事实", trait: "特征", entity: "人物", turn: "原话", doubt: "疑问" };
+const TIER_NAME = { 1: "hot", 2: "warm", 3: "cold" };
+const TIER_LABEL = { hot: "hot · 热", warm: "warm · 温", cold: "cold · 冷" };
+const TAB_OF_KIND = { event: "events", fact: "facts", entity: "entities", trait: "entities", turn: "events", doubt: "events" };
+const TAB_TITLE = { events: "事件", facts: "事实", entities: "人物" };
+
+// ---------- 数据源：http(s) 同源；file:// 或 ?api= 时指向内核端口 ----------
+const API = (() => {
+  const q = new URLSearchParams(location.search).get("api");
+  if (q) return q.replace(/\/+$/, "");
+  if (location.protocol === "http:" || location.protocol === "https:") return "";
+  return "http://127.0.0.1:8766"; // file:// 直开时连内核默认端口
+})();
+
+// ---------- 工具 ----------
+const $ = (id) => document.getElementById(id);
+const esc = (s) => String(s ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
+const fmtTime = (ts) => {
+  if (!ts) return "—";
+  const d = new Date(ts * 1000);
+  const p = (n) => String(n).padStart(2, "0");
+  return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())} ${p(d.getHours())}:${p(d.getMinutes())}`;
+};
+const fmtConf = (v) => (v === null || v === undefined) ? "—" : Number(v).toFixed(2);
+const baseName = (p) => String(p || "").split(/[\\/]/).pop() || "mem.db";
+
+// ---------- 全局状态 ----------
+const state = {
+  data: null,
+  tab: "events",
+  query: "",
+  detailId: null,      // 详情视图对应的节点 id（event:3 / entity:5 …）
+  expanded: false,
+  fingerprint: "",
+  autoRotate: true,
+  resumeRotate: false,
+  failed: false,
+};
+
+// ---------- 引擎挂载 ----------
+const wrap = $("fieldWrap"), canvas = $("cv"), tip = $("tip");
+const reducedMotion = () => typeof matchMedia === "function" && matchMedia("(prefers-reduced-motion: reduce)").matches;
+let engine = null;
+try {
+  engine = new NeuralEngine(canvas, tip, {
+    reducedMotion: reducedMotion(),
+    layerCaptions: ["语义 SEMANTIC", "情节 EPISODIC", "工作 WORKING"],
+    onSelect: (id) => onFieldSelect(id),
+  });
+} catch (err) {
+  const p = document.createElement("p");
+  p.className = "field-fallback";
+  p.textContent = "此环境无法绘制神经图。右侧列表仍可检索全部记忆。";
+  wrap.appendChild(p);
+  canvas.remove();
+}
+if (engine) {
+  const ro = new ResizeObserver((entries) => {
+    const r = entries[0] && entries[0].contentRect;
+    if (r) engine.resize(r.width, r.height);
+  });
+  ro.observe(wrap);
+  const rect = wrap.getBoundingClientRect();
+  engine.resize(rect.width, rect.height);
+  if (typeof IntersectionObserver === "function") {
+    new IntersectionObserver((entries) => engine.setVisible(entries.some(e => e.isIntersecting))).observe(wrap);
+  }
+  engine.start();
+  if (typeof matchMedia === "function") {
+    matchMedia("(prefers-reduced-motion: reduce)").addEventListener("change", () => {
+      engine.setOptions({ reducedMotion: reducedMotion(), layerCaptions: engine.opts.layerCaptions, onSelect: (id) => onFieldSelect(id) });
+      syncRotateButton();
+    });
+  }
+}
+
+// ---------- 快照 → 场数据 ----------
+function toField(d) {
+  const nodes = (d.nodes || []).map((n) => ({
+    id: n.id,
+    layer: LAYER_INDEX[n.layer] ?? 1,
+    derived: n.kind !== "event" && n.kind !== "turn",
+    weight: Math.max(0.3, Math.min(1, Number(n.priority) || 0.5)),
+    label: String(n.content || ""),
+    kindLabel: KIND_LABEL[n.kind] || n.kind,
+    kind: n.kind,
+  }));
+  const edges = (d.edges || []).map((e) => ({ source: e.source, target: e.target }));
+  return { nodes, edges };
+}
+
+function layerCounts(d) {
+  const c = [0, 0, 0];
+  for (const n of d.nodes || []) c[LAYER_INDEX[n.layer] ?? 1]++;
+  return c;
+}
+
+// ---------- 记录查找（详情按 id 前缀落到真实数组） ----------
+function findRecord(id) {
+  const d = state.data;
+  if (!d || !id) return null;
+  const i = id.indexOf(":");
+  const kind = id.slice(0, i), rest = id.slice(i + 1);
+  const node = (d.nodes || []).find((n) => n.id === id) || null;
+  let record = null;
+  if (kind === "event") record = (d.events || []).find((e) => String(e.id) === rest) || null;
+  else if (kind === "fact") record = (d.facts || []).find((f) => f.key === rest) || null;
+  else if (kind === "entity") record = (d.entities || []).find((e) => String(e.id) === rest) || null;
+  else if (kind === "turn") record = (d.turns || []).find((t) => `${t.session}:${t.idx}` === rest) || null;
+  else if (kind === "doubt") record = (d.doubts || []).find((x) => String(x.id) === rest) || null;
+  return { kind, rest, node, record };
+}
+
+// ---------- 渲染：副标题 / 仪表条 ----------
+function renderHead(d) {
+  const c = d.counts || {};
+  const nodes = (d.nodes || []).length, edges = (d.edges || []).length;
+  $("sub").textContent = `${nodes} 个节点 · ${edges} 条关联 · 事件 ${c.events ?? 0} / 事实 ${c.facts ?? 0} / 人物 ${c.entities ?? 0}`;
+  const t = d.tiers || {};
+  const layers = layerCounts(d);
+  $("console").innerHTML = `
+    <div class="console-cell console-intro">
+      <span class="console-kicker">HIPPO / MEMORY</span>
+      <strong>记忆总览</strong>
+      <span class="console-muted">${esc(baseName(d.db))} · 轮次 ${c.turns ?? 0}</span>
+    </div>
+    <div class="console-cell">
+      <span class="console-label">事件 <small>EVENTS</small></span>
+      <strong class="console-number console-amber">${c.events ?? "—"}</strong>
+      <span class="console-muted">hot ${t.hot ?? 0} · warm ${t.warm ?? 0} · cold ${t.cold ?? 0}</span>
+    </div>
+    <div class="console-cell">
+      <span class="console-label">事实 <small>FACTS</small></span>
+      <strong class="console-number console-blue">${c.facts ?? "—"}</strong>
+      <span class="console-muted">当前有效</span>
+    </div>
+    <div class="console-cell">
+      <span class="console-label">人物 <small>ENTITIES</small></span>
+      <strong class="console-number">${c.entities ?? "—"}</strong>
+      <span class="console-muted">已识别</span>
+    </div>
+    <div class="console-cell console-layers">
+      <span class="console-label">三层节点 <small>IN VIEW</small></span>
+      <div class="console-layer-list">
+        ${layers.map((n, i) => `<span data-layer="${i}"><i></i>${LAYER_NAME[i]}<b>${n}</b></span>`).join("")}
+      </div>
+    </div>
+    <div class="console-cell">
+      <span class="console-label">关联 <small>EDGES</small></span>
+      <strong class="console-number console-cyan">${edges}</strong>
+      <span class="console-muted">图中真实关联</span>
+    </div>`;
+  for (const [k, v] of [["events", c.events], ["facts", c.facts], ["entities", c.entities]]) {
+    const el = document.querySelector(`[data-count="${k}"]`);
+    if (el) el.textContent = v ?? "";
+  }
+  if (engine) {
+    engine.opts.layerCaptions = layers.map((n, i) => `${LAYER_NAME[i]} ${LAYER_EN[i]} · ${n}`);
+    engine.invalidate();
+  }
+}
+
+// ---------- 渲染：列表 ----------
+function filteredItems() {
+  const d = state.data;
+  const q = state.query.trim().toLowerCase();
+  const hit = (...ss) => !q || ss.some((s) => String(s || "").toLowerCase().includes(q));
+  if (!d) return [];
+  if (state.tab === "events") {
+    return (d.events || []).filter((e) => hit(e.summary, e.raw_preview, e.keywords, e.session)).map((e) => ({ type: "event", e }));
+  }
+  if (state.tab === "facts") {
+    return (d.facts || []).filter((f) => hit(f.key, f.value, f.session)).map((f) => ({ type: "fact", f }));
+  }
+  return (d.entities || []).filter((en) => hit(en.canonical, en.type, en.aliases)).map((en) => ({ type: "entity", en }));
+}
+
+function mark(text) {
+  const q = state.query.trim();
+  const s = String(text ?? "");
+  if (!q) return esc(s);
+  const i = s.toLowerCase().indexOf(q.toLowerCase());
+  if (i < 0) return esc(s);
+  return esc(s.slice(0, i)) + `<mark class="mark">` + esc(s.slice(i, i + q.length)) + `</mark>` + esc(s.slice(i + q.length));
+}
+
+function renderList() {
+  const body = $("inspBody");
+  const items = filteredItems();
+  const q = state.query.trim();
+  const total = state.data
+    ? (state.tab === "events" ? (state.data.events || []).length : state.tab === "facts" ? (state.data.facts || []).length : (state.data.entities || []).length)
+    : 0;
+
+  // 搜索高亮同步到三维场
+  let inField = 0;
+  if (engine) {
+    if (!q) { engine.setHighlight(null); }
+    else {
+      const ids = items.map((it) => it.type === "event" ? `event:${it.e.id}` : it.type === "fact" ? `fact:${it.f.key}` : `entity:${it.en.id}`);
+      inField = engine.setHighlight(ids);
+    }
+  }
+
+  let html = "";
+  if (q) {
+    html += `<p class="result-count">${items.length} 条结果${inField < items.length ? ` · ${items.length - inField} 条在图外` : ""}</p>`;
+  }
+  if (!items.length) {
+    const emptyText = q
+      ? `没有找到与「${esc(q)}」相关的${TAB_TITLE[state.tab]}。`
+      : state.tab === "events" ? "还没有事件。在 DSH 里正常聊天，攒够轮数后自动抽取。"
+      : state.tab === "facts" ? "还没有事实。对话中出现地名、偏好等信息后会自动抽取。"
+      : "还没有认出的人物。对话中提到人物后会自动建立档案。";
+    html += `<div class="status"><p class="status-title">${q ? "没有结果" : "暂无记录"}</p><p class="status-body">${emptyText}</p></div>`;
+    body.innerHTML = html;
+    return;
+  }
+  html += '<ul class="list">';
+  for (const it of items) {
+    if (it.type === "event") {
+      const e = it.e;
+      const tier = TIER_NAME[e.tier] || "warm";
+      const id = `event:${e.id}`;
+      const kws = String(e.keywords || "").split(/\s+/).filter(Boolean).slice(0, 4);
+      html += `<li><button type="button" class="row" data-id="${esc(id)}" data-tier="${tier}" aria-current="${state.detailId === id}">
+        <span class="row-lead"><span class="badge" data-tier="${tier}">${tier}</span><span class="row-meta">${fmtTime(e.event_time)}</span>${e.pinned ? '<span class="badge badge-muted">pin</span>' : ""}</span>
+        <span class="row-text">${mark(e.summary || e.raw_preview || "（无摘要）")}</span>
+        ${kws.length ? `<span class="row-meta">${kws.map((k) => `<span class="kw">${esc(k)}</span>`).join(" ")}</span>` : ""}
+      </button></li>`;
+    } else if (it.type === "fact") {
+      const f = it.f;
+      const id = `fact:${f.key}`;
+      const owner = (state.data.entities || []).find((en) => en.id === f.entity_id);
+      html += `<li><button type="button" class="row" data-id="${esc(id)}" aria-current="${state.detailId === id}">
+        <span class="row-lead"><span class="badge" data-layer="0">事实</span><span class="row-meta">${esc(f.key)}</span>${owner ? `<span class="row-meta">· ${esc(owner.canonical)}</span>` : ""}</span>
+        <span class="row-text row-text-1">${mark(f.value)}</span>
+        <span class="row-meta">置信 ${fmtConf(f.confidence)}</span>
+      </button></li>`;
+    } else {
+      const en = it.en;
+      const id = `entity:${en.id}`;
+      const aliases = String(en.aliases || "").split(/[,，;；\s]+/).filter(Boolean).slice(0, 3);
+      html += `<li><button type="button" class="row" data-id="${esc(id)}" aria-current="${state.detailId === id}">
+        <span class="row-lead"><span class="avatar">${esc(String(en.canonical || "?").slice(0, 1))}</span>
+          <span style="min-width:0"><span class="row-text row-text-1">${mark(en.canonical)}</span>
+          <span class="row-meta">${esc(en.type || "person")} · 置信 ${fmtConf(en.confidence)}</span></span></span>
+        ${aliases.length ? `<span class="row-meta">别名 ${aliases.map(esc).join("、")}</span>` : ""}
+      </button></li>`;
+    }
+  }
+  html += "</ul>";
+  body.innerHTML = html;
+  body.querySelectorAll(".row").forEach((el) => el.addEventListener("click", () => openDetail(el.dataset.id)));
+}
+
+// ---------- 渲染：详情 ----------
+function metaRow(k, v, mono) {
+  return `<div><dt>${esc(k)}</dt><dd${mono ? ' class="mono"' : ""}>${v}</dd></div>`;
+}
+
+function renderDetail(id) {
+  const body = $("inspBody");
+  const found = findRecord(id);
+  if (!found || !found.node) { state.detailId = null; renderList(); return; }
+  const { kind, node, record } = found;
+  const layer = LAYER_INDEX[node.layer] ?? 1;
+  const d = state.data;
+  const head = `<div class="detail-head">
+    <button type="button" class="icon-btn" id="btnBack" aria-label="返回列表">${ICON.back}</button>
+    <span class="chip" data-layer="${layer}"><i class="dot"></i>${LAYER_NAME[layer]}</span>
+    <span class="kind-label">${KIND_LABEL[kind] || kind}</span>
+    <span class="spacer"></span>
+    ${node.derived ? '<span class="badge badge-muted">派生 · 只读</span>' : ""}
+  </div>`;
+
+  let main = "", meta = "", extra = "";
+  if (kind === "event" && record) {
+    const e = record;
+    const tier = TIER_NAME[e.tier] || "warm";
+    main = `<div class="content">${esc(e.summary || e.raw_preview || "（无摘要）")}</div>`;
+    meta = '<dl class="meta">'
+      + metaRow("层级", `<span class="badge" data-tier="${tier}">${TIER_LABEL[tier]}</span>`)
+      + metaRow("时间", esc(fmtTime(e.event_time)))
+      + metaRow("权重", Number(e.weight || 0).toFixed(2))
+      + metaRow("置顶", e.pinned ? "是" : "否")
+      + metaRow("会话", esc(e.session || "—"), true)
+      + (e.keywords ? metaRow("关键词", String(e.keywords).split(/\s+/).filter(Boolean).map((k) => `<span class="kw">${esc(k)}</span>`).join(" ")) : "")
+      + "</dl>";
+    if (e.raw_preview) extra += `<section class="section"><h3 class="section-h">原文预览</h3><div class="content">${esc(e.raw_preview)}</div></section>`;
+    // 同会话的相邻事件（真实关联）
+    const siblings = (d.events || []).filter((x) => x.session === e.session && x.id !== e.id).slice(0, 6);
+    if (siblings.length) {
+      extra += `<section class="section"><h3 class="section-h">同会话事件 · ${siblings.length}</h3><ul class="list">`
+        + siblings.map((x) => `<li><button type="button" class="row" data-id="event:${x.id}" data-tier="${TIER_NAME[x.tier] || "warm"}">
+            <span class="row-meta">${fmtTime(x.event_time)}</span>
+            <span class="row-text row-text-1">${esc(x.summary || x.raw_preview || "")}</span>
+          </button></li>`).join("")
+        + "</ul></section>";
+    }
+  } else if (kind === "fact" && record) {
+    const f = record;
+    const owner = (d.entities || []).find((en) => en.id === f.entity_id);
+    main = `<div class="content">${esc(f.key)} = ${esc(f.value)}</div>`;
+    meta = '<dl class="meta">'
+      + metaRow("置信度", fmtConf(f.confidence))
+      + (owner ? metaRow("所属人物", `<button type="button" class="btn" style="min-height:30px;padding:0 10px" data-jump="entity:${owner.id}">${esc(owner.canonical)}</button>`) : "")
+      + metaRow("会话", esc(f.session || "—"), true)
+      + "</dl>";
+  } else if (kind === "entity" && record) {
+    const en = record;
+    main = `<div class="content">${esc(en.canonical)}</div>`;
+    meta = '<dl class="meta">'
+      + metaRow("类型", esc(en.type || "person"))
+      + metaRow("置信度", fmtConf(en.confidence))
+      + (en.aliases ? metaRow("别名", esc(en.aliases)) : "")
+      + "</dl>";
+    const facts = (d.facts || []).filter((f) => f.entity_id === en.id);
+    if (facts.length) {
+      extra += `<section class="section"><h3 class="section-h">相关事实 · ${facts.length}</h3><ul class="list">`
+        + facts.map((f) => `<li><button type="button" class="row" data-id="fact:${esc(f.key)}">
+            <span class="row-lead"><span class="badge" data-layer="0">事实</span><span class="row-meta">${esc(f.key)}</span></span>
+            <span class="row-text row-text-1">${esc(f.value)}</span>
+          </button></li>`).join("")
+        + "</ul></section>";
+    }
+    const traits = (d.nodes || []).filter((n) => n.kind === "trait" && n.entity_id === en.id);
+    if (traits.length) {
+      extra += `<section class="section"><h3 class="section-h">特征 · ${traits.length}</h3><ul class="list">`
+        + traits.map((t) => `<li><button type="button" class="row" data-id="${esc(t.id)}">
+            <span class="row-text">${esc(t.content)}</span>
+          </button></li>`).join("")
+        + "</ul></section>";
+    }
+  } else if (kind === "trait") {
+    main = `<div class="content">${esc(node.content)}</div>`;
+    meta = '<dl class="meta">' + metaRow("置信度", fmtConf((node.priority || 1) / 2)) + "</dl>";
+    const owner = (d.entities || []).find((en) => en.id === node.entity_id);
+    if (owner) extra = `<section class="section"><h3 class="section-h">所属人物</h3><ul class="list"><li>
+      <button type="button" class="row" data-id="entity:${owner.id}">
+        <span class="row-lead"><span class="avatar">${esc(owner.canonical.slice(0, 1))}</span>
+        <span class="row-text row-text-1">${esc(owner.canonical)}</span></span>
+      </button></li></ul></section>`;
+  } else if (kind === "turn" && record) {
+    main = `<div class="content">${esc(record.content)}</div>`;
+    meta = '<dl class="meta">'
+      + metaRow("时间", esc(fmtTime(record.ts)))
+      + metaRow("角色", esc(record.role || "user"))
+      + metaRow("会话", esc(record.session || "—"), true)
+      + "</dl>";
+  } else if (kind === "doubt" && record) {
+    main = `<div class="content">${esc(record.question)}</div>`;
+    meta = '<dl class="meta">'
+      + metaRow("影响", fmtConf(record.impact))
+      + metaRow("成本", fmtConf(record.cost))
+      + metaRow("会话", esc(record.session || "—"), true)
+      + "</dl>";
+  } else {
+    main = `<div class="content">${esc(node.content)}</div>`;
+  }
+
+  body.innerHTML = head + main + meta + extra;
+  $("btnBack").addEventListener("click", backToList);
+  body.querySelectorAll(".row[data-id]").forEach((el) => el.addEventListener("click", () => openDetail(el.dataset.id)));
+  body.querySelectorAll("[data-jump]").forEach((el) => el.addEventListener("click", () => openDetail(el.dataset.jump)));
+  body.scrollTop = 0;
+}
+
+// ---------- 交互：选择 / 详情 / 视图 ----------
+function openDetail(id) {
+  const found = findRecord(id);
+  if (!found || !found.node) return;
+  state.detailId = id;
+  const tab = TAB_OF_KIND[found.kind] || state.tab;
+  if (tab !== state.tab) { state.tab = tab; state.query = ""; $("q").value = ""; $("btnClearQ").hidden = true; }
+  setExpanded(true);
+  syncNav();
+  renderDetail(id);
+  if (engine) {
+    if (state.autoRotate && engine.isAutoRotating) state.resumeRotate = true;
+    engine.setSelected(id);
+  }
+}
+
+function backToList() {
+  state.detailId = null;
+  if (engine) engine.setSelected(null, false);
+  syncNav();
+  renderList();
+}
+
+function returnToGraph() {
+  state.detailId = null;
+  if (engine) {
+    engine.setSelected(null, false);
+    engine.resetView();
+    if (state.resumeRotate && !reducedMotion()) { engine.setAutoRotate(true); syncRotateButton(); }
+  }
+  state.resumeRotate = false;
+  renderList();
+}
+
+function onFieldSelect(id) {
+  if (id === null) { if (state.detailId) returnToGraph(); return; }
+  if (id === state.detailId) return;
+  openDetail(id);
+}
+
+function setExpanded(on) {
+  state.expanded = on;
+  $("shell").classList.toggle("expanded", on);
+  $("drawerMain").hidden = !on;
+  if (on) syncNav();
+}
+
+function syncNav() {
+  document.querySelectorAll(".nav-item").forEach((b) => {
+    b.setAttribute("aria-current", state.expanded && !state.detailId && b.dataset.tab === state.tab ? "page" : "false");
+  });
+  $("drawerTitle").textContent = TAB_TITLE[state.tab] + (state.detailId ? " · 详情" : "");
+}
+
+// ---------- 覆盖层（加载 / 错误 / 空库） ----------
+function showOverlay(kind, detail) {
+  const ov = $("overlay");
+  if (!kind) { ov.hidden = true; ov.innerHTML = ""; if (engine) engine.setDimmed(false); return; }
+  ov.hidden = false;
+  if (engine) engine.setDimmed(true);
+  if (kind === "loading") {
+    ov.innerHTML = `<div class="status-card"><span class="spinner"></span><p class="status-title">正在读取记忆</p></div>`;
+  } else if (kind === "error") {
+    ov.innerHTML = `<div class="status-card">
+      <span class="status-icon">${ICON.alert}</span>
+      <p class="status-title">连不上记忆内核</p>
+      <p class="status-body">${esc(detail || "")}<br>先启动内核，再打开本页：</p>
+      <p class="status-cmd">python -m hippo.dsh_kernel --db C:\\h\\t6\\mem.db --port 8794</p>
+      <p style="margin:12px 0 0"><button type="button" class="btn btn-primary" id="btnRetry">重试</button></p>
+    </div>`;
+    $("btnRetry").addEventListener("click", () => load());
+  } else if (kind === "empty") {
+    ov.innerHTML = `<div class="status-card">
+      <p class="status-title">还没有记忆</p>
+      <p class="status-body">在 DSH 里聊天几轮，海马体会自动抽取事件、事实与人物；<br>这里会随之生长出三层记忆场。</p>
+    </div>`;
+  }
+}
+
+// ---------- 数据加载（5s 轮询，指纹不变不重绘） ----------
+async function load(manual) {
+  const first = !state.data;
+  if (first) showOverlay("loading");
+  try {
+    const r = await fetch(API + "/board/data", { cache: "no-store" });
+    const d = await r.json();
+    if (!d || d.ok === false) throw new Error((d && d.error) || "bad response");
+    state.failed = false;
+    const c = d.counts || {};
+    const fp = JSON.stringify([c.events, c.facts, c.entities, c.turns, c.doubts, (d.nodes || []).length, (d.edges || []).length]);
+    const changed = fp !== state.fingerprint;
+    state.fingerprint = fp;
+    state.data = d;
+    renderHead(d);
+    const empty = !(c.events || c.facts || c.entities || c.turns);
+    showOverlay(empty ? "empty" : null);
+    if (engine && changed) {
+      const f = toField(d);
+      engine.setData(f.nodes, f.edges);
+    }
+    if (state.detailId) {
+      const found = findRecord(state.detailId);
+      if (found && found.node) { if (changed) renderDetail(state.detailId); }
+      else backToList();
+    } else {
+      renderList();
+    }
+  } catch (err) {
+    state.failed = true;
+    if (first || manual) showOverlay("error", String(err && err.message || err));
+    $("sub").textContent = "读取失败：" + (err && err.message || err);
+  }
+}
+
+// ---------- 工具条 ----------
+function syncRotateButton() {
+  const btn = $("btnRotate");
+  const rm = reducedMotion();
+  const on = engine && engine.isAutoRotating;
+  btn.innerHTML = on && !rm ? ICON.pause : ICON.play;
+  btn.disabled = rm;
+  btn.setAttribute("aria-pressed", on && !rm ? "true" : "false");
+  btn.setAttribute("aria-label", on && !rm ? "暂停自转" : "开始自转");
+  btn.title = rm ? "已遵循系统「减少动态效果」设置" : "";
+}
+$("btnRotate").innerHTML = ICON.pause;
+$("btnZoomOut").innerHTML = ICON.minus;
+$("btnZoomIn").innerHTML = ICON.plus;
+$("btnReset").innerHTML = ICON.reset;
+$("btnRefresh").innerHTML = ICON.refresh;
+$("searchIcon").innerHTML = ICON.search;
+$("btnClearQ").innerHTML = ICON.close;
+
+$("btnRotate").addEventListener("click", () => {
+  if (!engine) return;
+  const next = !engine.isAutoRotating;
+  state.autoRotate = next;
+  engine.setAutoRotate(next);
+  syncRotateButton();
+});
+$("btnZoomOut").addEventListener("click", () => engine && engine.zoomBy(1 / 1.2));
+$("btnZoomIn").addEventListener("click", () => engine && engine.zoomBy(1.2));
+$("btnReset").addEventListener("click", () => engine && engine.resetView());
+$("btnRefresh").addEventListener("click", () => load(true));
+
+// ---------- 抽屉与导航 ----------
+$("btnCollapse").addEventListener("click", () => setExpanded(false));
+$("btnGraph").addEventListener("click", () => { returnToGraph(); });
+$("btnFocusSearch").addEventListener("click", () => $("q").focus());
+document.querySelectorAll(".nav-item").forEach((b) => b.addEventListener("click", () => {
+  const tab = b.dataset.tab;
+  if (state.expanded && state.tab === tab && !state.detailId) { setExpanded(false); return; }
+  if (state.detailId) backToList();
+  state.tab = tab;
+  state.query = ""; $("q").value = ""; $("btnClearQ").hidden = true;
+  setExpanded(true);
+  syncNav();
+  renderList();
+}));
+
+// ---------- 搜索 ----------
+$("q").addEventListener("input", (e) => {
+  state.query = e.target.value;
+  $("btnClearQ").hidden = !state.query;
+  if (state.detailId) { state.detailId = null; if (engine) engine.setSelected(null, false); syncNav(); }
+  renderList();
+});
+$("q").addEventListener("keydown", (e) => { if (e.key === "Escape") { e.target.value = ""; state.query = ""; $("btnClearQ").hidden = true; renderList(); } });
+$("btnClearQ").addEventListener("click", () => { $("q").value = ""; state.query = ""; $("btnClearQ").hidden = true; renderList(); $("q").focus(); });
+
+// ---------- 启动 ----------
+syncRotateButton();
+load();
+setInterval(load, 5000);
+})();
+</script>
+</body>
+</html>

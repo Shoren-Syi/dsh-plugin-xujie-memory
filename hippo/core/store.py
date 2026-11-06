@@ -2782,6 +2782,112 @@ class Store:
                 out[t] = int(self.conn.execute(f"SELECT count(*) FROM {t}").fetchone()[0])
         return out
 
+    def board_snapshot(self, *, limit: int = 120) -> dict[str, Any]:
+        """DSH 记忆看板的数据快照（只读，M30）。
+
+        三层映射照 dsh-plugin-xujie-memory 0.8 的语义：
+          语义 semantic  = 事实 + 角色特征 + 实体
+          情节 episodic  = 事件（摘要 + 原文预览 + 关键词）
+          工作 working   = 最近用户消息 + 未解决疑问
+        节点与边都来自真实库；前端只负责画。
+        """
+        counts = self.counts()
+        tiers = {"hot": 0, "warm": 0, "cold": 0}
+        try:
+            for k, n in self.tier_distribution().items():
+                tiers[{1: "hot", 2: "warm", 3: "cold"}.get(int(k), "warm")] = int(n)
+        except Exception:  # noqa: BLE001
+            pass
+
+        events = [dict(r) for r in self.conn.execute(
+            "SELECT id, session, event_time, summary, substr(raw, 1, 240) AS raw_preview,"
+            " keywords, tier, weight, pinned FROM events WHERE archived = 0"
+            " ORDER BY id DESC LIMIT ?", (limit,)).fetchall()]
+        facts = [dict(r) for r in self.conn.execute(
+            "SELECT id, key, value, session, entity_id, confidence FROM facts"
+            " WHERE valid_to IS NULL ORDER BY id DESC LIMIT ?", (limit,)).fetchall()]
+        entities = [dict(r) for r in self.conn.execute(
+            "SELECT id, canonical, type, confidence, aliases FROM entities"
+            " WHERE merged_into IS NULL ORDER BY last_seen DESC LIMIT ?", (limit,)).fetchall()]
+        traits = [dict(r) for r in self.conn.execute(
+            "SELECT id, entity_id, trait, evidence, confidence FROM card_traits"
+            " WHERE valid_to IS NULL ORDER BY id DESC LIMIT ?", (limit,)).fetchall()]
+        turns = [dict(r) for r in self.conn.execute(
+            "SELECT session, idx, role, substr(content, 1, 160) AS content, ts FROM turns"
+            " WHERE role = 'user' ORDER BY ts DESC, idx DESC LIMIT 20").fetchall()]
+        doubts = [dict(r) for r in self.conn.execute(
+            "SELECT id, session, question, impact, cost FROM doubts"
+            " WHERE resolved = 0 AND converted = 0 ORDER BY id DESC LIMIT ?", (limit,)).fetchall()]
+        links: list[dict[str, Any]] = []
+        if table_exists(self.conn, "event_entities"):
+            links = [dict(r) for r in self.conn.execute(
+                "SELECT event_id, entity_id FROM event_entities").fetchall()]
+
+        nodes: list[dict[str, Any]] = []
+        index: dict[str, int] = {}
+
+        def add(node: dict[str, Any]) -> None:
+            if node["id"] in index:
+                return
+            index[node["id"]] = len(nodes)
+            nodes.append(node)
+
+        for e in events:
+            add({"id": f"event:{e['id']}", "layer": "episodic", "kind": "event",
+                 "content": e["summary"] or e["raw_preview"] or "",
+                 "priority": float(e["weight"] or 0.0), "ts": e["event_time"],
+                 "session": e["session"], "keywords": e["keywords"] or "",
+                 "tier": e["tier"], "raw": e["raw_preview"], "pinned": e["pinned"]})
+        for f in facts:
+            add({"id": f"fact:{f['key']}", "layer": "semantic", "kind": "fact",
+                 "content": f"{f['key']} = {f['value']}",
+                 "priority": float(f["confidence"] or 0.5) * 2.0,
+                 "session": f["session"], "entity_id": f["entity_id"]})
+        for t in traits:
+            evidence = (t["evidence"] or "").strip()
+            add({"id": f"trait:{t['id']}", "layer": "semantic", "kind": "trait",
+                 "content": (f"{t['trait']}：{evidence}" if evidence else str(t["trait"])),
+                 "priority": float(t["confidence"] or 0.5) * 2.0,
+                 "entity_id": t["entity_id"]})
+        for en in entities:
+            add({"id": f"entity:{en['id']}", "layer": "semantic", "kind": "entity",
+                 "content": en["canonical"],
+                 "priority": float(en["confidence"] or 0.5) * 2.0,
+                 "type": en["type"], "aliases": en["aliases"]})
+        for t in turns:
+            add({"id": f"turn:{t['session']}:{t['idx']}", "layer": "working", "kind": "turn",
+                 "content": t["content"], "priority": 1.0, "ts": t["ts"],
+                 "session": t["session"]})
+        for d in doubts:
+            add({"id": f"doubt:{d['id']}", "layer": "working", "kind": "doubt",
+                 "content": d["question"], "priority": float(d["impact"] or 0.5) * 2.0,
+                 "session": d["session"]})
+
+        edges: list[dict[str, str]] = []
+
+        def link(a: str, b: str) -> None:
+            if a in index and b in index and a != b:
+                edges.append({"source": a, "target": b})
+
+        by_session: dict[str, list[str]] = {}
+        for e in events:
+            by_session.setdefault(e["session"] or "", []).append(f"event:{e['id']}")
+        for ids in by_session.values():
+            for i in range(1, min(len(ids), 8)):
+                link(ids[i - 1], ids[i])
+        for l in links:
+            link(f"event:{l['event_id']}", f"entity:{l['entity_id']}")
+        for f in facts:
+            if f.get("entity_id"):
+                link(f"fact:{f['key']}", f"entity:{f['entity_id']}")
+        for t in traits:
+            if t.get("entity_id"):
+                link(f"trait:{t['id']}", f"entity:{t['entity_id']}")
+
+        return {"counts": counts, "tiers": tiers, "nodes": nodes, "edges": edges,
+                "events": events, "facts": facts, "entities": entities,
+                "turns": turns, "doubts": doubts}
+
     def giveup_stats(self, *, session: str | None = None,
                      top: int = 10) -> list[dict[str, Any]]:
         """按 (level, reason) 聚合弃权记录，次数降序。M22.3 的能力地图。
