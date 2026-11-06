@@ -566,6 +566,10 @@ class NeuralEngine {
     this.returning = false;
     this.autoRotate = !opts.reducedMotion;
     this.time = 0; this.ringPhase = 0; this.last = 0;
+    // 存疑星环：平面拖拽角度（只转，不倾斜）
+    this.ringAngle = 0;
+    this.ringDrag = false;
+    this.ringStart = 0;
     this.raf = 0; this.running = false; this.dirty = true; this.visible = true;
     this.selected = -1; this.hover = -1;
     this.fading = -1; this.fadeUntil = 0;
@@ -866,6 +870,16 @@ class NeuralEngine {
         this.pinch = Math.hypot(a.x - b.x, a.y - b.y);
       }
       this.press = { x: p.x, y: p.y, t: performance.now(), moved: false, button: e.button, shift: e.shiftKey };
+      // 星环平面拖拽：按在环附近 → 只转环，不倾斜场景。
+      this.ringDrag = false;
+      if (this.doubts.length) {
+        const cx = this.somaScreen.x, cy = this.somaScreen.y;
+        const dist = Math.hypot(p.x - cx, p.y - cy);
+        if (Math.abs(dist - this.ringRadius()) < 70) {
+          this.ringDrag = true;
+          this.ringStart = Math.atan2(p.y - cy, p.x - cx);
+        }
+      }
       this.yawTarget = null;
       this.focusTarget = null;
       this.returning = false;
@@ -886,6 +900,19 @@ class NeuralEngine {
       }
       const dx = p.x - prev.x, dy = p.y - prev.y;
       if (this.press && Math.hypot(p.x - this.press.x, p.y - this.press.y) > 4) this.press.moved = true;
+      if (this.ringDrag) {
+        // 平面转：按圆心的极角差更新，不碰 yaw/pitch。
+        const cx = this.somaScreen.x, cy = this.somaScreen.y;
+        const a = Math.atan2(p.y - cy, p.x - cx);
+        let d = a - this.ringStart;
+        if (d > Math.PI) d -= TAU;
+        if (d < -Math.PI) d += TAU;
+        this.ringAngle += d;
+        this.ringStart = a;
+        this.hideTooltip();
+        this.invalidate();
+        return;
+      }
       if (this.press && (this.press.button === 1 || this.press.button === 2 || this.press.shift)) {
         this.panX += dx; this.panY += dy;
       } else {
@@ -1079,6 +1106,11 @@ class NeuralEngine {
     return (1.6 + nd.weight * 2.0) * Math.max(0.6, this.nsp[i] * this.fBase * this.zoom * 1.15);
   }
 
+  ringRadius() {
+    // 存疑环：比装饰外环更外一圈，避免被中心记忆体压住。
+    return 300 * this.fBase * this.zoom * 1.28;
+  }
+
   nodeColor(i) {
     const nd = this.nodes[i];
     const w = Math.max(0, Math.min(1, nd.weight));
@@ -1211,55 +1243,46 @@ class NeuralEngine {
     this.drawSelection();
   }
 
-  // 存疑池星环：外挂的三维环，真实 doubts 节点，可点、随场旋转。
-  drawDoubtRing(project, dim) {
+  // 存疑池：挂在已有装饰星环上的节点（不新增环），可点、随环自转。
+  drawDoubtRing(_project, dim) {
     const { ctx } = this;
     const n = this.doubts.length;
     if (!n) return;
-    const R = 390, N = 96;
-    const tmp = new Float32Array(3);
+    const { x: cx, y: cy } = this.somaScreen;
+    // 存疑环：在装饰外环之外一圈；拖动时平面转（ringAngle），不倾斜。
+    const R = this.ringRadius();
     const spin = this.time * 0.06;
-    ctx.beginPath();
-    for (let i = 0; i <= N; i++) {
-      const a = (i / N) * TAU + spin;
-      project(Math.cos(a) * R, 0, Math.sin(a) * R, tmp, 0);
-      if (i === 0) ctx.moveTo(tmp[0], tmp[1]); else ctx.lineTo(tmp[0], tmp[1]);
-    }
-    ctx.strokeStyle = `rgba(177,141,255,${0.65 * dim})`;
-    ctx.lineWidth = 1.6;
-    ctx.stroke();
-    for (let i = 0; i < 24; i++) {
-      const a = (i / 24) * TAU + spin;
-      project(Math.cos(a) * R, 0, Math.sin(a) * R, tmp, 0);
-      const x1 = tmp[0], y1 = tmp[1];
-      project(Math.cos(a) * (R + 9), 0, Math.sin(a) * (R + 9), tmp, 0);
-      ctx.beginPath(); ctx.moveTo(x1, y1); ctx.lineTo(tmp[0], tmp[1]);
-      ctx.strokeStyle = `rgba(177,141,255,${0.45 * dim})`;
-      ctx.stroke();
-    }
     for (let i = 0; i < n; i++) {
-      const a = (i / n) * TAU + spin + 0.4;
-      project(Math.cos(a) * R, 0, Math.sin(a) * R, tmp, 0);
-      this.doubtScr[i] = { x: tmp[0], y: tmp[1], z: tmp[2] };
+      const a = (i / n) * TAU + spin + this.ringAngle - Math.PI / 2 + 0.35;
+      const x = cx + Math.cos(a) * R;
+      const y = cy + Math.sin(a) * R;
+      this.doubtScr[i] = { x, y, z: 0 };
       const near = this.doubtHover === i;
       const r = near ? 10 : 7.5;
-      const grad = ctx.createRadialGradient(tmp[0], tmp[1], 0, tmp[0], tmp[1], r * 2.4);
+      const grad = ctx.createRadialGradient(x, y, 0, x, y, r * 2.4);
       grad.addColorStop(0, "rgba(255,255,255,1)");
       grad.addColorStop(.3, `rgba(196,166,255,${0.95 * dim})`);
       grad.addColorStop(1, "rgba(177,141,255,0)");
       ctx.fillStyle = grad;
-      ctx.beginPath(); ctx.arc(tmp[0], tmp[1], r * 2.4, 0, TAU); ctx.fill();
+      ctx.beginPath(); ctx.arc(x, y, r * 2.4, 0, TAU); ctx.fill();
+      // 环上小刻度（贴合装饰环，表明这是存疑节点位）
+      ctx.beginPath();
+      ctx.moveTo(cx + Math.cos(a) * (R - 10), cy + Math.sin(a) * (R - 10));
+      ctx.lineTo(cx + Math.cos(a) * (R + 10), cy + Math.sin(a) * (R + 10));
+      ctx.strokeStyle = `rgba(196,166,255,${0.4 * dim})`;
+      ctx.lineWidth = 1;
+      ctx.stroke();
       if (near) {
         ctx.font = "500 12px ui-monospace, Consolas, monospace";
         const label = String(this.doubts[i].question || "").slice(0, 36);
         const tw = ctx.measureText(label).width;
         ctx.fillStyle = "rgba(10,15,24,.85)";
         ctx.beginPath();
-        if (ctx.roundRect) ctx.roundRect(tmp[0] + 12, tmp[1] - 10, tw + 14, 24, 6);
-        else ctx.rect(tmp[0] + 12, tmp[1] - 10, tw + 14, 24);
+        if (ctx.roundRect) ctx.roundRect(x + 12, y - 10, tw + 14, 24, 6);
+        else ctx.rect(x + 12, y - 10, tw + 14, 24);
         ctx.fill();
         ctx.fillStyle = "rgba(238,245,251,.95)";
-        ctx.fillText(label, tmp[0] + 19, tmp[1] + 6);
+        ctx.fillText(label, x + 19, y + 6);
       }
     }
   }
@@ -1275,7 +1298,7 @@ class NeuralEngine {
       ctx.lineWidth = Math.max(0.55, width * scale);
       ctx.strokeStyle = `rgba(169,202,214,${alpha * dim})`; ctx.stroke();
     }
-    const offset = this.ringPhase + this.yaw * 0.08;
+    const offset = this.ringPhase + this.yaw * 0.08 + this.ringAngle;
     for (let i = 0; i < 144; i++) {
       const angle = i / 144 * TAU + offset, major = i % 12 === 0, medium = i % 4 === 0;
       const inner = radius * 1.06, outer = radius * (major ? 1.102 : medium ? 1.09 : 1.077);
