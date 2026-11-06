@@ -138,6 +138,10 @@ def test_queue_reaches_prompt(store, cfg):
     from hippo.core.pack import pack
 
     now = _now()
+    # 这条测试曾经**夜里必挂**：默认配置有 quiet_hours（23~7 点不追问），
+    # 而 prepare() 在安静时段直接返回 None，断言就红了。CI 在夜里跑永远是红的。
+    # 这条测的是"队列会不会真的进 prompt"，和作息无关，所以显式关掉安静时段。
+    cfg.curiosity.quiet_hours = []
     store.add_doubt(session="s", question="那边是公司还是老家？", impact=0.9,
                     expire_days=0, now=now - 8 * 86400)
     assert Curiosity(store, cfg).prepare("s", now) is not None

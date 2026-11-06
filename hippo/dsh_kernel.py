@@ -23,6 +23,7 @@ from __future__ import annotations
 import argparse
 import asyncio
 import os
+import time
 from contextlib import asynccontextmanager
 from pathlib import Path
 from urllib.parse import urlsplit
@@ -177,7 +178,27 @@ def create_kernel(cfg: Config, api_key: str = "", instance_id: str = "") -> Fast
             return {"ok": True, "skipped": "empty"}
         store = _store()
         try:
-            store.add_turns(body.session, [(body.role, body.text, 0)])
+            text = body.text
+            # 重复投递幂等：DSH 重试、会话重放、用户重复粘贴都会把同一条再送一遍。
+            # 只对**有实质内容的长消息**（>=8 字）做去重——"嗯""好"这种短句
+            # 用户本来就会连发，不能被吞掉。
+            last = store.last_turn(body.session)
+            if len(text.strip()) >= 8 and last == (body.role, text):
+                log.info("kernel.event.duplicate", extra={"fields": {"session": body.session}})
+                return {"ok": True, "skipped": "duplicate"}
+            store.add_turns(body.session, [(body.role, text, 0)])
+            # 被动纠正：只从用户这句话里认"旧值→新值"，静默修正已有事实。
+            # 不调模型、不改提示词、不加延迟（一次正则 + 一条库查询）。
+            if body.role == "user":
+                from .core.reflect import apply_corrections, parse_correction
+                pairs = parse_correction(text)
+                if pairs:
+                    applied = apply_corrections(store, body.session, pairs,
+                                                cfg=cfg, now=int(time.time()))
+                    if applied:
+                        log.info("kernel.correction.applied",
+                                 extra={"fields": {"session": body.session,
+                                                   "n": len(applied)}})
         finally:
             store.close()
         _maybe_extract(app, body.session)

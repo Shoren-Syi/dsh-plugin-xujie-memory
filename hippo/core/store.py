@@ -2617,6 +2617,25 @@ class Store:
         ).fetchone()
         return int(row[0])
 
+    def active_facts_by_value(self, session: str, value: str) -> list[tuple[str, str]]:
+        """按"值"反查当前有效的事实（被动纠正用：用户说"不是上海，是北京"）。
+
+        只返回 (key, value)，不返回整行——调用方只需要知道改哪个槽。
+        """
+        rows = self.conn.execute(
+            "SELECT key, value FROM facts WHERE session = ? AND valid_to IS NULL "
+            "AND trim(value) = ?", (session, value.strip()),
+        ).fetchall()
+        return [(str(r[0]), str(r[1])) for r in rows]
+
+    def last_turn(self, session: str):
+        """同一会话最后一条 turn（role, content）；没有就 None。"""
+        row = self.conn.execute(
+            "SELECT role, content FROM turns WHERE session = ? ORDER BY idx DESC LIMIT 1",
+            (session,),
+        ).fetchone()
+        return (str(row[0]), str(row[1])) if row else None
+
     def extracted_turn_count(self, session: str) -> int:
         """这个会话已经抽过的 turn 条数（0 = 还没抽过）。"""
         row = self.conn.execute(

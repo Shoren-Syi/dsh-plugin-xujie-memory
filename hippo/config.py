@@ -67,6 +67,30 @@ class PackCfg(_Section):
     time_anchor_last: bool = True
 
 
+class ReflectCfg(_Section):
+    """让对话模型"顺手"参与纠错，而不是插件自己硬扛。
+
+    人会说"不对，是十四号不是十五号"——这类自我反思本来就该由模型来做，
+    但**不能让模型每轮都反思**：那等于每轮多一段指令 + 更多输出 token。
+
+    所以只在两种轮次里注入一行提示（约 20 token）：
+      - 本轮正在问一个存疑问题（记忆本身不确定）
+      - 本轮注入了"当前事实"（模型有可对照的值）
+    其余轮次一律不注入。这是"必要时"的边界。
+    """
+
+    # **默认关闭**：往系统提示里塞"请纠正我"这类指令是有感的——它会改变模型
+    # 行为、多付 token，还可能让回复出现"我注意到我的记忆有误"这种痕迹。
+    # 主人的要求是"绝对无感"，所以正确做法是**被动挖掘**：从用户/模型自己的
+    # 自然语言里识别纠正（"不对，是十四号不是十五号"），插件静默更新，
+    # 不额外调模型、不改提示词、不增加延迟。
+    # 这个开关只在"主动请模型反思"的实验分支里用，生产默认关。
+    correction_hint: bool = False
+    marker: str = "[纠正]"
+    # 被动纠正每天最多应用几条（防止把闲聊里的"不对"全当纠正）
+    max_passive_per_day: int = 3
+
+
 class RetrieveCfg(_Section):
     trigger_jaccard: float = Field(0.25, ge=0, le=1)
     max_summaries: int = Field(8, ge=1, le=50)
@@ -274,6 +298,7 @@ class Config(BaseModel):
     session: SessionCfg = Field(default_factory=SessionCfg)
     budget: BudgetCfg = Field(default_factory=BudgetCfg)
     pack: PackCfg = Field(default_factory=PackCfg)
+    reflect: ReflectCfg = Field(default_factory=ReflectCfg)
     retrieve: RetrieveCfg = Field(default_factory=RetrieveCfg)
     rank: RankCfg = Field(default_factory=RankCfg)
     decay: DecayCfg = Field(default_factory=DecayCfg)
