@@ -2636,6 +2636,12 @@ class Store:
         ).fetchone()
         return (str(row[0]), str(row[1])) if row else None
 
+    def list_turn_sessions(self) -> list[str]:
+        """有对话记录的会话列表（摘要补建用）。"""
+        rows = self.conn.execute(
+            "SELECT DISTINCT session FROM turns ORDER BY session").fetchall()
+        return [str(r[0]) for r in rows]
+
     def extracted_turn_count(self, session: str) -> int:
         """这个会话已经抽过的 turn 条数（0 = 还没抽过）。"""
         row = self.conn.execute(

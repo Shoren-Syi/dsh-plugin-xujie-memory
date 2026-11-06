@@ -243,6 +243,12 @@ def create_kernel(cfg: Config, api_key: str = "", instance_id: str = "") -> Fast
         """Give already accepted background work a bounded shutdown window."""
         deadline = asyncio.get_running_loop().time() + 30
         _pump_extract(app)
+        # 会话结束时补一条摘要：每个会话一次调用，成本有界。
+        if app.state.api_key:
+            try:
+                await _refresh_digests(app)
+            except Exception as exc:  # noqa: BLE001
+                log.warning("kernel.digest.failed", extra={"fields": {"err": repr(exc)[:160]}})
         while app.state.extract_tasks:
             remaining = deadline - asyncio.get_running_loop().time()
             if remaining <= 0:
@@ -250,6 +256,31 @@ def create_kernel(cfg: Config, api_key: str = "", instance_id: str = "") -> Fast
             await asyncio.wait(app.state.extract_tasks.copy(), timeout=remaining, return_when=asyncio.FIRST_COMPLETED)
             await asyncio.sleep(0)  # run completion callbacks before inspecting the queue
         return {"ok": not bool(app.state.extract_tasks), "remaining": len(app.state.extract_tasks)}
+
+    async def _refresh_digests(app: FastAPI) -> None:
+        """给"已经有内容但还没摘要"的会话补一条。"""
+        from .core.digest import build_digest, get_digest
+        store = _store()
+        try:
+            sessions = store.list_turn_sessions()
+            for session in sessions:
+                if get_digest(store, session):
+                    continue
+                if store.pending_turn_count(session) == 0 and store.get_turns(session, limit=2):
+                    continue
+        finally:
+            store.close()
+        async with httpx.AsyncClient(
+                timeout=httpx.Timeout(connect=10.0, read=cfg.extract.timeout, write=30.0, pool=10.0),
+        ) as client:
+            store = _store()
+            try:
+                for session in sessions:
+                    if get_digest(store, session):
+                        continue
+                    await build_digest(store, session, cfg, client, app.state.api_key)
+            finally:
+                store.close()
 
     def _maybe_extract(app: FastAPI, session: str) -> None:
         """Remember work arriving during an active extraction, including other sessions."""

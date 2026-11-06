@@ -628,7 +628,21 @@ def pack(
     card_text, card_drop = _card(store, session, budget_of["card"])
     card = Block("card", card_text, budget=budget_of["card"], dropped=card_drop)
     pin_text, pin_drop = _pinned(store, session)
-    pinned = Block("pinned", pin_text, budget=budget_of["pinned"], dropped=pin_drop)
+    # 会话摘要放 C 段（必记），不放 D 段：总预算吃紧时 D 段最先被砍，
+    # 放那儿等于白写。它是任务型对话里"总是存在"的锚点。
+    try:
+        # 直接读状态，不走 digest 模块的 import：实测跨模块调用在这里拿不到值
+        # （外层能读到 134 字，进了 pack 就是空），换成本地读取后正常。
+        _digest = str(store.get_state(session, "session_digest", "") or "")
+    except Exception:  # noqa: BLE001 - 摘要缺失不影响装配
+        _digest = ""
+    _digest_line = f"[会话摘要] {_digest}" if _digest else ""
+    if _digest_line:
+        pin_text = _digest_line + ("\n" + pin_text if pin_text else "")
+    # C 段原来的预算只够放事实；摘要单独占一行、单独给额度，
+    # 否则 _trim_to 会把这一行（也是唯一一行）弹掉，摘要等于没注入。
+    pin_budget = budget_of["pinned"] + estimate_tokens(_digest_line) if _digest_line else budget_of["pinned"]
+    pinned = Block("pinned", pin_text, budget=pin_budget, dropped=pin_drop)
 
     if reused:
         mem_text = store.get_state(session, "last_pack_d", "")
