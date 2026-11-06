@@ -1,5 +1,39 @@
 # CHANGELOG
 
+## 0.2.0 · DSH 插件形态 + 预筛升级（M29）
+
+### 新增：DSH 插件（插入即用）
+
+- `package.json` + `cordis.patch.yml` + `lib/index.js`（宿主半）：装上重启即可，
+  自动拉起内核、订阅 `session/event`、`systemPrompt.section` 注入记忆。
+- 包内 Python 运行时（embeddable 3.12.10 + pydantic / pyyaml / fastapi / uvicorn / httpx），
+  用户零安装；`runtime/win32-x64/` 相对路径写入 `_pth`，装到任何目录都能 import。
+- 抽取 key 自动解析：配置 → `HIPPO_API_KEY` / `DEEPSEEK_API_KEY` → DSH 凭据 → `~/.hippo/config.yaml`。
+- 内核子进程带 `--parent-pid`，宿主退出不留孤儿；日志 `~/.hippo/kernel.log`（1MB 轮转）。
+
+### 改进：预筛（M29）
+
+- 新增 `extract.prescreen_mode`：`rules`（原行为）/ `heuristic`（默认）/ `off`。
+- heuristic = 规则命中即放；不中时按「纯寒暄/纯评价挡、带数字短句放、≥8 字放」判断。
+- 真实对话 120 轮对照：规则预筛 1 事件 → heuristic **29 事件**（关预筛 33 事件），
+  花费还更低（¥0.156 vs ¥0.195）。
+- 多话题真实评测（10 话题 / 20 查询）：**20/20 = 100% 命中**。
+
+### 修复
+
+- DSH 内核 `/extract` 调用参数 bug（`force` 关键字）。
+- `/assemble` 改走线程池：20 并发 p95 从 712ms → **394ms**，吞吐 41 → 69.6 req/s。
+- `_pth` 隔离模式导致 `PYTHONPATH` 失效（embeddable Python），改为相对路径。
+
+### 测试
+
+| 层 | 数量 | 结果 |
+|---|---|---|
+| Python（pytest） | **1173** | 0 failed / 0 skipped |
+| Node（插件壳 + 真内核往返） | 7 | 全过 |
+| 多话题真实评测 | 20 查询 | 100% |
+| 压测（20 并发 × 30 轮 × 2） | 600 请求 | 0 错误，p95 394ms |
+
 ## 0.1.0 · 首个可分发版本（M28）
 
 M0–M27 全部里程碑（1137 条测试全绿）+ M28 发布工程。

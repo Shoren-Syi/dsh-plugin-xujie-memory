@@ -100,27 +100,32 @@ def create_kernel(cfg: Config, api_key: str = "") -> FastAPI:
 
     @app.post("/assemble")
     async def assemble(body: AssembleBody) -> dict:
-        store = _store()
-        try:
-            degrade = False
+        # pack 是同步的（检索 + 装配 + SQLite 读）。20 并发时如果直接跑在
+        # 事件循环上，p95 会被同步点拖到 700ms+；丢线程池后并发不再互相堵。
+        def _do() -> dict:
+            store = _store()
             try:
-                degrade = budget_check(store, cfg).degraded
+                degrade = False
+                try:
+                    degrade = budget_check(store, cfg).degraded
+                except Exception as exc:  # noqa: BLE001
+                    log.warning("kernel.budget.failed", extra={"fields": {"err": repr(exc)}})
+                pres = pack(store, body.session, body.text, cfg=cfg, degrade=degrade)
+                return {
+                    "ok": True,
+                    "text": pres.text,
+                    "tokens": pres.total_tokens,
+                    "degraded": pres.degraded,
+                    "trigger": pres.trigger.reason if pres.trigger else "",
+                }
             except Exception as exc:  # noqa: BLE001
-                log.warning("kernel.budget.failed", extra={"fields": {"err": repr(exc)}})
-            pres = pack(store, body.session, body.text, cfg=cfg, degrade=degrade)
-            return {
-                "ok": True,
-                "text": pres.text,
-                "tokens": pres.total_tokens,
-                "degraded": pres.degraded,
-                "trigger": pres.trigger.reason if pres.trigger else "",
-            }
-        except Exception as exc:  # noqa: BLE001
-            # 组装失败 = 这一轮没有记忆，绝不能影响对话
-            log.warning("kernel.assemble.failed", extra={"fields": {"err": repr(exc)}})
-            return {"ok": False, "text": "", "tokens": 0, "error": repr(exc)}
-        finally:
-            store.close()
+                # 组装失败 = 这一轮没有记忆，绝不能影响对话
+                log.warning("kernel.assemble.failed", extra={"fields": {"err": repr(exc)}})
+                return {"ok": False, "text": "", "tokens": 0, "error": repr(exc)}
+            finally:
+                store.close()
+
+        return await asyncio.to_thread(_do)
 
     @app.post("/extract")
     async def extract(session: str = "", force: bool = False) -> dict:
