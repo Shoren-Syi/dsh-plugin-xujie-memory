@@ -23,6 +23,7 @@ import json
 import time
 from dataclasses import dataclass
 from typing import Any, Sequence
+from urllib.parse import urlsplit
 
 import httpx
 
@@ -166,9 +167,12 @@ class Encoder:
             "response_format": {"type": "json_object"},
             "stream": False,
         }
-        # 只在配置里显式写了才发。见 DeepSeekCfg.thinking 的注释：
-        # 默认加这个字段会让不认它的上游 400。
+        # 只对官方 Flash 默认关闭思考；其他兼容服务可能不接受该参数。
         thinking = (self.cfg.deepseek.thinking or "").strip().lower()
+        if (self.cfg.deepseek.thinking == ""
+                and urlsplit(self.cfg.deepseek.base_url).hostname == "api.deepseek.com"
+                and self.cfg.deepseek.extract_model == "deepseek-flash"):
+            thinking = "disabled"
         if thinking in ("enabled", "disabled"):
             payload["thinking"] = {"type": thinking}
         return payload

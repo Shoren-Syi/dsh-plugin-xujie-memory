@@ -51,6 +51,19 @@ def test_tail_ending_with_user_is_pending():
     assert w.has_pending is True
 
 
+def test_consecutive_user_messages_never_create_incomplete_middle_window():
+    turns = _turns(4) + [
+        Turn(session="s", idx=8, role="user", content="第一条", ts=0),
+        Turn(session="s", idx=9, role="user", content="补充", ts=0),
+        Turn(session="s", idx=10, role="assistant", content="收到", ts=0),
+        Turn(session="s", idx=11, role="user", content="下一轮", ts=0),
+        Turn(session="s", idx=12, role="assistant", content="好", ts=0),
+    ]
+    windows = slice_windows(turns, session="s")
+    assert [w.idxs for w in windows] == [list(range(11)), [11, 12]]
+    assert all(w.complete for w in windows)
+
+
 def test_empty_input():
     assert slice_windows([], session="s") == []
 

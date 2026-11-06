@@ -110,7 +110,7 @@ class DailyFileHandler(logging.Handler):
     def emit(self, record: logging.LogRecord) -> None:
         try:
             day = time.strftime("%Y%m%d", time.localtime(record.created))
-            if day != self._day:
+            if day != self._day or self._fh is None:
                 self._open(day)
             self._fh.write(self.format(record) + "\n")
             self._fh.flush()

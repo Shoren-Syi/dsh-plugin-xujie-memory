@@ -1,6 +1,6 @@
 # hippocampus-deepseek
 
-> 给 DeepSeek / DSH 加一个「记得住事」的海马体。**装上即用**，记忆只存本地 SQLite，不训练、不上传。
+> 给 DeepSeek / DSH 加一个「记得住事」的海马体。记忆数据库保存在本地 SQLite；抽取和对话会向所配置的模型服务发送必要的对话及记忆内容。
 
 ![tests](https://img.shields.io/badge/tests-1173-brightgreen)
 ![python](https://img.shields.io/badge/python-3.11%2B-blue)
@@ -21,7 +21,8 @@ dsh plugin --profile <你的profile> add link:<本目录>
 在 `systemPrompt` 里注入记忆段。**不需要改 base_url、不需要手动起服务、不需要 pip install。**
 
 - 记忆库：`~/.hippo/mem.db`
-- 抽取 key：自动从 DSH 凭据 / `DEEPSEEK_API_KEY` / `~/.hippo/config.yaml` 读取
+- 抽取 key：依次使用插件配置、环境变量、DSH 凭据服务中的 `DEEPSEEK_API_KEY`，或 `~/.hippo/config.yaml`。更新 key 后重启 DSH。
+- 仅登录 DeepSeek 账户不等于配置了 API key；没有可用 key 时插件只记录原文，不会执行模型抽取。
 - 内核日志：`~/.hippo/kernel.log`
 
 ### B. OpenAI 兼容代理（任何客户端）
@@ -61,14 +62,10 @@ client = OpenAI(base_url="http://127.0.0.1:8787/v1", api_key="sk-...")
 
 ## 成本
 
-数字来自 `python -m hippo.tools.cost_report`，token 取自 200 轮实测
-（573 token/轮），价格按 DeepSeek 官方价，前缀缓存命中 72%。
-
-| 档位 | 轮/天 | 月 token | 月成本 |
-|---|---:|---:|---:|
-| 轻度 | 20 | 434,040 | **¥1.08** |
-| 中度 | 100 | 2,170,200 | **¥5.41** |
-| 重度 | 500 | 10,851,000 | **¥27.04** |
+模型调用按供应商当时的价格和实际用量计费。历史评测中记忆环节约为
+573 token/轮，但实际用量取决于对话、抽取和缓存情况，不能据此保证费用。
+当前模型价格请查看 [DeepSeek 官方价格表](https://api-docs.deepseek.com/quick_start/pricing/)。
+`hippo.tools.cost_report` 使用配置中的单价计算估算值，并非供应商账单；旧配置的单价需要自行更新。
 
 - 模型调用只出现在**抽取**（每 5 轮一次窗口）和**心跳升级**；其余全是规则/统计。
 - 超预算自动降级（停止抽取、只装人设/钉住/时间锚），次日 00:00 恢复。
@@ -99,7 +96,7 @@ hippo doctor             # 恢复后自检
 
 **装不上怎么办？** 先 `hippo doctor`：Python ≥ 3.11、SQLite ≥ 3.34 且编入 FTS5 trigram。Windows 请用 python.org 安装包（商店版是占位 stub）。
 
-**会不会上传数据？** 不会。记忆只写本地 SQLite，记忆内容只出现在你这一轮的 prompt 里。
+**会不会上传数据？** 记忆数据库保存在本地。开启模型抽取时，对话片段会发送给所配置的模型服务；相关记忆在召回后也会作为提示词发送给对话模型。数据处理取决于你选用的服务商。
 
 **能不能多设备同步？** 不能自动同步。把 `~/.hippo/mem.db`（或 backups 快照）拷到另一台机器同一路径即可。
 

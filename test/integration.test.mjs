@@ -37,7 +37,7 @@ test('真内核 HTTP 往返：health → event → assemble', async (t) => {
   const dir = mkdtempSync(join(tmpdir(), 'hippo-integ-'))
   const db = join(dir, 'mem.db')
   const child = spawn(PY, ['-m', 'hippo.dsh_kernel', '--db', db, '--port', String(PORT)], {
-    env: { ...process.env, PYTHONPATH: __test.PACKAGE_ROOT, HIPPO_LOG: 'off', PYTHONIOENCODING: 'utf-8' },
+    env: { ...process.env, PYTHONPATH: __test.PACKAGE_ROOT, HIPPO_LOG: 'off', PYTHONIOENCODING: 'utf-8', HIPPO_KERNEL_INSTANCE: 'integration-instance', HIPPO_EXTRACT_API_KEY: 'integration-test-key' },
     stdio: 'ignore',
   })
   t.after(() => {
@@ -51,6 +51,8 @@ test('真内核 HTTP 往返：health → event → assemble', async (t) => {
   const health = await waitHealth()
   assert.ok(health, '内核未在超时内就绪')
   assert.equal(health.ok, true)
+  assert.equal(health.instance, 'integration-instance')
+  assert.equal(health.extract, true)
 
   const ev = await postJson('/event', { session: 's1', role: 'user', text: '我叫张三，住在杭州，对花生过敏。' })
   assert.equal(ev.ok, true)

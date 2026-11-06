@@ -78,6 +78,21 @@ def test_trimmed_events_are_not_counted(store):
     assert injected == p.by_name["memory"].text.count("[记忆 · ")
 
 
+def test_total_budget_updates_recall_accounting_after_trimming(store, monkeypatch):
+    import importlib
+    module = importlib.import_module("hippo.core.pack")
+    monkeypatch.setattr(module, "TOTAL_BUDGET", 450)
+    ids = [_ev(store, f"搬家记录{i}" + "细节" * 20, "搬家 海淀", summary="摘要" * 35)
+           for i in range(8)]
+    cfg = __import__("hippo.config", fromlist=["Config"]).Config()
+    result = pack(store, S, "搬家", now=NOW, cfg=cfg, use_cache=False)
+    rendered = result.by_name["memory"].text.count("[记忆 · ")
+    assert len(result.items) > rendered, "应触发总预算裁剪"
+    assert sum(rc(store, i) for i in ids) == rendered
+    assert len(store.get_state(S, "last_pack_ids").split()) == rendered
+    assert not result.by_name["memory"].text.endswith("]"), "不能保留没有内容的事件标题"
+
+
 def test_reuse_turn_counts_exactly_the_rendered(store):
     """续说同一话题 → 不重新检索 → 复用 D 段。加固数必须等于 D 段条目数。
 

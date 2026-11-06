@@ -23,14 +23,13 @@ from __future__ import annotations
 import argparse
 import asyncio
 import os
-import sys
 from contextlib import asynccontextmanager
 from pathlib import Path
+from urllib.parse import urlsplit
 
 import httpx
-from fastapi import FastAPI
-from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import HTMLResponse, Response
+from fastapi import FastAPI, Request
+from fastapi.responses import HTMLResponse, PlainTextResponse, Response
 from pydantic import BaseModel
 
 from . import __version__
@@ -62,7 +61,45 @@ def _open_store(db: Path, cfg: Config) -> Store:
     return Store.open(db, cfg)
 
 
-def create_kernel(cfg: Config, api_key: str = "") -> FastAPI:
+def _watch_parent(parent_pid: int) -> None:
+    """父进程退出时结束内核；Windows 不能用 os.kill(pid, 0) 探测。"""
+    if os.name == "nt":
+        import ctypes
+        from ctypes import wintypes
+
+        kernel32 = ctypes.WinDLL("kernel32", use_last_error=True)
+        kernel32.OpenProcess.argtypes = (wintypes.DWORD, wintypes.BOOL, wintypes.DWORD)
+        kernel32.OpenProcess.restype = wintypes.HANDLE
+        kernel32.WaitForSingleObject.argtypes = (wintypes.HANDLE, wintypes.DWORD)
+        kernel32.WaitForSingleObject.restype = wintypes.DWORD
+        kernel32.CloseHandle.argtypes = (wintypes.HANDLE,)
+        handle = kernel32.OpenProcess(0x00100000, False, parent_pid)  # SYNCHRONIZE
+        if not handle:
+            if ctypes.get_last_error() == 87:  # 进程不存在
+                os._exit(0)
+            log.warning("kernel.parent.watch_failed")
+            return
+        try:
+            result = kernel32.WaitForSingleObject(handle, 0xFFFFFFFF)
+        finally:
+            kernel32.CloseHandle(handle)
+        if result == 0:  # WAIT_OBJECT_0
+            os._exit(0)
+        log.warning("kernel.parent.watch_failed")
+        return
+
+    import time
+    while True:
+        try:
+            os.kill(parent_pid, 0)
+        except ProcessLookupError:
+            os._exit(0)
+        except PermissionError:
+            pass
+        time.sleep(5)
+
+
+def create_kernel(cfg: Config, api_key: str = "", instance_id: str = "") -> FastAPI:
     """构造内核 app。cfg.db_path 必须是绝对路径。"""
     db = Path(cfg.db_path).expanduser()
 
@@ -73,6 +110,7 @@ def create_kernel(cfg: Config, api_key: str = "") -> FastAPI:
         with _open_store(db, cfg):  # 首次启动跑迁移；已存在则幂等
             pass
         app.state.extract_tasks = set()
+        app.state.dirty_sessions = set()
         app.state.api_key = api_key
         log.info("kernel.ready", extra={"fields": {"db": str(db), "version": __version__}})
         yield
@@ -80,13 +118,23 @@ def create_kernel(cfg: Config, api_key: str = "") -> FastAPI:
             task.cancel()
 
     app = FastAPI(title="hippo-dsh-kernel", lifespan=lifespan)
-    # 看板页面同源；DSH 侧栏 client（不同端口）需要跨域读 /board/data。
-    app.add_middleware(
-        CORSMiddleware,
-        allow_origins=["*"],
-        allow_methods=["GET", "POST"],
-        allow_headers=["*"],
-    )
+    @app.middleware("http")
+    async def local_browser_boundary(request: Request, call_next):
+        # localhost 并非认证：拒绝 DNS 重绑定和其他网站发起的跨源请求。
+        # 无 Origin 的本机宿主进程仍可访问；本机其他进程不在此边界内。
+        host = request.headers.get("host", "")
+        try:
+            parsed = urlsplit("http://" + host)
+            allowed_host = (parsed.hostname in {"127.0.0.1", "localhost", "::1"}
+                            and not parsed.username and not parsed.password
+                            and not parsed.path and not parsed.query and not parsed.fragment)
+            _ = parsed.port  # 拒绝非法端口
+        except ValueError:
+            allowed_host = False
+        origin = request.headers.get("origin")
+        if not allowed_host or (origin is not None and origin.lower() != f"http://{host}".lower()):
+            return PlainTextResponse("Forbidden", status_code=403)
+        return await call_next(request)
     app.state.db = db
     app.state.cfg = cfg
 
@@ -95,7 +143,7 @@ def create_kernel(cfg: Config, api_key: str = "") -> FastAPI:
 
     @app.get("/health")
     def health() -> dict:
-        return {"ok": True, "version": __version__, "db": str(db), "extract": bool(api_key)}
+        return {"ok": True, "version": __version__, "db": str(db), "extract": bool(api_key), "instance": instance_id}
 
     # ------------------------------------------------------------ 记忆看板（M30）
     @app.get("/board/data")
@@ -104,7 +152,7 @@ def create_kernel(cfg: Config, api_key: str = "") -> FastAPI:
         try:
             snap = store.board_snapshot()
             snap["db"] = str(db)
-            return {"ok": True, **snap}
+            return {"ok": True, "extraction_configured": bool(api_key), **snap}
         except Exception as exc:  # noqa: BLE001
             log.warning("kernel.board.failed", extra={"fields": {"err": repr(exc)}})
             return {"ok": False, "error": repr(exc)}
@@ -169,24 +217,48 @@ def create_kernel(cfg: Config, api_key: str = "") -> FastAPI:
         task = _start_extract(app, session, force=force)
         return {"ok": True, "started": bool(task)}
 
+    @app.post("/drain")
+    async def drain() -> dict:
+        """Give already accepted background work a bounded shutdown window."""
+        deadline = asyncio.get_running_loop().time() + 30
+        _pump_extract(app)
+        while app.state.extract_tasks:
+            remaining = deadline - asyncio.get_running_loop().time()
+            if remaining <= 0:
+                break
+            await asyncio.wait(app.state.extract_tasks.copy(), timeout=remaining, return_when=asyncio.FIRST_COMPLETED)
+            await asyncio.sleep(0)  # run completion callbacks before inspecting the queue
+        return {"ok": not bool(app.state.extract_tasks), "remaining": len(app.state.extract_tasks)}
+
     def _maybe_extract(app: FastAPI, session: str) -> None:
-        """攒够轮数才抽；同一时间只跑一个抽取任务。"""
+        """Remember work arriving during an active extraction, including other sessions."""
         if not app.state.api_key:
             return
-        if any(not t.done() for t in app.state.extract_tasks):
+        app.state.dirty_sessions.add(session)
+        _pump_extract(app)
+
+    def _pump_extract(app: FastAPI) -> None:
+        if not app.state.api_key or app.state.extract_tasks:
             return
-        try:
-            store = _store()
+        while app.state.dirty_sessions:
+            session = app.state.dirty_sessions.pop()
             try:
-                pending = store.pending_turn_count(session)
-            finally:
-                store.close()
-        except Exception as exc:  # noqa: BLE001
-            log.warning("kernel.pending.failed", extra={"fields": {"err": repr(exc)}})
+                store = _store()
+                try:
+                    pending = store.pending_turns(session)
+                    first = store.extracted_turn_count(session) == 0
+                finally:
+                    store.close()
+            except Exception as exc:  # noqa: BLE001
+                log.warning("kernel.pending.failed", extra={"fields": {"err": repr(exc)}})
+                continue
+            from .core.extractor import extract_threshold
+            need = extract_threshold(cfg, first=first)
+            if (not pending or pending[-1].role != "assistant"
+                    or sum(t.role == "user" for t in pending) < need):
+                continue
+            _start_extract(app, session, force=False)
             return
-        if pending < cfg.extract.every_n_turns:
-            return
-        _start_extract(app, session, force=False)
 
     def _start_extract(app: FastAPI, session: str, *, force: bool) -> asyncio.Task | None:
         async def run() -> None:
@@ -214,6 +286,7 @@ def create_kernel(cfg: Config, api_key: str = "") -> FastAPI:
             return None
         app.state.extract_tasks.add(task)
         task.add_done_callback(lambda t: app.state.extract_tasks.discard(t))
+        task.add_done_callback(lambda _t: _pump_extract(app))
         return task
 
     return app
@@ -238,23 +311,14 @@ def main(argv: list[str] | None = None) -> int:
         cfg.db_path = str(Path.home() / ".hippo" / "mem.db")
 
     if a.parent_pid:
-        def _watch_parent() -> None:
-            import time
-
-            while True:
-                try:
-                    os.kill(a.parent_pid, 0)
-                except OSError:
-                    sys.exit(0)
-                time.sleep(5)
-
         import threading
 
-        threading.Thread(target=_watch_parent, daemon=True).start()
+        threading.Thread(target=_watch_parent, args=(a.parent_pid,), daemon=True).start()
 
     import uvicorn
 
-    uvicorn.run(create_kernel(cfg, api_key=a.api_key), host=a.host, port=a.port,
+    uvicorn.run(create_kernel(cfg, api_key=a.api_key or os.environ.get("HIPPO_EXTRACT_API_KEY", ""),
+                              instance_id=os.environ.get("HIPPO_KERNEL_INSTANCE", "")), host=a.host, port=a.port,
                 log_level="warning", access_log=False)
     return 0
 

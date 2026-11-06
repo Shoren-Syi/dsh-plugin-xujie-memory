@@ -25,15 +25,13 @@ class _Section(BaseModel):
 
 class DeepSeekCfg(_Section):
     base_url: str = "https://api.deepseek.com"
-    model: str = "deepseek-chat"
-    extract_model: str = "deepseek-chat"
+    model: str = "deepseek-flash"
+    extract_model: str = "deepseek-flash"
     temperature: float = Field(1.1, ge=0, le=2)
     api_key: str = ""
     timeout: float = Field(120.0, gt=0)
-    # 思考开关，只有部分模型认（mimo-v2.6 系列）。
-    # 空字符串 = **完全不发这个字段**。不能默认发 "disabled"：
-    # DeepSeek 不认识这个参数，多送一个未知字段有 400 的风险，
-    # 而"默认能用的配置"比"默认更省钱的配置"重要。
+    # 显式 enabled/disabled 优先；空值时官方 deepseek-flash 的抽取关闭思考，
+    # 其他上游不发送该字段，以保留兼容性。
     thinking: str = ""
 
 
@@ -163,6 +161,10 @@ class ExtractCfg(_Section):
     # 关掉它 = 只记录对话、不记忆。调试代理透传时有用，也给"我只想要原文"的人留条路。
     enabled: bool = True
     every_n_turns: int = Field(5, ge=1)
+    # 首次抽取的门槛。真实使用里用户很少连发 5 条，攒不够就一条记忆都没有，
+    # 界面上看着像"装了没用"。所以会话第一次抽取只要求 2 条用户消息，
+    # 之后照旧 every_n_turns。设成 0 或 >= every_n_turns 等于关闭这条加速。
+    first_extract_user_turns: int = Field(2, ge=1)
     window_tokens: int = Field(1200, ge=100)
     prescreen: bool = True
     # M29：预筛模式。

@@ -280,6 +280,7 @@
         <p class="eyebrow">HIPPOCAMPUS · MEMORY FIELD</p>
         <h1 class="title">记忆看板</h1>
         <p class="sub" id="sub"> </p>
+        <p class="sub" id="extractStatus" role="status" hidden></p>
       </header>
       <div class="controls" role="toolbar" aria-label="视图">
         <button type="button" class="tool" id="btnRotate" aria-label="暂停自转" aria-pressed="true"></button>
@@ -354,6 +355,61 @@ const STRATA = [
   { y: -185, radius: 265 }, { y: 0, radius: 300 }, { y: 185, radius: 265 },
 ];
 const SOMA_RADIUS = 40;
+// 存疑星环的几何：RING_K 是环带半径（相对 300 基准），RING_K_OUT 是外溢粒子最远处。
+// 1.58 是"不再压住三层记忆结构"的下限：内层节点场最大到 1.2 左右，
+// 原来 1.28 只剩 0.08 的缝，视觉上就是压在记忆体上。
+const RING_K = 1.58;
+const RING_K_OUT = 1.94;
+
+// 环带里的神经元群：固定种子生成，保证每次打开是同一张"脑图"（不闪、不漂）。
+// 每个神经元只存极坐标与分支参数，具体像素每帧按 offset 旋转后算。
+function seedNeurons(n) {
+  const out = [];
+  let s = 20261106;
+  const rnd = () => { s = (s * 1103515245 + 12345) & 0x7fffffff; return s / 0x7fffffff; };
+  for (let i = 0; i < n; i++) {
+    const k = 3 + Math.floor(rnd() * 2);        // 3~4 根树突
+    const branches = [];
+    for (let j = 0; j < k; j++) {
+      branches.push({
+        ang: (j / k) * TAU + (rnd() - 0.5) * 0.55,
+        len: 0.55 + rnd() * 0.5,                // 相对环带厚度
+        bend: (rnd() - 0.5) * 0.9,              // 折角的横向偏移
+        fork: 0.35 + rnd() * 0.3,
+        phase: rnd(),
+        speed: 0.22 + rnd() * 0.42,
+      });
+    }
+    out.push({
+      a: (i / n) * TAU + (rnd() - 0.5) * 0.2,
+      r: 0.16 + rnd() * 0.68,                   // 带内径向位置 0~1
+      size: 2.2 + rnd() * 2.0,
+      branches,
+      axon: { ang: (rnd() - 0.5) * 0.8, len: 0.72 + rnd() * 0.5, phase: rnd(), speed: 0.16 + rnd() * 0.26 },
+      spin: rnd() * TAU,
+      link: rnd() > 0.42,
+    });
+  }
+  return out;
+}
+
+
+// 每个粒子沿一条固定极角向外飘，飘完从头再来，视觉上就是"环在往外出东西"。
+function seedRingSparks(n) {
+  const out = [];
+  let s = 1337;
+  const rnd = () => { s = (s * 1103515245 + 12345) & 0x7fffffff; return s / 0x7fffffff; };
+  for (let i = 0; i < n; i++) {
+    out.push({
+      a: rnd() * TAU,
+      p: rnd(),
+      v: 0.06 + rnd() * 0.16,
+      size: 0.7 + rnd() * 1.9,
+      tone: rnd(),
+    });
+  }
+  return out;
+}
 
 function buildMorphology(seed = 0x7a11e) {
   let state = seed >>> 0;
@@ -570,6 +626,9 @@ class NeuralEngine {
     this.ringAngle = 0;
     this.ringDrag = false;
     this.ringStart = 0;
+    this.ringSparks = seedRingSparks(190);
+    // 环带神经元群（内环与外环之间那一圈）
+    this.neurons = seedNeurons(16);
     this.raf = 0; this.running = false; this.dirty = true; this.visible = true;
     this.selected = -1; this.hover = -1;
     this.fading = -1; this.fadeUntil = 0;
@@ -705,7 +764,9 @@ class NeuralEngine {
     this.width = Math.max(1, width); this.height = Math.max(1, height);
     this.canvas.width = Math.round(this.width * this.dpr);
     this.canvas.height = Math.round(this.height * this.dpr);
-    this.fBase = Math.min(this.width / 1060, this.height / 900);
+    // 星环半径变大后，底盘要跟着留白：原来按 1060×900 拟合，
+    // 环到 1.58 会被裁掉一圈（尤其高度）。
+    this.fBase = Math.min(this.width / 1260, this.height / 1060);
     this.invalidate();
   }
 
@@ -870,12 +931,16 @@ class NeuralEngine {
         this.pinch = Math.hypot(a.x - b.x, a.y - b.y);
       }
       this.press = { x: p.x, y: p.y, t: performance.now(), moved: false, button: e.button, shift: e.shiftKey };
-      // 星环平面拖拽：按在环附近 → 只转环，不倾斜场景。
+      // 星环平面拖拽：按在环带附近 → 只转环，不倾斜场景。
+      // 注意：这里**不看有没有存疑点**。空库时环照样画着，
+      // 原来 `if (this.doubts.length)` 会让空库完全拖不动（实测反馈）。
       this.ringDrag = false;
-      if (this.doubts.length) {
+      {
         const cx = this.somaScreen.x, cy = this.somaScreen.y;
         const dist = Math.hypot(p.x - cx, p.y - cy);
-        if (Math.abs(dist - this.ringRadius()) < 70) {
+        const R = this.ringRadius();
+        const tol = Math.max(64, R * 0.14);
+        if (Math.abs(dist - R) < tol) {
           this.ringDrag = true;
           this.ringStart = Math.atan2(p.y - cy, p.x - cx);
         }
@@ -1032,6 +1097,15 @@ class NeuralEngine {
   step(dt) {
     this.time += dt;
     if (this.autoRotate && !this.opts.reducedMotion) this.ringPhase += dt * 0.08;
+    // 星环外溢粒子只在自己这一层推进，不碰场景旋转（环是平面装饰）。
+    if (!this.opts.reducedMotion) {
+      const sp = this.ringSparks;
+      for (let i = 0; i < sp.length; i++) {
+        const s = sp[i];
+        s.p += dt * s.v;
+        if (s.p >= 1) s.p -= 1;
+      }
+    }
     const dragging = this.press !== null && this.pointers.size > 0;
     if (this.returning && !dragging) {
       const rate = Math.min(1, dt * 5);
@@ -1107,8 +1181,13 @@ class NeuralEngine {
   }
 
   ringRadius() {
-    // 存疑环：比装饰外环更外一圈，避免被中心记忆体压住。
-    return 300 * this.fBase * this.zoom * 1.28;
+    // 星环 = 最外那圈装饰环，存疑光点就挂在这上面。
+    // 半径必须显著大于内层记忆场（约 1.2×），否则视觉上会压住三层结构。
+    // 同时按视口夹一下：放大（zoom>1）或点节点聚焦时，环不能跑出画布——
+    // 那是"卖相"最直接的破绽，裁掉半圈比没有还难看。
+    const want = 300 * this.fBase * this.zoom * RING_K;
+    const cap = Math.min(this.width, this.height) * 0.455;
+    return Math.min(want, cap);
   }
 
   nodeColor(i) {
@@ -1222,6 +1301,8 @@ class NeuralEngine {
     const dim = this.dimmed ? 0.45 : 1;
     const zoomW = Math.max(0.7, Math.min(2.4, f * 1.25));
     this.drawCoreFrame(f, dim);
+    this.drawNeuronBelt(dim, f);
+    this.drawStarRing(dim, f);
     this.drawDoubtRing(project, dim);
     this.drawCoreCloud(project, dim);
     this.drawStrata(project, dim, true);
@@ -1243,13 +1324,327 @@ class NeuralEngine {
     this.drawSelection();
   }
 
-  // 存疑池：挂在已有装饰星环上的节点（不新增环），可点、随环自转。
+  // 环带神经元：胞体 + 树突分叉 + 轴突 + 沿纤维跑的脉冲。
+  // 画在内环和外环之间那一圈，跟随星环一起平面转动（offset）。
+  drawNeuronBelt(dim, scale) {
+    const { ctx } = this;
+    const { x: cx, y: cy } = this.somaScreen;
+    const R = this.ringRadius();
+    if (R < 60) return;
+    const inner = R * 0.745, outer = R * 0.952;
+    const thick = outer - inner;
+    const offset = this.ringPhase + this.ringAngle;
+    const t = this.time;
+    const s2 = Math.max(0.55, scale);
+
+    const dot = (x, y, r, style) => {
+      ctx.beginPath(); ctx.arc(x, y, r, 0, TAU);
+      ctx.fillStyle = style; ctx.fill();
+    };
+    // 折线上取点：soma → mid(55%) → end
+    const at = (x0, y0, x1, y1, x2, y2, u) => {
+      if (u <= 0.55) { const k = u / 0.55; return [x0 + (x1 - x0) * k, y0 + (y1 - y0) * k]; }
+      const k = (u - 0.55) / 0.45; return [x1 + (x2 - x1) * k, y1 + (y2 - y1) * k];
+    };
+
+    // ---- 神经毡：神经元之间偶尔连一条细弧（真实脑片里最像"网"的那层）
+    for (let i = 0; i < this.neurons.length; i++) {
+      const a = this.neurons[i], b = this.neurons[(i + 1) % this.neurons.length];
+      if (!a.link) continue;
+      const aa = a.a + offset, ba = b.a + offset;
+      const ra = inner + a.r * thick, rb = inner + b.r * thick;
+      const x1 = cx + Math.cos(aa) * ra, y1 = cy + Math.sin(aa) * ra;
+      const x2 = cx + Math.cos(ba) * rb, y2 = cy + Math.sin(ba) * rb;
+      const mx = (x1 + x2) / 2, my = (y1 + y2) / 2;
+      // 往圆心方向兜一下，弧线才不会切进内环
+      const k = 0.16;
+      ctx.beginPath();
+      ctx.moveTo(x1, y1);
+      ctx.quadraticCurveTo(mx + (cx - mx) * k, my + (cy - my) * k, x2, y2);
+      ctx.lineWidth = Math.max(0.4, 0.75 * s2);
+      ctx.strokeStyle = `rgba(138,206,238,${0.11 * dim})`;
+      ctx.stroke();
+      // 沿这条连接跑的慢脉冲
+      const u = (t * 0.11 + i * 0.137) % 1;
+      const ix = (1 - u) * (1 - u) * x1 + 2 * (1 - u) * u * (mx + (cx - mx) * k) + u * u * x2;
+      const iy = (1 - u) * (1 - u) * y1 + 2 * (1 - u) * u * (my + (cy - my) * k) + u * u * y2;
+      const f = Math.sin(u * Math.PI) * dim;
+      if (f > 0.05) dot(ix, iy, Math.max(0.7, 1.1 * s2), `rgba(210,246,255,${0.5 * f})`);
+    }
+
+    for (let i = 0; i < this.neurons.length; i++) {
+      const nb = this.neurons[i];
+      const a = nb.a + offset;
+      const rr = inner + nb.r * thick;
+      const x = cx + Math.cos(a) * rr;
+      const y = cy + Math.sin(a) * rr;
+      const soma = Math.max(1.2, nb.size * 0.82 * s2);
+
+      // ---- 树突
+      for (const br of nb.branches) {
+        const ba = a + br.ang;
+        const L = thick * br.len;
+        const mx = x + Math.cos(ba) * L * 0.55 + Math.cos(ba + 1.57) * L * br.bend * 0.25;
+        const my = y + Math.sin(ba) * L * 0.55 + Math.sin(ba + 1.57) * L * br.bend * 0.25;
+        const ex = mx + Math.cos(ba + br.bend * 0.35) * L * 0.45;
+        const ey = my + Math.sin(ba + br.bend * 0.35) * L * 0.45;
+
+        ctx.beginPath();
+        ctx.moveTo(x, y); ctx.lineTo(mx, my); ctx.lineTo(ex, ey);
+        ctx.lineWidth = Math.max(0.45, 1.0 * s2);
+        ctx.strokeStyle = `rgba(152,220,248,${0.34 * dim})`;
+        ctx.stroke();
+
+        // 末端两个小分叉（树突棘）
+        for (const d of [-0.45, 0.4]) {
+          const fa = ba + br.bend * 0.35 + d * br.fork;
+          ctx.beginPath();
+          ctx.moveTo(ex, ey);
+          ctx.lineTo(ex + Math.cos(fa) * L * 0.26, ey + Math.sin(fa) * L * 0.26);
+          ctx.lineWidth = Math.max(0.4, 0.7 * s2);
+          ctx.strokeStyle = `rgba(160,226,250,${0.22 * dim})`;
+          ctx.stroke();
+        }
+        dot(ex, ey, Math.max(0.7, 1.1 * s2), `rgba(190,238,255,${0.35 * dim})`);
+
+        // ---- 脉冲：沿这条树突的 0→1 跑，跑到头就回到胞体
+        const u = (t * br.speed + br.phase) % 1;
+        const [px, py] = at(x, y, mx, my, ex, ey, u);
+        const fade = Math.sin(u * Math.PI) * dim;
+        if (fade > 0.03) {
+          ctx.beginPath(); ctx.arc(px, py, Math.max(1.6, 3.4 * s2), 0, TAU);
+          ctx.fillStyle = `rgba(140,215,250,${0.16 * fade})`;
+          ctx.fill();
+          dot(px, py, Math.max(0.8, 1.5 * s2), `rgba(240,252,255,${0.92 * fade})`);
+        }
+      }
+
+      // ---- 轴突：更长、更直，末端一个突触终末
+      {
+        const aa = a + nb.axon.ang;
+        const L = thick * nb.axon.len;
+        const mx = x + Math.cos(aa) * L * 0.6;
+        const my = y + Math.sin(aa) * L * 0.6;
+        const ex = x + Math.cos(aa) * L;
+        const ey = y + Math.sin(aa) * L;
+        ctx.beginPath();
+        ctx.moveTo(x, y); ctx.lineTo(mx, my); ctx.lineTo(ex, ey);
+        ctx.lineWidth = Math.max(0.5, 1.25 * s2);
+        ctx.strokeStyle = `rgba(170,226,250,${0.26 * dim})`;
+        ctx.stroke();
+        // 终末小泡
+        ctx.beginPath(); ctx.arc(ex, ey, Math.max(1.2, 2.2 * s2), 0, TAU);
+        ctx.fillStyle = `rgba(175,232,255,${0.5 * dim})`; ctx.fill();
+        ctx.beginPath(); ctx.arc(ex, ey, Math.max(2.4, 5.2 * s2), 0, TAU);
+        ctx.fillStyle = `rgba(150,220,250,${0.1 * dim})`; ctx.fill();
+
+        const u = (t * nb.axon.speed + nb.axon.phase) % 1;
+        const px = x + (ex - x) * u, py = y + (ey - y) * u;
+        const fade = Math.sin(u * Math.PI) * dim;
+        if (fade > 0.03) {
+          ctx.beginPath(); ctx.arc(px, py, Math.max(2, 4 * s2), 0, TAU);
+          ctx.fillStyle = `rgba(150,220,250,${0.18 * fade})`; ctx.fill();
+          dot(px, py, Math.max(0.9, 1.7 * s2), `rgba(244,253,255,${0.95 * fade})`);
+        }
+      }
+
+      // ---- 胞体：发光核 + 细准星圈（"电子仪器"那半张脸）
+      const g = ctx.createRadialGradient(x, y, 0, x, y, soma * 4.2);
+      g.addColorStop(0, `rgba(255,255,255,${0.95 * dim})`);
+      g.addColorStop(0.28, `rgba(176,232,255,${0.7 * dim})`);
+      g.addColorStop(1, "rgba(120,200,240,0)");
+      ctx.beginPath(); ctx.arc(x, y, soma * 4.2, 0, TAU);
+      ctx.fillStyle = g; ctx.fill();
+      dot(x, y, soma * 0.62, `rgba(250,254,255,${0.95 * dim})`);
+
+      ctx.beginPath(); ctx.arc(x, y, soma * 2.1, 0, TAU);
+      ctx.strokeStyle = `rgba(160,222,248,${0.3 * dim})`;
+      ctx.lineWidth = Math.max(0.4, 0.7 * s2);
+      ctx.stroke();
+      // 旋转刻度圈
+      const ra = t * 0.6 + nb.spin;
+      for (let k = 0; k < 4; k++) {
+        const ka = ra + k * Math.PI / 2;
+        ctx.beginPath();
+        ctx.moveTo(x + Math.cos(ka) * soma * 2.1, y + Math.sin(ka) * soma * 2.1);
+        ctx.lineTo(x + Math.cos(ka) * soma * 3.0, y + Math.sin(ka) * soma * 3.0);
+        ctx.strokeStyle = `rgba(180,232,252,${0.32 * dim})`;
+        ctx.stroke();
+      }
+    }
+  }
+
+
+  // 注意这里**不画存疑点**，存疑点由 drawDoubtRing 挂上去（同一半径）。
+  drawStarRing(dim, scale) {
+    const { ctx } = this;
+    const { x: cx, y: cy } = this.somaScreen;
+    const R = this.ringRadius();
+    if (R < 30) return;
+    const t = this.time;
+    const offset = this.ringPhase + this.ringAngle;   // 拖拽时整圈花纹跟着转
+    const breathe = 0.85 + 0.15 * Math.sin(t * 0.9);
+
+    // ---- 1) 内外几层极淡的轨道圈 + 呼吸
+    for (const [ratio, alpha, width] of [
+      [0.965, 0.16, 0.8], [1.0, 0.34, 1.1], [1.035, 0.14, 0.7],
+      [1.105, 0.2, 0.8], [1.185, 0.1, 0.6], [1.255, 0.07, 0.6],
+    ]) {
+      ctx.beginPath(); ctx.arc(cx, cy, R * ratio, 0, TAU);
+      ctx.lineWidth = Math.max(0.5, width * scale);
+      ctx.strokeStyle = `rgba(150,196,222,${alpha * dim * (ratio === 1.0 ? breathe : 1)})`;
+      ctx.stroke();
+    }
+
+    // ---- 1.5) 环带的柔光：一条宽而淡的描边，让环"发光"而不是一根细线
+    ctx.beginPath(); ctx.arc(cx, cy, R, 0, TAU);
+    ctx.lineWidth = Math.max(8, 26 * scale);
+    ctx.strokeStyle = `rgba(122,192,240,${0.085 * dim * breathe})`;
+    ctx.stroke();
+    ctx.beginPath(); ctx.arc(cx, cy, R, 0, TAU);
+    ctx.lineWidth = Math.max(3, 10 * scale);
+    ctx.strokeStyle = `rgba(150,214,245,${0.10 * dim * breathe})`;
+    ctx.stroke();
+
+    // ---- 2) 装饰花纹：48 片细长"羽/花瓣"，长短相间，向外张开
+    // 这是"华丽"的主体：只用线条，不用填充，避免糊成一圈。
+    for (let i = 0; i < 48; i++) {
+      const a = i / 48 * TAU + offset;
+      const major = i % 4 === 0;
+      const len = R * (major ? 0.135 : i % 2 === 0 ? 0.075 : 0.045);
+      const wide = major ? 0.016 : 0.008;             // 半角宽度
+      const r0 = R * 1.0, r1 = R * 1.0 + len;
+      ctx.beginPath();
+      ctx.moveTo(cx + Math.cos(a - wide) * r0, cy + Math.sin(a - wide) * r0);
+      ctx.lineTo(cx + Math.cos(a) * r1, cy + Math.sin(a) * r1);
+      ctx.lineTo(cx + Math.cos(a + wide) * r0, cy + Math.sin(a + wide) * r0);
+      ctx.lineWidth = Math.max(0.5, scale * (major ? 1.0 : 0.6));
+      ctx.strokeStyle = major
+        ? `rgba(196,232,240,${0.62 * dim})`
+        : `rgba(158,198,222,${0.3 * dim})`;
+      ctx.stroke();
+    }
+
+    // ---- 2.5) 第二层花纹：24 片短瓣，反向转，避免"一圈重复"的死板
+    for (let i = 0; i < 24; i++) {
+      const a = i / 24 * TAU - offset * 0.6;
+      const len = R * (i % 6 === 0 ? 0.055 : 0.03);
+      ctx.beginPath();
+      ctx.moveTo(cx + Math.cos(a) * R * 1.055, cy + Math.sin(a) * R * 1.055);
+      ctx.lineTo(cx + Math.cos(a) * (R * 1.055 + len), cy + Math.sin(a) * (R * 1.055 + len));
+      ctx.lineWidth = Math.max(0.5, scale * 0.7);
+      ctx.strokeStyle = `rgba(178,214,236,${(i % 6 === 0 ? 0.34 : 0.16) * dim})`;
+      ctx.stroke();
+    }
+
+    // ---- 2.7) 菱形珠饰：12 颗小菱形，把环"串"起来
+    for (let i = 0; i < 12; i++) {
+      const a = i / 12 * TAU + offset * 1.15;
+      const r = R * 1.115;
+      const bx = cx + Math.cos(a) * r, by = cy + Math.sin(a) * r;
+      const s = Math.max(1.8, 3.2 * scale) * (i % 3 === 0 ? 1.5 : 1);
+      const tx = Math.cos(a + Math.PI / 2) * s, ty = Math.sin(a + Math.PI / 2) * s;
+      const rx = Math.cos(a) * s * 0.55, ry = Math.sin(a) * s * 0.55;
+      ctx.beginPath();
+      ctx.moveTo(bx + tx, by + ty);
+      ctx.lineTo(bx + rx, by + ry);
+      ctx.lineTo(bx - tx, by - ty);
+      ctx.lineTo(bx - rx, by - ry);
+      ctx.closePath();
+      ctx.fillStyle = `rgba(206,236,244,${0.5 * dim * breathe})`;
+      ctx.fill();
+    }
+
+    // ---- 3) 刻度：180 格，每 15 格加长
+    for (let i = 0; i < 180; i++) {
+      const a = i / 180 * TAU + offset;
+      const major = i % 15 === 0, medium = i % 5 === 0;
+      const inner = R * 0.985, outer = R * (major ? 0.945 : medium ? 0.962 : 0.975);
+      ctx.beginPath();
+      ctx.moveTo(cx + Math.cos(a) * inner, cy + Math.sin(a) * inner);
+      ctx.lineTo(cx + Math.cos(a) * outer, cy + Math.sin(a) * outer);
+      ctx.lineWidth = Math.max(0.5, scale * (major ? 1.4 : 0.55));
+      ctx.strokeStyle = `rgba(198,228,238,${dim * (major ? 0.55 : medium ? 0.28 : 0.12)})`;
+      ctx.stroke();
+    }
+
+    // ---- 4) 两段反向旋转的虚线弧（给"在转"的暗示）
+    for (const [ratio, dir, dash, alpha] of [
+      [1.105, 1, [scale * 2, scale * 9], 0.3],
+      [1.135, -1, [scale * 1.2, scale * 14], 0.2],
+    ]) {
+      ctx.setLineDash(dash);
+      ctx.beginPath();
+      const a0 = dir * offset * 1.6;
+      ctx.arc(cx, cy, R * ratio, a0, a0 + TAU);
+      ctx.lineWidth = Math.max(0.6, scale * 0.9);
+      ctx.strokeStyle = `rgba(168,206,226,${alpha * dim})`;
+      ctx.stroke();
+      ctx.setLineDash([]);
+    }
+
+    // ---- 5) 扫描弧：一段亮弧缓慢绕行，像雷达
+    {
+      const a0 = -Math.PI / 2 + t * 0.55;
+      const sweep = 0.55 + 0.35 * Math.sin(t * 0.7);
+      const g = ctx.createLinearGradient(
+        cx + Math.cos(a0) * R, cy + Math.sin(a0) * R,
+        cx + Math.cos(a0 + sweep) * R, cy + Math.sin(a0 + sweep) * R);
+      g.addColorStop(0, "rgba(140,220,255,0)");
+      g.addColorStop(0.5, `rgba(150,226,255,${0.3 * dim})`);
+      g.addColorStop(1, "rgba(140,220,255,0)");
+      ctx.beginPath();
+      ctx.arc(cx, cy, R * 1.012, a0, a0 + sweep);
+      ctx.lineWidth = Math.max(2, 9 * scale);
+      ctx.strokeStyle = g;
+      ctx.stroke();
+    }
+
+    // ---- 6) 外溢粒子：从环带向外飘，越远越淡
+    const k = RING_K_OUT / RING_K - 1;      // 外溢距离（相对 R）
+    for (let i = 0; i < this.ringSparks.length; i++) {
+      const s = this.ringSparks[i];
+      const p = s.p;
+      const a = s.a + offset + p * 0.16;    // 稍微打折，别直直往出射
+      const r = R * (1.0 + p * k);
+      const fade = Math.pow(1 - p, 1.5) * dim;
+      if (fade <= 0.02) continue;
+      const size = Math.max(0.5, s.size * scale * 1.55 * (1.12 - p * 0.55));
+      const violet = s.tone > 0.72;
+      if (size > 1.35) {
+        ctx.beginPath(); ctx.arc(cx + Math.cos(a) * r, cy + Math.sin(a) * r, size * 2.6, 0, TAU);
+        ctx.fillStyle = violet
+          ? `rgba(196,166,255,${0.18 * fade})`
+          : `rgba(168,224,255,${0.2 * fade})`;
+        ctx.fill();
+      }
+      ctx.fillStyle = violet
+        ? `rgba(206,180,255,${0.95 * fade})`
+        : `rgba(186,232,255,${0.98 * fade})`;
+      ctx.beginPath();
+      ctx.arc(cx + Math.cos(a) * r, cy + Math.sin(a) * r, size, 0, TAU);
+      ctx.fill();
+      // 长尾：一小段径向拖尾，让"溢出"有方向感
+      if (p > 0.08) {
+        const rTail = R * (1.0 + (p - 0.08) * k);
+        ctx.beginPath();
+        ctx.moveTo(cx + Math.cos(a) * rTail, cy + Math.sin(a) * rTail);
+        ctx.lineTo(cx + Math.cos(a) * r, cy + Math.sin(a) * r);
+        ctx.lineWidth = Math.max(0.3, size * 0.5);
+        ctx.strokeStyle = violet
+          ? `rgba(196,166,255,${0.28 * fade})`
+          : `rgba(168,224,255,${0.3 * fade})`;
+        ctx.stroke();
+      }
+    }
+  }
+
+  // 存疑池：挂在装饰星环上的光点（不新增环），可点、跟着环一起转。
   drawDoubtRing(_project, dim) {
     const { ctx } = this;
     const n = this.doubts.length;
     if (!n) return;
     const { x: cx, y: cy } = this.somaScreen;
-    // 存疑环：在装饰外环之外一圈；拖动时平面转（ringAngle），不倾斜。
     const R = this.ringRadius();
     const spin = this.time * 0.06;
     for (let i = 0; i < n; i++) {
@@ -1259,18 +1654,40 @@ class NeuralEngine {
       this.doubtScr[i] = { x, y, z: 0 };
       const near = this.doubtHover === i;
       const r = near ? 10 : 7.5;
-      const grad = ctx.createRadialGradient(x, y, 0, x, y, r * 2.4);
+      // 脉冲：每个点有自己的相位，避免整圈一起呼吸（看着像故障）。
+      const pulse = 0.72 + 0.28 * Math.sin(this.time * 2.1 + i * 1.7);
+      // 向内的连接丝：让光点看起来"挂"在环上、并牵住里面的记忆。
+      const innerR = R * 0.72;
+      const cg = ctx.createLinearGradient(
+        cx + Math.cos(a) * innerR, cy + Math.sin(a) * innerR, x, y);
+      cg.addColorStop(0, "rgba(196,166,255,0)");
+      cg.addColorStop(1, `rgba(204,176,255,${0.42 * dim * pulse})`);
+      ctx.beginPath();
+      ctx.moveTo(cx + Math.cos(a) * innerR, cy + Math.sin(a) * innerR);
+      ctx.lineTo(x, y);
+      ctx.strokeStyle = cg;
+      ctx.lineWidth = Math.max(0.6, 1.1 * pulse);
+      ctx.stroke();
+      // 外圈脉冲光环
+      ctx.beginPath();
+      ctx.arc(x, y, r * (2.2 + 0.5 * pulse), 0, TAU);
+      ctx.strokeStyle = `rgba(196,166,255,${0.26 * dim * pulse})`;
+      ctx.lineWidth = 1;
+      ctx.stroke();
+      // 核心光晕
+      const grad = ctx.createRadialGradient(x, y, 0, x, y, r * 2.6);
       grad.addColorStop(0, "rgba(255,255,255,1)");
-      grad.addColorStop(.3, `rgba(196,166,255,${0.95 * dim})`);
+      grad.addColorStop(.28, `rgba(214,188,255,${0.98 * dim})`);
+      grad.addColorStop(.55, `rgba(196,166,255,${0.5 * dim * pulse})`);
       grad.addColorStop(1, "rgba(177,141,255,0)");
       ctx.fillStyle = grad;
-      ctx.beginPath(); ctx.arc(x, y, r * 2.4, 0, TAU); ctx.fill();
+      ctx.beginPath(); ctx.arc(x, y, r * 2.6, 0, TAU); ctx.fill();
       // 环上小刻度（贴合装饰环，表明这是存疑节点位）
       ctx.beginPath();
-      ctx.moveTo(cx + Math.cos(a) * (R - 10), cy + Math.sin(a) * (R - 10));
-      ctx.lineTo(cx + Math.cos(a) * (R + 10), cy + Math.sin(a) * (R + 10));
-      ctx.strokeStyle = `rgba(196,166,255,${0.4 * dim})`;
-      ctx.lineWidth = 1;
+      ctx.moveTo(cx + Math.cos(a) * (R - 13), cy + Math.sin(a) * (R - 13));
+      ctx.lineTo(cx + Math.cos(a) * (R + 13), cy + Math.sin(a) * (R + 13));
+      ctx.strokeStyle = `rgba(206,176,255,${0.55 * dim})`;
+      ctx.lineWidth = Math.max(1, 1.3 * pulse);
       ctx.stroke();
       if (near) {
         ctx.font = "500 12px ui-monospace, Consolas, monospace";
@@ -1732,6 +2149,9 @@ if (engine) {
     new IntersectionObserver((entries) => engine.setVisible(entries.some(e => e.isIntersecting))).observe(wrap);
   }
   engine.start();
+  // 调试/验收用句柄：CDP 测试要读 ringAngle、somaScreen 这些内部量。
+  // 只挂在 window 上，不参与任何业务逻辑。
+  window.__hippoBoard = engine;
   if (typeof matchMedia === "function") {
     matchMedia("(prefers-reduced-motion: reduce)").addEventListener("change", () => {
       engine.setOptions({ reducedMotion: reducedMotion(), layerCaptions: engine.opts.layerCaptions, onSelect: (id) => onFieldSelect(id) });
@@ -1786,6 +2206,9 @@ function renderHead(d) {
   const c = d.counts || {};
   const nodes = (d.nodes || []).length, edges = (d.edges || []).length;
   $("sub").textContent = `${nodes} 个节点 · ${edges} 条关联 · 事件 ${c.events ?? 0} / 事实 ${c.facts ?? 0} / 人物 ${c.entities ?? 0} / 存疑 ${c.doubts ?? 0}`;
+  const extractStatus = $("extractStatus");
+  extractStatus.hidden = d.extraction_configured !== false;
+  extractStatus.textContent = d.extraction_configured === false ? "未配置 API key：仅保存对话，暂不自动提取记忆。" : "";
   const t = d.tiers || {};
   const layers = layerCounts(d);
   $("console").innerHTML = `
@@ -2122,15 +2545,16 @@ function showOverlay(kind, detail) {
     ov.innerHTML = `<div class="status-card">
       <span class="status-icon">${ICON.alert}</span>
       <p class="status-title">连不上记忆内核</p>
-      <p class="status-body">${esc(detail || "")}<br>先启动内核，再打开本页：</p>
-      <p class="status-cmd">python -m hippo.dsh_kernel --db C:\\h\\t6\\mem.db --port 8794</p>
+      <p class="status-body">${esc(detail || "")}<br>请检查插件是否已启用，重启 DSH 后再重试。</p>
       <p style="margin:12px 0 0"><button type="button" class="btn btn-primary" id="btnRetry">重试</button></p>
     </div>`;
     $("btnRetry").addEventListener("click", () => load());
   } else if (kind === "empty") {
     ov.innerHTML = `<div class="status-card">
       <p class="status-title">还没有记忆</p>
-      <p class="status-body">在 DSH 里聊天几轮，海马体会自动抽取事件、事实与人物；<br>这里会随之生长出三层记忆场。</p>
+      <p class="status-body">${state.data && state.data.extraction_configured === false
+        ? "请先在 DSH 中配置 DeepSeek API key 并重启，再开始聊天。"
+        : "在 DSH 里聊天几轮，海马体会自动抽取事件、事实与人物；<br>这里会随之生长出三层记忆场。"}</p>
     </div>`;
   }
 }
@@ -2140,7 +2564,8 @@ async function load(manual) {
   const first = !state.data;
   if (first) showOverlay("loading");
   try {
-    const r = await fetch(API + "/board/data", { cache: "no-store" });
+    const dataPath = location.pathname === "/api/hippo.board" ? "/api/hippo.board.data" : API + "/board/data";
+    const r = await fetch(dataPath, { cache: "no-store" });
     const d = await r.json();
     if (!d || d.ok === false) throw new Error((d && d.error) || "bad response");
     state.failed = false;

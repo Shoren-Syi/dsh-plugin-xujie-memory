@@ -10,8 +10,10 @@
     - id: hippocampus-deepseek
       name: dsh-plugin-hippocampus-deepseek
       config:
-        # 内核监听端口（本地回环，不对外）
-        port: 8766
+        # 内核监听端口（本地回环，不对外）。
+        # 0 = 自动：先试 8766，被占用就往后找（多实例/多 profile 同时跑时必需）。
+        # 填具体端口 = 锁死该端口，被占时插件会退避重试并打警告。
+        port: 0
         # 记忆库路径；留空 = ~/.hippo/mem.db
         dbPath: ""
         # 抽取用的 DeepSeek key；留空自动从 DSH 凭据 / 环境变量 / ~/.hippo/config.yaml 找

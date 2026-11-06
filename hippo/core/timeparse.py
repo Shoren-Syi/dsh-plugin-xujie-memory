@@ -718,7 +718,9 @@ _RE_PLAN_MD = re.compile(r"([一二三四五六七八九十\d]{1,2})\s*月")
 _RE_PLAN_YEAR_END = re.compile("年底|年末|今年底|今年年底")
 _RE_PLAN_YEAR_AFTER = re.compile(r"([一二两三四五六七八九十\d]+)\s*年后")
 # "这句话里有个远期日期词"的粗判据，只用来防止 parse_when 只抓到时刻
-_RE_PLAN_FAR = re.compile("下个?月|下下个?月|明年|年底|年后|[一二三四五六七八九十\d]{1,2}\s*月")
+# 必须是原生字符串：非原生字符串里的 \d 在 3.12 会报 SyntaxWarning，
+# 未来版本直接变 SyntaxError（实测打包运行时日志里就刷了这条警告）。
+_RE_PLAN_FAR = re.compile(r"下个?月|下下个?月|明年|年底|年后|[一二三四五六七八九十\d]{1,2}\s*月")
 
 def _add_months(dt: datetime, n: int) -> datetime:
     """加月并夹到月末。1/31 + 1 月 = 2/28，不是 3/3。"""

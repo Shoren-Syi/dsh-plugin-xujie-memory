@@ -158,8 +158,10 @@ class Extractor:
             return rep
 
         user_turns = sum(1 for t in pending if t.role == "user")
-        if not force and user_turns < self.cfg.extract.every_n_turns:
-            return rep
+        if not force:
+            first = self.store.extracted_turn_count(session) == 0
+            if user_turns < extract_threshold(self.cfg, first=first):
+                return rep
 
         windows = slice_windows(
             pending,
@@ -185,7 +187,7 @@ class Extractor:
                     session=session, start_idx=w.start_idx, end_idx=w.end_idx,
                     status="skipped", reason="incomplete"))
                 # 不 mark：这条尾巴下次还要抽
-                continue
+                break
 
             if index is None:
                 index = EntityIndex.from_store(self.store, session)
@@ -206,6 +208,9 @@ class Extractor:
                     known = "（暂无）"
 
             await self._one(rep, session, w, known)
+            # 标记采用前缀水位线；前一窗口失败时继续处理后续窗口会误标失败数据。
+            if rep.results[-1].status == "error":
+                break
 
         return rep
 
@@ -321,3 +326,15 @@ class Extractor:
 
 
 __all__ = ["Extractor", "RunResult", "SessionReport"]
+
+
+def extract_threshold(cfg: Any, *, first: bool) -> int:
+    """这一次抽取要攒够几条用户消息。
+
+    首次抽（这个会话还没抽过）用更低的门槛：真实使用里"连发 5 条"很罕见，
+    门槛不降的结果就是聊了半天一条记忆都没有。
+    """
+    n = int(cfg.extract.every_n_turns)
+    if first:
+        n = min(n, max(1, int(getattr(cfg.extract, "first_extract_user_turns", n))))
+    return max(1, n)

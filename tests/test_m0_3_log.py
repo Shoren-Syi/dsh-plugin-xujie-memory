@@ -67,3 +67,14 @@ def test_exception_is_captured(logdir):
         lg.exception("failed")
     row = json.loads(hlog.current_log_file(logdir).read_text(encoding="utf-8").strip())
     assert "ValueError: boom" in row["exc"]
+
+
+def test_handler_can_reopen_after_close(logdir):
+    lg = hlog.get_logger("reopen")
+    lg.info("before")
+    handler = next(h for h in __import__("logging").getLogger("hippo").handlers
+                   if isinstance(h, hlog.DailyFileHandler))
+    handler.close()
+    lg.info("after")
+    rows = [json.loads(line) for line in hlog.current_log_file(logdir).read_text(encoding="utf-8").splitlines()]
+    assert [row["event"] for row in rows] == ["before", "after"]

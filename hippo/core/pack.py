@@ -59,6 +59,7 @@ M12 量出来触发率 45%——如果每轮都重新装 D 段，缓存命中率
 from __future__ import annotations
 
 import hashlib
+import re
 from dataclasses import dataclass, field
 from datetime import datetime
 from pathlib import Path
@@ -76,12 +77,17 @@ from .ledger import recall as recall_lesson
 from .rank import L2Result, MemoryItem, l2_search
 from .topic import Trigger, save_keywords, should_retrieve
 from .turns import estimate_tokens
+from .store import fact_keys
 
 log = get_logger("pack")
 
 __all__ = ["Block", "PackResult", "pack", "render", "TOTAL_BUDGET", "BLOCKS"]
 
 TOTAL_BUDGET = 1100
+
+# 稳定段版本号的占位符。先按最终长度占位、等裁剪落地后再换成真值，
+# 是为了让预算计算和实际注入看到同一份字节（详见 pack() 里那段注释）。
+_VSLOT = "[ctx-v0000]"
 
 # 顺序即优先级（从高到低）。裁剪按**反序**进行。
 BLOCKS = ("persona", "card", "pinned", "memory", "dynamic", "anchor")
@@ -303,6 +309,51 @@ def _memory_block(items: list[MemoryItem], drilled: DrillResult | None) -> str:
     return "\n".join(out)
 
 
+def _targeted_self_fact(store: Any, session: str, question: str) -> str:
+    """只对明确问自身单个事实槽的问题，补充当前事实；不猜其他人的身份。"""
+    q = re.sub(r"\s+", "", (question or "").lower())
+    if not q or any(word in q for word in ("以前", "之前", "过去", "原来", "原先", "当时", "曾经")):
+        return ""
+    if not any(word in q for word in ("?", "？", "多少", "什么", "哪", "多大", "几", "吗", "呢")):
+        return ""
+    q = re.sub(r"[?？!！。,.，]", "", q)
+    q = re.sub(r"^(?:请问|你还记得|你记得|请告诉我)", "", q)
+    if not q.startswith("我"):
+        return ""
+    q = q[1:]
+    # "的"可能出现在时间副词两侧："我的住址" / "我现在的住址" / "我今年的年龄"。
+    # 第一版只允许它出现在"现在/今年"前面，于是"我现在的住址是什么"匹配不上，
+    # 而"我的住址是什么"能匹配——同一件事换个说法就查不到，纯属正则漏写。
+    q = re.sub(r"^(?:的)?(?:今年|现在|目前|平时|当前)?(?:的)?(?:是)?", "", q)
+    q = re.sub(r"(?:吗|呢|呀|啊)$", "", q)
+    table = fact_keys()
+    matches = set()
+    for name, key in table.keys.items():
+        for alias in (key.cn, *key.aliases):
+            token = re.sub(r"\s+", "", alias.lower())
+            if len(token) < 2:
+                continue
+            if q == token or q in (token + "是多少", token + "是什么", token + "多少"):
+                matches.add(name)
+    if len(matches) != 1:
+        return ""
+    name = matches.pop()
+    rows = [(f, who) for f, who in store.list_facts(session, include_historical=False)
+            if f.key == name and (not who or who == _SELF) and f.valid_from is not None]
+    if not rows:
+        return ""
+    rows.sort(key=lambda item: (int(item[0].valid_from or 0), item[0].id), reverse=True)
+    spec = table.get(name)
+    values = list(dict.fromkeys(re.sub(r"\s+", " ", f.value).strip() for f, _ in rows if f.value.strip()))
+    if not values:
+        return ""
+    if spec and spec.single:
+        values = values[:1]
+    elif len(values) > 3:
+        values = values[:3] + ["等"]
+    return f"[当前事实] 用户的{spec.cn if spec else name}：{'、'.join(values)}"
+
+
 def _fmt_plan(p: Any, now_ts: int) -> str:
     """M19.3 到点注入格式。手册快照：
 
@@ -406,6 +457,12 @@ def _trim_to(block: Block, limit: int) -> None:
         gone = lines.pop()
         if gone.strip():
             block.dropped.append(f"{block.name}:{gone[:16]}")
+    if block.name == "memory":
+        # 允许退化为关键词，但不能把没有任何内容的事件标题当作一条记忆。
+        if lines and lines[-1].startswith("[记忆 · "):
+            block.dropped.append(f"memory:{lines.pop()[:16]}")
+        if lines == ["# 我记得的"]:
+            lines.clear()
     block.text = "\n".join(lines)
     block.tokens = estimate_tokens(block.text)
 
@@ -562,7 +619,12 @@ def pack(
     blocks: list[Block] = []
     dropped: list[str] = []
 
-    persona = Block("persona", _persona(cfg), budget=budget_of["persona"])
+    # A 段先按最终长度占位版本号（和 `[ctx-vxxxx]` 等长），真值等裁剪
+    # 全部落地后再填，这样预算数字和实际注入的字节是同一份。
+    persona_body = _persona(cfg)
+    persona = Block("persona",
+                    (f"{_VSLOT}\n" + persona_body) if persona_body.strip() else "",
+                    budget=budget_of["persona"])
     card_text, card_drop = _card(store, session, budget_of["card"])
     card = Block("card", card_text, budget=budget_of["card"], dropped=card_drop)
     pin_text, pin_drop = _pinned(store, session)
@@ -579,17 +641,11 @@ def pack(
     memory = Block("memory", mem_text, budget=budget_of["memory"])
     dyn_text, dyn_drop = _dynamic(store, session, now, cfg=cfg,
                                   upcoming_action=upcoming_action)
+    direct_fact = _targeted_self_fact(store, session, user_msg)
+    if direct_fact:
+        dyn_text = "\n".join(part for part in (direct_fact, dyn_text) if part)
     dynamic = Block("dynamic", dyn_text, budget=budget_of["dynamic"], dropped=dyn_drop)
     anchor = Block("anchor", _anchor(now, tz), budget=budget_of["anchor"])
-
-    # 稳定段的版本号（手册 M13.2 要求 A/B 带 `[ctx-v{n}]`）。
-    # 用内容哈希的前 4 位而不是自增计数器：自增要持久化状态，
-    # 状态一丢（换机器、清库）全体缓存失效；哈希是"内容一样版本就一样"，
-    # 天然成立，且跨进程稳定。
-    stable = persona.text + "\x00" + card.text + "\x00" + pinned.text
-    version = hashlib.sha1(stable.encode("utf-8")).hexdigest()[:4]
-    if persona.text.strip():
-        persona.text = f"[ctx-v{version}]\n" + persona.text
 
     for b in (persona, card, pinned, memory, dynamic, anchor):
         b.tokens = estimate_tokens(b.text)
@@ -617,6 +673,20 @@ def pack(
             continue          # 不裁
         _trim_to(b, b.budget)
 
+    # 角色卡是稳定的背景，检索记忆是针对本轮问题的内容。只有总预算
+    # 真正不足且有检索结果时，才收缩过长角色卡，并保留至少 200 token。
+    # 这样不必在空闲或普通对话中降低角色信息，也避免一张大卡挤掉本轮答案。
+    pre_total = sum(b.tokens for b in blocks)
+    card_floor = min(200, budget_of["card"])
+    if memory.used and pre_total > TOTAL_BUDGET and card.tokens > card_floor:
+        target = max(card_floor, card.tokens - (pre_total - TOTAL_BUDGET))
+        compact, compact_dropped = _card(store, session, target)
+        if estimate_tokens(compact) < card.tokens:
+            card.text = compact
+            card.tokens = estimate_tokens(compact)
+            card.dropped.extend(compact_dropped)
+            card.dropped.append("card:budget_compacted")
+
     # ---- 4. 总预算（D79）：按优先级从低到高砍
     order = ["memory", "dynamic", "card", "pinned", "persona"]
     by = {b.name: b for b in blocks}
@@ -634,6 +704,19 @@ def pack(
         _trim_to(by["persona"], max(0, by["persona"].tokens - (total - TOTAL_BUDGET)))
         total = sum(x.tokens for x in blocks)
         log.warning("pack.over_budget", extra={"fields": {"total": total}})
+
+    # 版本号填真值（手册 M13.2）。裁剪已经落到最终字节，现在算的哈希
+    # 才是"实际注入的稳定段"。之前是在裁剪前算，C 段一被裁就对不上：
+    # 版本号是缓存的键，键和内容不符时，内容变了还会复用旧前缀。
+    if _VSLOT in persona.text:
+        body = persona.text.split("\n", 1)[1] if "\n" in persona.text else ""
+        stable = body + "\x00" + card.text + "\x00" + pinned.text
+        version = hashlib.sha1(stable.encode("utf-8")).hexdigest()[:4]
+        # 等长替换，token 数不变，预算结论保持成立。
+        persona.text = persona.text.replace(_VSLOT, f"[ctx-v{version}]", 1)
+
+    # 最终总预算裁剪也可能移除事件；只给实际发出的记录回填和加固。
+    inj_ids = inj_ids[:by["memory"].text.count("[记忆 · ")]
 
     for b in blocks:
         dropped.extend(b.dropped)

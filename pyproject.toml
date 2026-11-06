@@ -31,7 +31,7 @@ hippo = "hippo.cli:main"
 include = ["hippo*"]
 
 [tool.setuptools.package-data]
-hippo = ["data/*.yaml", "data/*.sql", "data/migrations/*.sql",
+hippo = ["data/*.yaml", "data/*.sql", "data/*.html", "data/migrations/*.sql",
          "data/*.md", "data/prompts/*.md"]
 
 [tool.pytest.ini_options]

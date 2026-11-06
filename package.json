@@ -1,7 +1,7 @@
 {
   "name": "dsh-plugin-hippocampus-deepseek",
-  "version": "0.2.0",
-  "description": "DSH 插件：每轮自动记忆与注入，装上即用。记忆存本地 SQLite，不训练、不上传。",
+  "version": "0.2.3",
+  "description": "DSH 插件：自动提取与召回对话记忆，记忆数据库存于本地 SQLite。",
   "type": "module",
   "main": "lib/index.js",
   "exports": {
@@ -21,6 +21,13 @@
   "dsh": {
     "bundle": {
       "patch": "./cordis.patch.yml"
+    },
+    "client": {
+      "platform": "web",
+      "inject": [
+        "@deepseek-ai/dsh-client-ui-layout",
+        "@deepseek-ai/dsh-client-ui-sidebar"
+      ]
     }
   },
   "engines": {

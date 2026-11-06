@@ -198,7 +198,8 @@ def slice_windows(
     for t in turns:
         if t.role == "user":
             # 新的一轮要开始了：先看看上一窗是不是该收
-            if buf and (rounds >= per_window or tok >= max_tokens):
+            # 连续用户消息属于尚未得到回复的一组，不能在组中间切开。
+            if buf and buf[-1].role != "user" and (rounds >= per_window or tok >= max_tokens):
                 flush(False)
             rounds += 1
         buf.append(t)

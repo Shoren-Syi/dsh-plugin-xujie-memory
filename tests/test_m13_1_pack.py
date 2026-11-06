@@ -12,6 +12,7 @@ from datetime import datetime, timedelta
 
 import pytest
 
+from hippo.config import Config
 from hippo.core.pack import TOTAL_BUDGET, pack
 from hippo.core.rank import MemoryItem
 from hippo.core.models import Event
@@ -83,6 +84,25 @@ def test_memory_trimmed_before_persona(store):
     r = _pack(store, "搬家")
     assert r.by_name["persona"].tokens > 150, "人设不该被砍到这个程度"
     assert r.by_name["memory"].tokens < 600
+
+
+def test_large_background_card_compacts_only_when_budget_is_tight(store, monkeypatch):
+    import importlib
+    module = importlib.import_module("hippo.core.pack")
+    entity = store.upsert_entity(session="s1", canonical="用户", type="person")
+    event = _ev(store, "喜欢南瓜和游泳", keywords="南瓜 游泳", summary="用户喜欢南瓜和游泳")
+    for i in range(24):
+        store.add_trait(entity_id=entity, trait=f"背景特征{i}内容内容内容内容",
+                        evidence=[event], status="observed", confidence=0.8, slot=f"s{i}")
+    cfg = Config()
+    normal = pack(store, "s1", "", cfg=cfg, use_cache=False)
+    assert not any(x == "card:budget_compacted" for x in normal.dropped)
+    monkeypatch.setattr(module, "TOTAL_BUDGET", 650)
+    tight = pack(store, "s1", "南瓜是什么？", cfg=cfg, use_cache=False)
+    assert "card:budget_compacted" in tight.dropped
+    assert tight.by_name["card"].used
+    assert "南瓜" in tight.by_name["memory"].text
+    assert tight.total_tokens <= 650
 
 
 # ------------------------------------------------------------------ 确定性

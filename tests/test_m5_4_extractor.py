@@ -72,11 +72,14 @@ def make_extractor(store, cfg, respond):
 
 # ---------------------------------------------------------------- 攒够才抽
 async def test_not_enough_turns_no_call(store, cfg):
-    add_rounds(store, ["我昨天下午搬家了从朝阳搬到海淀", "老王说他下周要去深圳出差"])
+    # 1 条用户消息不够：窗口不完整（最后一条是 user），也不到首抽门槛。
+    # 注意 M39 起"2 条"就会触发首次抽取（见 tests/test_m39_1_first_extract.py）——
+    # 原来这里用 2 条，是因为当时首抽也要 5 条，真实使用里根本攒不到。
+    add_rounds(store, ["我昨天下午搬家了从朝阳搬到海淀"], last_user_only=True)
     ex, calls = make_extractor(store, cfg, lambda b, n: json.dumps(GOOD, ensure_ascii=False))
     rep = await ex.run("s")
     assert rep.results == []
-    assert calls == [], "不足 5 轮就调模型 = 每轮都在花钱"
+    assert calls == [], "窗口不完整就调模型 = 白花钱"
 
 
 async def test_force_extracts_tail(store, cfg):
@@ -193,6 +196,18 @@ async def test_persist_failure_not_marked(store, cfg, monkeypatch):
     rep = await ex.run("s")
     assert rep.results[0].status == "error"
     assert store.pending_turn_count("s") > 0, "写库失败却标记已抽 = 这段对话永远丢了"
+
+
+async def test_failed_first_window_does_not_mark_later_prefix(store, cfg, monkeypatch):
+    add_rounds(store, [f"我第{i}次说我昨天下午搬家了" for i in range(10)])
+    def boom(*_args, **_kwargs):
+        raise RuntimeError("disk full")
+    monkeypatch.setattr("hippo.core.extractor.persist_result", boom)
+    ex, calls = make_extractor(store, cfg, lambda b, n: json.dumps(GOOD, ensure_ascii=False))
+    rep = await ex.run("s")
+    assert [r.status for r in rep.results] == ["error"]
+    assert len(calls) == 1
+    assert store.pending_turn_count("s") == 20
 
 
 # ---------------------------------------------------------------- 幂等

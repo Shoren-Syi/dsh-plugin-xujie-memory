@@ -48,12 +48,16 @@ def _win():
 
 
 # ------------------------------------------------------------------ thinking
-def test_thinking_field_absent_by_default(cfg):
-    """默认配置不能发 thinking。DeepSeek 不认这个字段，多发就有 400 的风险。"""
+def test_official_flash_disables_thinking_for_extraction(cfg):
     enc, seen = _enc(cfg, {"prompt_tokens": 10, "completion_tokens": 5})
-    enc._payload([])
     payload = enc._payload([{"role": "user", "content": "x"}])
-    assert "thinking" not in payload
+    assert payload["thinking"] == {"type": "disabled"}
+
+
+def test_thinking_field_absent_for_other_providers(cfg):
+    cfg.deepseek.base_url = "https://other.example"
+    enc, _ = _enc(cfg, {})
+    assert "thinking" not in enc._payload([])
 
 
 def test_thinking_disabled_is_sent(cfg):

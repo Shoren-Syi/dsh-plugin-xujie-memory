@@ -6,8 +6,8 @@ timezone: Asia/Shanghai
 
 deepseek:
   base_url: https://api.deepseek.com
-  model: deepseek-chat          # 角色路径锁死 chat，reasoner 不用于角色
-  extract_model: deepseek-chat
+  model: deepseek-flash
+  extract_model: deepseek-flash
   temperature: 1.1
 
 session:

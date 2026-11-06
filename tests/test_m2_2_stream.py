@@ -8,6 +8,7 @@
 
 from __future__ import annotations
 
+import asyncio
 import json
 
 import httpx
@@ -55,22 +56,36 @@ async def test_relay_yields_per_line():
 
 
 async def test_stream_is_incremental_over_tcp(cfg, db_path, conn, live_server):
-    """过一遍真 TCP。ASGITransport 会 join 所有块，测不出问题。"""
-    app = create_app(cfg, store_path=db_path, upstream=streaming_fake(60).transport())
+    """首个 SSE 事件必须在上游允许结束之前穿过真实 TCP 到达客户端。"""
+    release = asyncio.Event()
+
+    class GatedStream(httpx.AsyncByteStream):
+        async def __aiter__(self):
+            yield sse(delta("第一段"), done=False).encode("utf-8")
+            await release.wait()
+            yield sse(delta("第二段"), usage=USAGE).encode("utf-8")
+
+    transport = httpx.MockTransport(lambda request: httpx.Response(
+        200, stream=GatedStream(), headers={"content-type": "text/event-stream"}))
+    app = create_app(cfg, store_path=db_path, upstream=transport)
     base = await live_server(app)
 
-    chunks: list[str] = []
-    async with httpx.AsyncClient(base_url=base, timeout=15) as c:
-        async with c.stream("POST", "/v1/chat/completions", json=BODY,
-                            headers={"authorization": "Bearer sk-x"}) as r:
-            assert r.status_code == 200
-            assert r.headers["content-type"].startswith("text/event-stream")
-            assert r.headers.get("x-accel-buffering") == "no"
-            async for text in r.aiter_text():
-                chunks.append(text)
-
-    assert len(chunks) > 5, f"只收到 {len(chunks)} 块，被缓冲了"
-    assert "".join(chunks).rstrip().endswith("data: [DONE]")
+    try:
+        async with httpx.AsyncClient(base_url=base, timeout=15) as c:
+            async with c.stream("POST", "/v1/chat/completions", json=BODY,
+                                headers={"authorization": "Bearer sk-x"}) as r:
+                assert r.status_code == 200
+                assert r.headers["content-type"].startswith("text/event-stream")
+                assert r.headers.get("x-accel-buffering") == "no"
+                lines = r.aiter_lines()
+                first = await asyncio.wait_for(anext(lines), timeout=3)
+                assert "第一段" in first
+                release.set()
+                rest = [line async for line in lines]
+                assert any("第二段" in line for line in rest)
+                assert "data: [DONE]" in rest
+    finally:
+        release.set()
 
 
 async def test_stream_ends_with_done(cfg, db_path, conn):

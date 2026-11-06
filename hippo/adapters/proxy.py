@@ -58,7 +58,7 @@ class ChatRequest(BaseModel):
 
     model_config = ConfigDict(extra="allow")
 
-    model: str = "deepseek-chat"
+    model: str = "deepseek-flash"
     messages: list[dict[str, Any]] = Field(default_factory=list)
     stream: bool = False
     user: str | None = None
@@ -361,6 +361,8 @@ def create_app(
         return {
             "object": "list",
             "data": [
+                {"id": "deepseek-flash", "object": "model", "owned_by": "deepseek"},
+                {"id": "deepseek-v4-pro", "object": "model", "owned_by": "deepseek"},
                 {"id": "deepseek-chat", "object": "model", "owned_by": "deepseek"},
                 {"id": "deepseek-reasoner", "object": "model", "owned_by": "deepseek"},
             ],

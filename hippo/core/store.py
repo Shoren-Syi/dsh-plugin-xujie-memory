@@ -2617,6 +2617,14 @@ class Store:
         ).fetchone()
         return int(row[0])
 
+    def extracted_turn_count(self, session: str) -> int:
+        """这个会话已经抽过的 turn 条数（0 = 还没抽过）。"""
+        row = self.conn.execute(
+            "SELECT count(*) FROM turns WHERE session = ? AND extracted_at IS NOT NULL",
+            (session,),
+        ).fetchone()
+        return int(row[0])
+
     # ------------------------------------------------------------------ extract_runs
     _RUN_COLS = (
         "status", "n_events", "n_facts", "n_traits", "n_plans", "n_doubts",
