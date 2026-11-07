@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "hippocampus-deepseek"
-version = "0.1.0"
+version = "1.0.0"
 description = "DeepSeek 的旁路记忆中间件：改一行 base_url，让 AI 记得住。"
 requires-python = ">=3.11"
 dependencies = [
