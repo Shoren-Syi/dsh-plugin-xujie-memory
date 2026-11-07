@@ -1,7 +1,10 @@
 {
-  "name": "dsh-plugin-hippocampus-deepseek",
+  "name": "dsh-plugin-xujie-memory",
   "version": "1.0.0",
-  "description": "DSH 插件：自动提取与召回对话记忆，记忆数据库存于本地 SQLite。",
+  "description": "叙界记忆 1.0：基于海马体内核的 DeepSeek Harness 本地记忆插件。",
+  "repository": { "type": "git", "url": "git+https://github.com/Shoren-Syi/dsh-plugin-xujie-memory.git" },
+  "homepage": "https://github.com/Shoren-Syi/dsh-plugin-xujie-memory#readme",
+  "bugs": { "url": "https://github.com/Shoren-Syi/dsh-plugin-xujie-memory/issues" },
   "type": "module",
   "main": "lib/index.js",
   "exports": {
@@ -16,7 +19,8 @@
     "runtime/**",
     "cordis.patch.yml",
     "LICENSE",
-    "README.md"
+    "README.md",
+    "RELEASE.md"
   ],
   "dsh": {
     "bundle": {
