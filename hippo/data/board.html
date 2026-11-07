@@ -263,6 +263,20 @@
     .spinner { animation: none; }
     .inspector { transition: none; }
   }
+
+.qq-wrap { display: flex; flex-direction: column; gap: 10px; }
+.qq-status { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+.qq-note { margin: 0; font-size: 12px; line-height: 1.55; color: rgba(206, 215, 232, .72); }
+.qq-error { margin: 0; font-size: 12px; color: #ff9b9b; }
+.qq-h4 { margin: 4px 0 0; font-size: 11px; letter-spacing: .08em; color: rgba(206, 215, 232, .6); }
+.qq-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(148px, 1fr)); gap: 8px; }
+.qq-field { display: flex; flex-direction: column; gap: 4px; font-size: 12px; color: rgba(206, 215, 232, .8); }
+.qq-input { min-height: 34px; padding: 6px 9px; border-radius: 7px; border: 1px solid rgba(120, 160, 190, .28); background: #0c131b; color: #e8f1f8; font: 500 13px/1.3 inherit; }
+.qq-input:focus { outline: none; border-color: #75d0d1; }
+.qq-check { display: flex; gap: 8px; align-items: center; font-size: 13px; color: rgba(206, 215, 232, .85); }
+.qq-hint { font-size: 11px; color: rgba(206, 215, 232, .5); }
+.qq-actions { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 4px; }
+.badge-ok { background: #17332c; color: #8fe3c2; }
 </style>
 </head>
 <body>
@@ -328,6 +342,7 @@
       <button type="button" class="nav-item" data-tab="facts">事实<span class="nav-count" data-count="facts"></span></button>
       <button type="button" class="nav-item" data-tab="entities">人物<span class="nav-count" data-count="entities"></span></button>
       <button type="button" class="nav-item" data-tab="doubts">存疑池<span class="nav-count" data-count="doubts"></span></button>
+      <button type="button" class="nav-item" data-tab="qq">QQ<span class="nav-count" data-count="qq"></span></button>
     </nav>
   </aside>
 
@@ -2085,7 +2100,7 @@ const KIND_LABEL = { event: "事件", fact: "事实", trait: "特征", entity: "
 const TIER_NAME = { 1: "hot", 2: "warm", 3: "cold" };
 const TIER_LABEL = { hot: "hot · 热", warm: "warm · 温", cold: "cold · 冷" };
 const TAB_OF_KIND = { event: "events", fact: "facts", entity: "entities", trait: "entities", turn: "events", doubt: "doubts" };
-const TAB_TITLE = { events: "事件", facts: "事实", entities: "人物", doubts: "存疑池" };
+const TAB_TITLE = { events: "事件", facts: "事实", entities: "人物", doubts: "存疑池", qq: "QQ 接入" };
 
 // ---------- 数据源：http(s) 同源；file:// 或 ?api= 时指向内核端口 ----------
 const API = (() => {
@@ -2282,6 +2297,8 @@ function mark(text) {
 
 function renderList() {
   const body = $("inspBody");
+  // QQ 接入是表单而不是记忆列表：单独渲染，且不参与搜索高亮。
+  if (state.tab === "qq") { renderQQ(); return; }
   const items = filteredItems();
   const q = state.query.trim();
   const total = state.data
@@ -2639,7 +2656,9 @@ document.querySelectorAll(".nav-item").forEach((b) => b.addEventListener("click"
   state.query = ""; $("q").value = ""; $("btnClearQ").hidden = true;
   setExpanded(true);
   syncNav();
+  $("q").parentElement.style.display = tab === "qq" ? "none" : "";
   renderList();
+  if (tab === "qq") void qqLoad();
 }));
 
 // ---------- 搜索 ----------
@@ -2651,6 +2670,174 @@ $("q").addEventListener("input", (e) => {
 });
 $("q").addEventListener("keydown", (e) => { if (e.key === "Escape") { e.target.value = ""; state.query = ""; $("btnClearQ").hidden = true; renderList(); } });
 $("btnClearQ").addEventListener("click", () => { $("q").value = ""; state.query = ""; $("btnClearQ").hidden = true; renderList(); $("q").focus(); });
+
+
+// ---------- QQ 接入（表单式标签页） ----------
+// 单位换算：内核用「百万分之一元」记金额，界面按「元」显示和输入。
+const qqState = { settings: null, budget: null, error: "", busy: false };
+const qqYuan = (microValue) => (Number(microValue || 0) / 1e6).toFixed(2);
+const qqMicro = (yuanText) => Math.max(0, Math.round(Number(yuanText || 0) * 1e6));
+
+async function qqFetch(path, options) {
+  const res = await fetch(`${API}${path}`, options);
+  let body = null;
+  try { body = await res.json(); } catch (e) { /* 非 JSON 响应 */ }
+  return { ok: res.ok && body && body.ok === true, status: res.status, body };
+}
+
+async function qqLoad() {
+  qqState.error = "";
+  try {
+    const s = await qqFetch("/qq/settings/active");
+    qqState.settings = s.ok ? (s.body.settings || null) : null;
+    const scope = qqState.settings?.budgetScope || qqState.settings?.selfId || "";
+    if (scope) {
+      const b = await qqFetch(`/qq/budget/status?scope=${encodeURIComponent(scope)}`);
+      qqState.budget = b.ok ? b.body : null;
+    } else {
+      qqState.budget = null;
+    }
+  } catch (err) {
+    qqState.error = (err && err.message) || "读取 QQ 配置失败";
+  }
+  if (state.tab === "qq" && !state.detailId) renderQQ();
+}
+
+function qqField(id, label, value, opts = {}) {
+  const type = opts.type || "text";
+  const ph = opts.placeholder || "";
+  const hint = opts.hint ? `<span class="qq-hint">${esc(opts.hint)}</span>` : "";
+  return `<label class="qq-field"><span>${esc(label)}</span>
+    <input class="qq-input" id="${id}" type="${type}" value="${esc(value ?? "")}" placeholder="${esc(ph)}"${opts.disabled ? " disabled" : ""}>${hint}</label>`;
+}
+
+function renderQQ() {
+  const body = $("inspBody");
+  const st = qqState.settings || {};
+  const bg = qqState.budget || null;
+  const policy = bg?.policy || null;
+  const enabled = Boolean(st.revision);
+  const scheduleText = st.schedule && Object.keys(st.schedule).length
+    ? Object.keys(st.schedule).map((k) => (k === "proactive" ? "主动发言" : "空间动态")).join(" / ")
+    : "未开启";
+
+  let html = `<div class="qq-wrap">
+    <div class="qq-status">
+      <span class="badge ${enabled ? "badge-ok" : "badge-muted"}">${enabled ? "已启用" : "未启用"}</span>
+      ${enabled ? `<span class="row-meta">revision ${esc(st.revision)}</span>` : ""}
+      ${bg ? `<span class="row-meta">今日 ¥${qqYuan(bg.today)} · 本月 ¥${qqYuan(bg.month)} · 预留 ¥${qqYuan(bg.pending)} · 今日 ${bg.calls_today ?? 0} 次调用</span>`
+        : `<span class="row-meta">未配预算：任何模型调用都会被拒绝</span>`}
+    </div>
+    ${qqState.error ? `<p class="qq-error">${esc(qqState.error)}</p>` : ""}
+    <p class="qq-note">需要你自己跑一个兼容 OneBot 的协议端（如 NapCatQQ）。第三方协议有账号风控风险，账号与风险自负。改完保存，宿主 5 秒内自动重连。</p>
+
+    <h4 class="qq-h4">连接</h4>
+    <div class="qq-grid">
+      ${qqField("qqSelf", "机器人 QQ 号", st.selfId, { placeholder: "10001" })}
+      ${qqField("qqToken", "Access token", st.accessToken, { placeholder: "没有就留空" })}
+      ${qqField("qqWs", "WebSocket 地址", st.wsUrl, { placeholder: "ws://127.0.0.1:3001" })}
+      ${qqField("qqHttp", "HTTP 地址", st.httpUrl, { placeholder: "http://127.0.0.1:3000" })}
+    </div>
+    <label class="qq-check"><input type="checkbox" id="qqMention" ${st.requireMention !== false ? "checked" : ""}> 群聊必须 @ 机器人才响应</label>
+
+    <h4 class="qq-h4">白名单</h4>
+    <div class="qq-grid">
+      ${qqField("qqPrivate", "允许的私聊 QQ（逗号分隔）", (st.privateAllow || []).join(","), { placeholder: "20002,20003" })}
+      ${qqField("qqGroup", "允许的群号（逗号分隔）", (st.groupAllow || []).join(","), { placeholder: "30003" })}
+    </div>
+
+    <h4 class="qq-h4">模型与预算</h4>
+    <div class="qq-grid">
+      ${qqField("qqProvider", "模型提供方 ID", st.provider, { placeholder: "deepseek-official" })}
+      ${qqField("qqModel", "模型 ID", st.model, { placeholder: "deepseek-flash" })}
+      ${qqField("qqMaxTokens", "每次最大输出 token", st.maxTokens, { type: "number", placeholder: "800" })}
+      ${qqField("qqDailyCalls", "每日调用次数上限", policy?.daily_calls, { type: "number", placeholder: "20" })}
+      ${qqField("qqPerRequest", "单次预算（元）", policy ? qqYuan(policy.per_request) : "", { type: "number" })}
+      ${qqField("qqDaily", "每日预算（元）", policy ? qqYuan(policy.daily) : "", { type: "number" })}
+      ${qqField("qqMonthly", "每月预算（元）", policy ? qqYuan(policy.monthly) : "", { type: "number" })}
+      ${qqField("qqInPrice", "输入价（元/百万 token）", policy ? qqYuan(policy.input_price) : "", { type: "number" })}
+      ${qqField("qqOutPrice", "输出价（元/百万 token）", policy ? qqYuan(policy.output_price) : "", { type: "number" })}
+    </div>
+    <p class="qq-note">模型请求前按最大上下文预留、按真实用量结算；价格或用量未知时保留预留并报错，不会把估算当账单。定时主动发言/空间动态目前只能用 <code>/qq/settings</code> 接口配置（当前：${esc(scheduleText)}）。</p>
+
+    <div class="qq-actions">
+      <button type="button" class="btn btn-primary" id="qqSave" ${qqState.busy ? "disabled" : ""}>保存并启用</button>
+      <button type="button" class="btn" id="qqStop" ${enabled ? "" : "disabled"}>停用</button>
+      <button type="button" class="btn" id="qqReload">刷新状态</button>
+    </div>
+  </div>`;
+  body.innerHTML = html;
+  $("qqSave").addEventListener("click", () => { void qqSave(); });
+  $("qqStop").addEventListener("click", () => { void qqStop(); });
+  $("qqReload").addEventListener("click", () => { void qqLoad(); });
+}
+
+function qqReadForm() {
+  const v = (id) => $(id).value.trim();
+  const body = {
+    selfId: v("qqSelf"), wsUrl: v("qqWs"), httpUrl: v("qqHttp"), accessToken: v("qqToken"),
+    privateAllow: v("qqPrivate").split(/[,，\s]+/).filter(Boolean),
+    groupAllow: v("qqGroup").split(/[,，\s]+/).filter(Boolean),
+    requireMention: $("qqMention").checked,
+    provider: v("qqProvider"), model: v("qqModel"),
+    maxTokens: Number(v("qqMaxTokens") || 0), budgetScope: v("qqSelf"),
+  };
+  const policy = {
+    scope_id: v("qqSelf"), per_request: qqMicro(v("qqPerRequest")), daily: qqMicro(v("qqDaily")),
+    monthly: qqMicro(v("qqMonthly")), input_price: qqMicro(v("qqInPrice")),
+    output_price: qqMicro(v("qqOutPrice")), daily_calls: Number(v("qqDailyCalls") || 0),
+    activity_limits: { chat: Number(v("qqDailyCalls") || 0) },
+  };
+  return { body, policy };
+}
+
+async function qqSave() {
+  const { body, policy } = qqReadForm();
+  const fail = (msg) => { qqState.error = msg; renderQQ(); };
+  if (!/^\d{1,20}$/.test(body.selfId)) return fail("机器人 QQ 号必须是纯数字");
+  if (!/^wss?:\/\//.test(body.wsUrl)) return fail("WebSocket 地址必须以 ws:// 或 wss:// 开头");
+  if (!/^https?:\/\//.test(body.httpUrl)) return fail("HTTP 地址必须以 http:// 或 https:// 开头");
+  const numOk = (n, name) => Number.isFinite(n) && n > 0 ? "" : `${name}必须是正数`;
+  for (const [n, name] of [[policy.per_request, "单次预算"], [policy.daily, "每日预算"],
+    [policy.monthly, "每月预算"], [policy.input_price, "输入价"], [policy.output_price, "输出价"],
+    [policy.daily_calls, "每日次数"], [body.maxTokens, "最大输出 token"]]) {
+    const msg = numOk(n, name);
+    if (msg) return fail(msg);
+  }
+  qqState.busy = true;
+  try {
+    const saved = await qqFetch("/qq/settings", {
+      method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(body),
+    });
+    if (!saved.ok) throw new Error(saved.body?.error || `保存设置失败（HTTP ${saved.status}）`);
+    const budget = await qqFetch("/qq/budget/configure", {
+      method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(policy),
+    });
+    if (!budget.ok) throw new Error(budget.body?.error || `保存预算失败（HTTP ${budget.status}）`);
+    await qqLoad();
+    return true;
+  } catch (err) {
+    qqState.error = (err && err.message) || "保存失败";
+    return false;
+  } finally {
+    qqState.busy = false;
+    if (state.tab === "qq" && !state.detailId) renderQQ();
+  }
+}
+
+async function qqStop() {
+  qqState.busy = true;
+  try {
+    const res = await qqFetch("/qq/settings", { method: "DELETE" });
+    if (!res.ok) throw new Error(res.body?.error || `停用失败（HTTP ${res.status}）`);
+    await qqLoad();
+  } catch (err) {
+    qqState.error = (err && err.message) || "停用失败";
+  } finally {
+    qqState.busy = false;
+    if (state.tab === "qq" && !state.detailId) renderQQ();
+  }
+}
 
 // ---------- 启动 ----------
 syncRotateButton();
