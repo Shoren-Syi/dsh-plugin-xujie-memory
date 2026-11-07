@@ -30,7 +30,7 @@ from urllib.parse import urlsplit
 
 import httpx
 from fastapi import FastAPI, Request
-from fastapi.responses import HTMLResponse, PlainTextResponse, Response
+from fastapi.responses import HTMLResponse, JSONResponse, PlainTextResponse, Response
 from pydantic import BaseModel
 
 from . import __version__
@@ -281,6 +281,125 @@ def create_kernel(cfg: Config, api_key: str = "", instance_id: str = "") -> Fast
                     await build_digest(store, session, cfg, client, app.state.api_key)
             finally:
                 store.close()
+
+    # ------------------------------------------------------------ QQ 桥接（0.8 实验分支移植）
+    #
+    # 设置与预算放服务端：Node 侧每 5 秒轮询 revision，变了就重建桥接。
+    # 这样"改配置"不用重启 DSH，也不用把 price/token 逻辑复制到 JS 里。
+    async def _qq_body(request: Request) -> dict:
+        try:
+            data = await request.json()
+        except Exception:  # noqa: BLE001
+            raise ValueError("请求体必须是 JSON")
+        if not isinstance(data, dict):
+            raise ValueError("请求体必须是对象")
+        return data
+
+    @app.get("/qq/settings/active")
+    def qq_settings_active() -> dict:
+        from dataclasses import asdict as _asdict
+
+        from .core import qq
+        store = _store()
+        try:
+            settings = qq.active_settings(store.conn)
+            return {"ok": True, "settings": _asdict(settings) if settings else None}
+        finally:
+            store.close()
+
+    @app.post("/qq/settings")
+    async def qq_settings_set(request: Request) -> Response:
+        from .core import qq
+        try:
+            data = await _qq_body(request)
+        except ValueError as exc:
+            return JSONResponse({"ok": False, "error": str(exc)}, status_code=400)
+        store = _store()
+        try:
+            settings = qq.set_settings(store.conn, data, now=int(time.time()))
+            return JSONResponse({"ok": True, "revision": settings.revision})
+        except ValueError as exc:
+            return JSONResponse({"ok": False, "error": str(exc)}, status_code=400)
+        finally:
+            store.close()
+
+    @app.delete("/qq/settings")
+    def qq_settings_clear() -> dict:
+        from .core import qq
+        store = _store()
+        try:
+            qq.clear_settings(store.conn)
+            return {"ok": True}
+        finally:
+            store.close()
+
+    @app.post("/qq/budget/configure")
+    async def qq_budget_configure(request: Request) -> Response:
+        from .core import qq
+        try:
+            data = await _qq_body(request)
+            policy = qq.BudgetPolicy(
+                per_request=int(data["per_request"]), daily=int(data["daily"]),
+                monthly=int(data["monthly"]), input_price=int(data["input_price"]),
+                output_price=int(data["output_price"]), daily_calls=int(data["daily_calls"]),
+                cache_price=None if data.get("cache_price") is None else int(data["cache_price"]),
+            )
+            store = _store()
+            try:
+                qq.configure_budget(store.conn, str(data.get("scope_id") or ""), policy,
+                                    data.get("activity_limits") or {})
+            finally:
+                store.close()
+            return JSONResponse({"ok": True})
+        except (KeyError, TypeError, ValueError) as exc:
+            return JSONResponse({"ok": False, "error": str(exc)}, status_code=400)
+
+    @app.post("/qq/budget/reserve")
+    async def qq_budget_reserve(request: Request) -> Response:
+        from .core import qq
+        try:
+            data = await _qq_body(request)
+            store = _store()
+            try:
+                call_id = qq.reserve(store.conn, str(data.get("scope_id") or ""),
+                                     str(data.get("activity") or ""),
+                                     int(data["input_limit"]), int(data["output_limit"]))
+            finally:
+                store.close()
+            return JSONResponse({"ok": True, "call_id": call_id})
+        except qq.BudgetDenied as exc:
+            return JSONResponse({"ok": False, "error": str(exc)}, status_code=429)
+        except (KeyError, TypeError, ValueError) as exc:
+            return JSONResponse({"ok": False, "error": str(exc)}, status_code=400)
+
+    @app.post("/qq/budget/settle")
+    async def qq_budget_settle(request: Request) -> Response:
+        from .core import qq
+        try:
+            data = await _qq_body(request)
+            store = _store()
+            try:
+                amount = qq.settle(store.conn, str(data.get("call_id") or ""),
+                                   int(data["input_tokens"]), int(data["output_tokens"]),
+                                   int(data.get("cached_tokens") or 0))
+            finally:
+                store.close()
+            return JSONResponse({"ok": True, "amount": amount})
+        except (KeyError, TypeError, ValueError) as exc:
+            return JSONResponse({"ok": False, "error": str(exc)}, status_code=400)
+
+    @app.get("/qq/budget/status")
+    def qq_budget_status(scope: str = "") -> Response:
+        from .core import qq
+        if not scope:
+            return JSONResponse({"ok": False, "error": "缺少 scope"}, status_code=400)
+        store = _store()
+        try:
+            return JSONResponse({"ok": True, **qq.budget_status(store.conn, scope)})
+        except qq.BudgetDenied as exc:
+            return JSONResponse({"ok": False, "error": str(exc)}, status_code=404)
+        finally:
+            store.close()
 
     def _maybe_extract(app: FastAPI, session: str) -> None:
         """Remember work arriving during an active extraction, including other sessions."""

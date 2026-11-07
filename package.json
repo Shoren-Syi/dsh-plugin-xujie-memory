@@ -1,6 +1,6 @@
 {
   "name": "dsh-plugin-hippocampus-deepseek",
-  "version": "0.2.5",
+  "version": "0.2.6",
   "description": "DSH 插件：自动提取与召回对话记忆，记忆数据库存于本地 SQLite。",
   "type": "module",
   "main": "lib/index.js",

@@ -66,3 +66,51 @@ dsh plugin --profile desktop remove dsh-plugin-hippocampus-deepseek
 
 - 重启 DSH 后侧栏出现「记忆」，点开面板正常
 - 结论：客户端插件加载、面板渲染、服务端数据链路，端到端通过
+
+## QQ 桥接（来自 0.8 实验分支，默认关闭）
+
+让 DSH 智能体通过 OneBot（NapCat 等协议端）收发 QQ 私聊/群聊，可选定时主动发言与空间动态。
+**默认关闭，必须显式配置**；启用前请读最后的风险段。
+
+### 启用步骤
+
+1. 起一个 OneBot 协议端（例如 NapCatQQ），确认 HTTP 与 WebSocket 都可用；
+2. 把设置写进内核（服务端持久化，改动后宿主 5 秒内自动重连）：
+
+```powershell
+$body = @{
+  selfId="<机器人QQ>"; wsUrl="ws://127.0.0.1:3001"; httpUrl="http://127.0.0.1:3000";
+  accessToken="<协议端 token，没有就空>";
+  privateAllow=@("<允许的QQ号>"); groupAllow=@("<允许的群号>"); requireMention=$true;
+  provider="deepseek-official"; model="deepseek-flash"; maxTokens=800;
+  budgetScope="<机器人QQ>"
+} | ConvertTo-Json
+Invoke-RestMethod "http://127.0.0.1:8766/qq/settings" -Method Post -Body $body -ContentType "application/json"
+```
+
+3. 配预算（金额单位：**百万分之一元**；不配预算则任何调用都会被拒）：
+
+```powershell
+$pol = @{ scope_id="<机器人QQ>"; per_request=100000; daily=1000000; monthly=10000000;
+  input_price=1000000; output_price=2000000; daily_calls=20;
+  activity_limits=@{ chat=20; proactive=2; qzone=1 } } | ConvertTo-Json
+Invoke-RestMethod "http://127.0.0.1:8766/qq/budget/configure" -Method Post -Body $pol -ContentType "application/json"
+```
+
+4. 查状态：`GET /qq/budget/status?scope=<机器人QQ>`；停用：`DELETE /qq/settings`。
+
+### 行为与边界
+
+- 私聊/群聊白名单外一律不进模型；群聊默认要求 @ 机器人；同一条消息 5 分钟内去重。
+- 每个「机器人 + 会话类型 + 对象 + 真实发言人」是独立 DSH 会话，记忆按人隔离。
+- 主动发言/空间动态标记为内部来源，**不写入用户记忆**。
+- 每次模型请求前预留预算，拿到真实用量后结算；价格或用量不可知时**保留预留并报错**，
+  不会把估算当账单。
+- 用量不完整、超预算、超次数：停止该次调用并提示，不静默降级。
+
+### 风险（务必读）
+
+- 走的是**第三方协议端**，不是官方机器人接口，存在账号风控风险，账号与风险由使用者自负。
+- 空间动态接口在不同协议端版本上可能不可用。
+- **本仓库没有对真实 QQ 做过联调**；已验证的是：过滤/发送/账本的单元测试 + 内核
+  HTTP 全链路（设置→预算→预留→结算）+ 非法输入拒绝。真实协议端需要你自己压一遍。
