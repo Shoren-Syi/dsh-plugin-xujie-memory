@@ -274,6 +274,15 @@ def _cut_real(text: str, limit: float) -> str:
     return _cut(text, max(2, int(limit * _TOKEN_SAFETY)))
 
 
+def _values_line(e: Event) -> str:
+    """关键值一行。单独给，不塞摘要——数字/日期是"以后要查得到"的东西。"""
+    vals = getattr(e, "value_list", None) or []
+    if not vals:
+        return ""
+    return "值：" + " ".join(str(v) for v in vals[:6])
+
+
+
 def format_event(
     e: Event,
     depth: str | None = None,
@@ -344,12 +353,16 @@ def format_event(
 
     # ---- 最低成本档：只要关键词
     if depth == DEPTH_KW or (t == TIER_COLD and not want_raw):
-        return f"{head}\n关键词：{kws or kw_fallback}"
+        extra = _values_line(e)
+        return f"{head}\n关键词：{kws or kw_fallback}" + (f"\n{extra}" if extra else "")
 
     if t == TIER_COLD:
         # 冷事件被下钻了：给原文，不给摘要。摘要要现裁，原文是现成的，
         # 而且用户问的就是"当时怎么说的"。
         lines = [head, f"关键词：{kws or kw_fallback}"]
+        extra = _values_line(e)
+        if extra:
+            lines.append(extra)
         lines.append('原文："' + _quote_escape(_pick_raw(e, body, RAW_QUOTE_TOKENS)) + '"')
         return "\n".join(lines)
 
@@ -357,13 +370,20 @@ def format_event(
     text = _one_line(summary if summary is not None else (e.summary or e.raw))
     # `max_tokens` 是**整块**的上限（真实 token）。M11 时它只卡正文，
     # 结果是"摘要刚好卡满 80 + 头部 + 关键词 = 110"，超出去的正是包边。
+    # 关键值单独占额度：它不该抢摘要的空间（否则摘要被截、答案照样丢）。
+    _extra = _values_line(e)
     cap = max_tokens if max_tokens is not None else TIER_BUDGET[t][1]
+    if _extra:
+        cap += _real(_extra)
     if e.pinned and max_tokens is None:
         # pinned 是用户明说"这个必须记住"的东西，为它多花 40 token 值得。
         # 上限不是无限的：pinned 数量由 M16.2 的 C 段 200 token 提醒兜住。
         cap += RAW_QUOTE_TOKENS
     used = _real(head) + _real(f"关键词：{kws or kw_fallback}")
     lines = [head, f"关键词：{kws or kw_fallback}"]
+    if _extra:
+        lines.append(_extra)
+        used += _real(_extra)
 
     # 原文先按实际长度占额度，不是按固定 40 预留：一句 10 个字的原文
     # 被预留 40 token，摘要就被白挤掉 30。

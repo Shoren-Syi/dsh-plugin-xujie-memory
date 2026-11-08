@@ -18,6 +18,7 @@ from pathlib import Path
 from typing import Any, Iterable, Iterator, Sequence
 
 from ..log import get_logger
+from .keywords import clean_values as _clean_values_import
 from .db import connect, table_exists, transaction
 from .facts import KeyTable, decide_fact, load_keys
 from .keywords import STOPWORDS, clean_keywords
@@ -275,6 +276,8 @@ class Store:
         w0: float = 0.5,
         weight: float | None = None,
         arousal: float = 0.0,
+        importance: int = 3,
+        values: Sequence[str] | None = None,
         entities: Iterable[int] | None = None,
         source: str = "user",
         kind: str = "event",
@@ -300,6 +303,7 @@ class Store:
         event_time = event_time if event_time is not None else ingest_time
         weight = w0 if weight is None else weight
         tokens = _dedupe_tokens(keywords) if precleaned else _split_tokens(keywords)
+        tokens_values = _clean_values_import(values)
 
         with self.tx():
             cur = self.conn.execute(
@@ -309,8 +313,8 @@ class Store:
                     time_precision, time_guessed, tier, weight, w0, arousal,
                     recall_count, keywords, summary, raw, entities,
                     source, kind, pinned, summary_truncated, summary_flagged,
-                    giveup_level
-                ) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
+                    giveup_level, importance, key_values
+                ) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
                 """,
                 (
                     session, event_time, event_time_end, ingest_time, None,
@@ -319,17 +323,19 @@ class Store:
                     json.dumps(list(entities or []), ensure_ascii=False),
                     source, kind, pinned, int(summary_truncated),
                     int(summary_flagged), giveup_level,
+                    max(1, min(5, int(importance))), " ".join(tokens_values),
                 ),
             )
             event_id = int(cur.lastrowid)
-            if tokens:
+            index_tokens = list(tokens) + [v.lower() for v in tokens_values if v.strip()]
+            if index_tokens:
                 self.conn.executemany(
                     "INSERT OR IGNORE INTO kw_index(token, event_id) VALUES (?,?)",
                     # 索引键统一小写：`AI` 和 `ai` 在倒排里必须是同一个键，
                     # 否则用户输 "go" 查不到库里存的 "Go"——而它看起来
                     # 完全正常（检索返回空，AI 说"不记得"）。
                     # 显示用的原文在 events.keywords 里，不受影响。
-                    [(t.lower(), event_id) for t in tokens],
+                    [(t.lower(), event_id) for t in index_tokens],
                 )
         return event_id
 
@@ -414,6 +420,96 @@ class Store:
                 continue
             out.append(Event.from_row(r))
         return out
+
+    def stats_summary(self) -> dict:
+        """给面板看的运行状态：有多少没抽、抽了多少、最近一次结果。"""
+        def _one(sql: str, params: tuple = ()) -> int:
+            row = self.conn.execute(sql, params).fetchone()
+            return int(row[0]) if row and row[0] is not None else 0
+
+        last = self.conn.execute(
+            "SELECT status, n_events, error, latency_ms, cost, prompt_tokens,"
+            " completion_tokens FROM extract_runs ORDER BY id DESC LIMIT 1").fetchone()
+        digests = _one("SELECT count(*) FROM session_state WHERE key = 'session_digest'")
+        sessions = _one("SELECT count(DISTINCT session) FROM turns")
+        return {
+            "turns": _one("SELECT count(*) FROM turns"),
+            "turns_pending": _one("SELECT count(*) FROM turns WHERE extracted_at IS NULL"),
+            "events": _one("SELECT count(*) FROM events WHERE archived = 0"),
+            "facts": _one("SELECT count(*) FROM facts WHERE valid_to IS NULL"),
+            "traits": _one("SELECT count(*) FROM card_traits"),
+            "doubts": _one("SELECT count(*) FROM doubts"),
+            "sessions": sessions,
+            "digests": digests,
+            "last_extract": dict(last) if last else None,
+        }
+
+    def count_events(self, session: str) -> int:
+        """会话内未归档事件数（检索兜底判断规模用）。"""
+        row = self.conn.execute(
+            "SELECT count(*) FROM events WHERE session = ? AND archived = 0",
+            (session,)).fetchone()
+        return int(row[0]) if row else 0
+
+    def search_events_substring(self, session: str, term: str, *,
+                                limit: int = 30) -> list[int]:
+        """会话内按子串找事件（摘要或原话里出现）。检索兜底用。
+
+        为什么需要它：中文关键词索引只存 2~4 字词，用户问法里的词如果没被
+        抽成关键词（很常见），关键词检索就是 0 命中，而答案其实躺在 raw 里。
+        LIKE 是全表扫，所以只在小会话里用（调用方负责判断规模）。
+        """
+        needle = str(term or "").strip()
+        if not needle:
+            return []
+        rows = self.conn.execute(
+            "SELECT id FROM events WHERE session = ? AND archived = 0 AND superseded_by IS NULL"
+            " AND kind NOT IN ('idle','raw','giveup','regret')"
+            " AND (summary LIKE ? OR raw LIKE ?)"
+            " ORDER BY importance DESC, weight DESC, event_time DESC LIMIT ?",
+            (session, f"%{needle}%", f"%{needle}%", int(limit)),
+        ).fetchall()
+        return [int(r[0]) for r in rows]
+
+    def recent_events(self, session: str, *, limit: int = 12,
+                      since_ts: int | None = None) -> list[Event]:
+        """最近写入的几条事件（按入库时间），供入库前去重。"""
+        cond = ["session = ?", "archived = 0", "kind = 'event'"]
+        params: list[Any] = [session]
+        if since_ts is not None:
+            cond.append("ingest_time >= ?")
+            params.append(int(since_ts))
+        params.append(int(limit))
+        rows = self.conn.execute(
+            f"SELECT id FROM events WHERE {' AND '.join(cond)}"
+            " ORDER BY ingest_time DESC, id DESC LIMIT ?", params).fetchall()
+        ids = [int(r[0]) for r in rows]
+        if not ids:
+            return []
+        by_id = {e.id: e for e in self.fetch_events(ids, session)}
+        return [by_id[i] for i in ids if i in by_id]
+
+    def highlight_events(self, session: str, *, limit: int = 6) -> list[Event]:
+        """重点标注层：按"重要度 → 新近"取前几条，每轮固定注入。
+
+        和 `top_events` 的区别：那个是"这次没找到线索，按重要性兜底"，
+        这个是**设计要求的常驻层**——不管本轮问什么，最近/最重要的几条
+        都得在场，否则模型就不知道"我们刚才在干什么"。
+        """
+        rows = self.conn.execute(
+            # 排除规则和检索层一致：idle/raw/giveup 不是"可说的事"；
+            # regret 只允许在"要动手"时作为教训出现，绝不能进常驻标注层。
+            "SELECT id FROM events WHERE session = ? AND archived = 0"
+            " AND superseded_by IS NULL"
+            " AND kind NOT IN ('idle','raw','giveup','regret')"
+            " ORDER BY importance DESC, weight DESC, event_time DESC, id DESC LIMIT ?",
+            (session, int(limit)),
+        ).fetchall()
+        ids = [int(r[0]) for r in rows]
+        if not ids:
+            return []
+        by_id = {e.id: e for e in self.fetch_events(ids, session)}
+        return [by_id[i] for i in ids if i in by_id]
 
     def top_events(
         self,
@@ -2635,6 +2731,12 @@ class Store:
             (session,),
         ).fetchone()
         return (str(row[0]), str(row[1])) if row else None
+
+    def last_turn_idx(self, session: str) -> int:
+        """这个会话最后一条 turn 的 idx；没有就是 -1。"""
+        row = self.conn.execute(
+            "SELECT max(idx) FROM turns WHERE session = ?", (session,)).fetchone()
+        return int(row[0]) if row and row[0] is not None else -1
 
     def list_turn_sessions(self) -> list[str]:
         """有对话记录的会话列表（摘要补建用）。"""

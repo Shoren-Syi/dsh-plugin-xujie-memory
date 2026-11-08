@@ -31,9 +31,17 @@ def connect(path: str | Path, *, check_same_thread: bool = True) -> sqlite3.Conn
                            check_same_thread=check_same_thread)
     conn.row_factory = sqlite3.Row
     conn.execute("PRAGMA foreign_keys = ON")
-    conn.execute("PRAGMA journal_mode = WAL")
-    conn.execute("PRAGMA synchronous = NORMAL")
+    # busy_timeout 必须在 journal_mode **之前**：WAL 是库级持久设置，
+    # 切换它要拿排他锁。另一个进程正在写时，先设 timeout 才能等，否则
+    # 直接 `database is locked`（两个实例同时冷启动时实测会崩）。
     conn.execute("PRAGMA busy_timeout = 5000")
+    try:
+        conn.execute("PRAGMA journal_mode = WAL")
+    except sqlite3.OperationalError:
+        # 等不到锁也不致命：WAL 是持久设置，另一个进程已经设过就是 WAL；
+        # 真的还是别的模式，后续写入也能工作，只是并发差一点。
+        pass
+    conn.execute("PRAGMA synchronous = NORMAL")
     # recursive_triggers 默认 OFF。OFF 时 `INSERT OR REPLACE` 与
     # `ON CONFLICT DO UPDATE` 的内部删除**不触发** BEFORE DELETE 触发器，
     # 于是 events.raw 的不可变约束可以被一句 OR REPLACE 绕过。

@@ -90,6 +90,12 @@ class EventOut(_Out):
     entities: list[EntityRef] = Field(default_factory=list)
     event_time_hint: str | None = None
     arousal: float = 0.0
+    # 模型自己打的重要性（1~5）。插件只负责摘要/关键词/落库，
+    # "这件事重不重要"交给模型判断——它比任何启发式都准，且不额外花钱。
+    importance: int = 3
+    # 关键值：数字/日期/金额/比例/专名，逐字照抄。单独存一列用于检索与渲染，
+    # 不塞进摘要（摘要 40~60 字，塞满了就成流水账）。
+    values: list[str] = Field(default_factory=list)
     source: Literal["user", "ai", "third"] = "user"
     # 摘要被截断的标记。由 encode 的修复回路写入，模型不该给这个字段——
     # 但它必须能穿过 parse，所以声明在这里而不是藏在别处。

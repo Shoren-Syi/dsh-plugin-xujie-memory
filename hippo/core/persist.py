@@ -26,6 +26,8 @@ from zoneinfo import ZoneInfo
 from ..log import get_logger
 from .affect import TAU_MINUTES, apply_delta, decay_moods
 from .doubt import filter_doubts, resolve_matching_doubts
+from .dedupe import is_duplicate
+from .keywords import clean_values
 from .keywords import clean_keywords
 from .ledger import settle as settle_ledger
 from .pin import looks_pinned
@@ -68,6 +70,7 @@ class PersistStats:
     doubts_filtered: int = 0         # M18.1：质检滤掉/合并的条数
     doubts_resolved: int = 0         # M18.3：用户自己回答关闭的疑问
     verbatim_fail: int = 0           # raw 锚定失败
+    events_dup: int = 0              # 和最近事件重复、被跳过的条数
     affect_changed: int = 0
     ledger_settled: int = 0          # M23.2：这一轮结算掉的自主动作
     ledger_regret: int = 0           # M23.3：其中写成懊悔记忆的
@@ -258,6 +261,20 @@ def persist_result(
                     kws = names_here[:3]
                     stats.kw_fallback += 1
                 stats.kw_kept += len(kws)
+                # 模型给的重要性直接决定衰减起点：5 → w0 +0.24，1 → -0.24。
+                # 只调起点、不调公式，权重仍随时间衰减，不存在"永不遗忘"。
+                imp = max(1, min(5, int(getattr(ev, "importance", 3) or 3)))
+                # ---- 去重：同一件事被抽成两条（用户原话 + 助手复述）是"记忆变脏"的主因
+                summary_try = ev.summary or anchored[:60]
+                recent = [e.summary or e.raw for e in
+                          store.recent_events(session, limit=12, since_ts=ingest - 6 * 3600)]
+                if is_duplicate(summary_try, recent):
+                    stats.events_dup += 1
+                    log.info("persist.event.duplicate", extra={"fields": {
+                        "session": session, "summary": summary_try[:60]}})
+                    continue
+                w0_adj = max(0.15, min(0.95, w0 + (imp - 3) * 0.12))
+                key_values = clean_values(getattr(ev, "values", None))
                 event_id = store.add_event(
                     session=session,
                     raw=anchored,
@@ -267,9 +284,11 @@ def persist_result(
                     event_time_end=event_end,
                     ingest_time=ingest,
                     tier=tier,
-                    w0=w0,
-                    weight=w0,
+                    w0=w0_adj,
+                    weight=w0_adj,
                     arousal=ev.arousal,
+                    importance=imp,
+                    values=key_values,
                     entities=linked,
                     source=ev.source,
                     kind="event",

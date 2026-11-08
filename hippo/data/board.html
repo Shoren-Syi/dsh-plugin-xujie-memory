@@ -277,6 +277,12 @@
 .qq-hint { font-size: 11px; color: rgba(206, 215, 232, .5); }
 .qq-actions { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 4px; }
 .badge-ok { background: #17332c; color: #8fe3c2; }
+
+.st-wrap { display: flex; flex-direction: column; gap: 6px; }
+.st-row { display: flex; align-items: baseline; gap: 8px; padding: 6px 0; border-bottom: 1px dashed rgba(120,160,190,.16); }
+.st-label { flex: 0 0 120px; font-size: 12px; color: rgba(206,215,232,.65); }
+.st-value { font-size: 13px; color: #e8f1f8; font-weight: 600; font-variant-numeric: tabular-nums; }
+.st-hint { font-size: 11px; color: rgba(206,215,232,.5); }
 </style>
 </head>
 <body>
@@ -343,6 +349,7 @@
       <button type="button" class="nav-item" data-tab="entities">人物<span class="nav-count" data-count="entities"></span></button>
       <button type="button" class="nav-item" data-tab="doubts">存疑池<span class="nav-count" data-count="doubts"></span></button>
       <button type="button" class="nav-item" data-tab="qq">QQ<span class="nav-count" data-count="qq"></span></button>
+      <button type="button" class="nav-item" data-tab="status">状态<span class="nav-count" data-count="status"></span></button>
     </nav>
   </aside>
 
@@ -2100,7 +2107,7 @@ const KIND_LABEL = { event: "事件", fact: "事实", trait: "特征", entity: "
 const TIER_NAME = { 1: "hot", 2: "warm", 3: "cold" };
 const TIER_LABEL = { hot: "hot · 热", warm: "warm · 温", cold: "cold · 冷" };
 const TAB_OF_KIND = { event: "events", fact: "facts", entity: "entities", trait: "entities", turn: "events", doubt: "doubts" };
-const TAB_TITLE = { events: "事件", facts: "事实", entities: "人物", doubts: "存疑池", qq: "QQ 接入" };
+const TAB_TITLE = { events: "事件", facts: "事实", entities: "人物", doubts: "存疑池", qq: "QQ 接入", status: "状态" };
 
 // ---------- 数据源：http(s) 同源；file:// 或 ?api= 时指向内核端口 ----------
 const API = (() => {
@@ -2297,8 +2304,9 @@ function mark(text) {
 
 function renderList() {
   const body = $("inspBody");
-  // QQ 接入是表单而不是记忆列表：单独渲染，且不参与搜索高亮。
+  // QQ 接入 / 状态是表单而不是记忆列表：单独渲染，不参与搜索高亮。
   if (state.tab === "qq") { renderQQ(); return; }
+  if (state.tab === "status") { renderStatus(); return; }
   const items = filteredItems();
   const q = state.query.trim();
   const total = state.data
@@ -2656,9 +2664,11 @@ document.querySelectorAll(".nav-item").forEach((b) => b.addEventListener("click"
   state.query = ""; $("q").value = ""; $("btnClearQ").hidden = true;
   setExpanded(true);
   syncNav();
-  $("q").parentElement.style.display = tab === "qq" ? "none" : "";
+  $("q").parentElement.style.display = (tab === "qq" || tab === "status") ? "none" : "";
   renderList();
   if (tab === "qq") void qqLoad();
+  if (tab === "status") { void loadStatus(); startStatusPoll(); }
+  else stopStatusPoll();
 }));
 
 // ---------- 搜索 ----------
@@ -2746,6 +2756,22 @@ function renderQQ() {
       ${qqField("qqGroup", "允许的群号（逗号分隔）", (st.groupAllow || []).join(","), { placeholder: "30003" })}
     </div>
 
+    <h4 class="qq-h4">定时主动发言 / 空间动态</h4>
+    <label class="qq-check"><input type="checkbox" id="qqProOn" ${st.schedule?.proactive?.enabled ? "checked" : ""}> 定时主动发言（按下面间隔自动发一句）</label>
+    <div class="qq-grid">
+      ${qqField("qqProMin", "间隔（分钟）", st.schedule?.proactive?.intervalMinutes ?? "", { type: "number", placeholder: "60" })}
+      ${qqField("qqProTarget", "对象（QQ 号或群号）", st.schedule?.proactive?.target ?? "", { placeholder: "20002" })}
+      ${qqField("qqProChannel", "范围（private/group）", st.schedule?.proactive?.channel ?? "private", { placeholder: "private" })}
+      ${qqField("qqProPrompt", "发言提示词", st.schedule?.proactive?.prompt ?? "", { placeholder: "问一句对方最近怎么样" })}
+    </div>
+    <label class="qq-check"><input type="checkbox" id="qqQzoneOn" ${st.schedule?.qzone?.enabled ? "checked" : ""}> 定时发空间动态</label>
+    <div class="qq-grid">
+      ${qqField("qqQzMin", "间隔（分钟）", st.schedule?.qzone?.intervalMinutes ?? "", { type: "number", placeholder: "360" })}
+      ${qqField("qqQzVis", "可见范围（1/4/16/64/128）", st.schedule?.qzone?.visibility ?? 64, { type: "number" })}
+      ${qqField("qqQzPrompt", "动态内容要求", st.schedule?.qzone?.prompt ?? "", { placeholder: "写一句今天的感想" })}
+    </div>
+    <p class="qq-note">只在你勾选并保存后才会运行；每次触发都受上面的预算与每日次数限制。空间接口能否用取决于协议端版本。</p>
+
     <h4 class="qq-h4">模型与预算</h4>
     <div class="qq-grid">
       ${qqField("qqProvider", "模型提供方 ID", st.provider, { placeholder: "deepseek-official" })}
@@ -2758,7 +2784,7 @@ function renderQQ() {
       ${qqField("qqInPrice", "输入价（元/百万 token）", policy ? qqYuan(policy.input_price) : "", { type: "number" })}
       ${qqField("qqOutPrice", "输出价（元/百万 token）", policy ? qqYuan(policy.output_price) : "", { type: "number" })}
     </div>
-    <p class="qq-note">模型请求前按最大上下文预留、按真实用量结算；价格或用量未知时保留预留并报错，不会把估算当账单。定时主动发言/空间动态目前只能用 <code>/qq/settings</code> 接口配置（当前：${esc(scheduleText)}）。</p>
+    <p class="qq-note">模型请求前按最大上下文预留、按真实用量结算；价格或用量未知时保留预留并报错，不会把估算当账单。<br>当前已配置的定时项：${esc(scheduleText)}。</p>
 
     <div class="qq-actions">
       <button type="button" class="btn btn-primary" id="qqSave" ${qqState.busy ? "disabled" : ""}>保存并启用</button>
@@ -2781,7 +2807,25 @@ function qqReadForm() {
     requireMention: $("qqMention").checked,
     provider: v("qqProvider"), model: v("qqModel"),
     maxTokens: Number(v("qqMaxTokens") || 0), budgetScope: v("qqSelf"),
+    schedule: {},
   };
+  if ($("qqProOn")?.checked) {
+    body.schedule.proactive = {
+      enabled: true,
+      intervalMinutes: Number(v("qqProMin") || 0),
+      target: v("qqProTarget"),
+      channel: v("qqProChannel") || "private",
+      prompt: v("qqProPrompt"),
+    };
+  }
+  if ($("qqQzoneOn")?.checked) {
+    body.schedule.qzone = {
+      enabled: true,
+      intervalMinutes: Number(v("qqQzMin") || 0),
+      visibility: Number(v("qqQzVis") || 64),
+      prompt: v("qqQzPrompt"),
+    };
+  }
   const policy = {
     scope_id: v("qqSelf"), per_request: qqMicro(v("qqPerRequest")), daily: qqMicro(v("qqDaily")),
     monthly: qqMicro(v("qqMonthly")), input_price: qqMicro(v("qqInPrice")),
@@ -2803,6 +2847,19 @@ async function qqSave() {
     [policy.daily_calls, "每日次数"], [body.maxTokens, "最大输出 token"]]) {
     const msg = numOk(n, name);
     if (msg) return fail(msg);
+  }
+  if (body.schedule.proactive) {
+    const p = body.schedule.proactive;
+    if (!/^\d+$/.test(p.target)) return fail("主动发言对象必须是纯数字 QQ/群号");
+    if (!(p.intervalMinutes >= 1 && p.intervalMinutes <= 1440)) return fail("主动发言间隔必须在 1~1440 分钟");
+    if (!p.prompt.trim()) return fail("主动发言需要提示词");
+    if (!["private", "group"].includes(p.channel)) return fail("主动发言范围只能是 private 或 group");
+  }
+  if (body.schedule.qzone) {
+    const z = body.schedule.qzone;
+    if (!(z.intervalMinutes >= 1 && z.intervalMinutes <= 1440)) return fail("空间动态间隔必须在 1~1440 分钟");
+    if (![1, 4, 16, 64, 128].includes(z.visibility)) return fail("空间可见范围只能是 1/4/16/64/128");
+    if (!z.prompt.trim()) return fail("空间动态需要内容要求");
   }
   qqState.busy = true;
   try {
@@ -2837,6 +2894,89 @@ async function qqStop() {
     qqState.busy = false;
     if (state.tab === "qq" && !state.detailId) renderQQ();
   }
+}
+
+
+// ---------- 运行状态（抽取实况） ----------
+const statusState = { data: null, error: "", timer: null };
+
+async function statusFetch(path) {
+  const res = await fetch(`${API}${path}`);
+  const body = await res.json().catch(() => null);
+  return { ok: res.ok && body && body.ok === true, body };
+}
+
+async function loadStatus() {
+  try {
+    const r = await statusFetch("/stats");
+    if (!r.ok) throw new Error(r.body?.error || "读取状态失败");
+    statusState.data = r.body;
+    statusState.error = "";
+  } catch (err) {
+    statusState.error = (err && err.message) || "读取状态失败";
+  }
+  if (state.tab === "status" && !state.detailId) renderStatus();
+}
+
+function statusRow(label, value, hint = "") {
+  return `<div class="st-row"><span class="st-label">${esc(label)}</span>
+    <strong class="st-value">${esc(value)}</strong>
+    ${hint ? `<span class="st-hint">${esc(hint)}</span>` : ""}</div>`;
+}
+
+function renderStatus() {
+  const body = $("inspBody");
+  const d = statusState.data;
+  if (!d) {
+    body.innerHTML = `<p class="qq-note">${esc(statusState.error || "正在读取…")}</p>`;
+    bindStatusButtons();
+    return;
+  }
+  const last = d.last_extract;
+  const lastText = last
+    ? `${last.status}${last.n_events ? ` · ${last.n_events} 条` : ""}${last.error ? ` · ${last.error}` : ""}`
+    : "还没有抽取记录";
+  const coverage = d.turns ? Math.round((d.digests / Math.max(1, d.sessions)) * 100) : 0;
+  let html = `<div class="st-wrap">
+    <div class="qq-status">
+      <span class="badge ${d.extract_configured ? "badge-ok" : "badge-muted"}">${d.extract_configured ? "抽取已配置" : "未配置 API key"}</span>
+      <span class="row-meta">${d.digest_enabled ? "自动摘要开" : "自动摘要关"}</span>
+    </div>
+    ${statusState.error ? `<p class="qq-error">${esc(statusState.error)}</p>` : ""}
+    <h4 class="qq-h4">抽取队列</h4>
+    ${statusRow("待抽取对话", `${d.turns_pending} 条`, d.turns_pending ? "下次抽取会带上" : "已全部抽完")}
+    ${statusRow("已记录对话", `${d.turns} 条 / ${d.sessions} 个会话`)}
+    ${statusRow("最近一次抽取", lastText, last ? `耗时 ${last.latency_ms ?? "-"}ms · ¥${((last.cost ?? 0)).toFixed(4)}` : "")}
+    <h4 class="qq-h4">记忆</h4>
+    ${statusRow("事件", `${d.events} 条`)}
+    ${statusRow("事实 / 特征 / 存疑", `${d.facts} / ${d.traits} / ${d.doubts}`)}
+    ${statusRow("会话摘要", `${d.digests} 条`, `覆盖 ${Math.min(100, coverage)}% 的会话`)}
+    <h4 class="qq-h4">运行</h4>
+    ${statusRow("内核版本", d.version || "-")}
+    ${statusRow("库", baseName(d.db))}
+    ${statusRow("抽取模型", d.extract_model || "-")}
+    <div class="qq-actions"><button type="button" class="btn" id="stReload">刷新</button></div>
+    <p class="qq-note">这里显示的是真实队列：待抽取为 0 表示当前没有积压；"最近一次抽取"为 ${
+      ""}<code>skipped/degraded</code> 时说明模型或预筛跳过了那个窗口，不是故障。</p>
+  </div>`;
+  body.innerHTML = html;
+  bindStatusButtons();
+}
+
+function bindStatusButtons() {
+  const btn = $("stReload");
+  if (btn) btn.addEventListener("click", () => { void loadStatus(); });
+}
+
+function startStatusPoll() {
+  stopStatusPoll();
+  statusState.timer = setInterval(() => {
+    if (state.tab === "status" && state.expanded && !state.detailId) void loadStatus();
+  }, 5000);
+}
+
+function stopStatusPoll() {
+  if (statusState.timer) { clearInterval(statusState.timer); statusState.timer = null; }
 }
 
 // ---------- 启动 ----------

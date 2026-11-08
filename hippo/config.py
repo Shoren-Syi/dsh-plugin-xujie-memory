@@ -91,6 +91,20 @@ class ReflectCfg(_Section):
     max_passive_per_day: int = 3
 
 
+class DigestCfg(_Section):
+    """会话摘要的自动生成策略。
+
+    摘要是"任务型对话里唯一总能捞回上下文"的东西，但只在 /drain 生成等于没有
+    ——DSH 很少走到 drain。所以改成后台轮询：攒够 `min_new_turns` 轮，或者
+    空闲 `idle_minutes` 分钟且有新内容，就补一条；同一条会话最多每
+    `refresh_minutes` 分钟重写一次，避免每轮都花一次调用。
+    """
+
+    enabled: bool = True
+    min_new_turns: int = 8
+    refresh_minutes: int = 30
+
+
 class RetrieveCfg(_Section):
     trigger_jaccard: float = Field(0.25, ge=0, le=1)
     max_summaries: int = Field(8, ge=1, le=50)
@@ -189,6 +203,13 @@ class ExtractCfg(_Section):
     # 界面上看着像"装了没用"。所以会话第一次抽取只要求 2 条用户消息，
     # 之后照旧 every_n_turns。设成 0 或 >= every_n_turns 等于关闭这条加速。
     first_extract_user_turns: int = Field(2, ge=1)
+    # 二次抽取：一个窗口抽出 0 条、且本地判断"这像在定义规则/数值/格式"时，
+    # 带着定向指令再问一次。**先本地判断再花钱**——不是每个空窗口都补。
+    #
+    # **默认关闭**：194 题实测，28 次额外调用只多抽出 3 条事件，
+    # 判定反而 127→123（噪声内）。成本优先，不划算，默认不开。
+    retry_empty: bool = False
+    retry_min_chars: int = Field(20, ge=8, le=1000)
     window_tokens: int = Field(1200, ge=100)
     prescreen: bool = True
     # M29：预筛模式。
@@ -298,6 +319,7 @@ class Config(BaseModel):
     session: SessionCfg = Field(default_factory=SessionCfg)
     budget: BudgetCfg = Field(default_factory=BudgetCfg)
     pack: PackCfg = Field(default_factory=PackCfg)
+    digest: DigestCfg = Field(default_factory=DigestCfg)
     reflect: ReflectCfg = Field(default_factory=ReflectCfg)
     retrieve: RetrieveCfg = Field(default_factory=RetrieveCfg)
     rank: RankCfg = Field(default_factory=RankCfg)
@@ -364,14 +386,32 @@ def _deep_merge(base: dict[str, Any], extra: dict[str, Any]) -> dict[str, Any]:
     return base
 
 
+def _log():
+    """配置层自己的日志句柄：不依赖 core.log，避免循环导入。"""
+    import logging
+    return logging.getLogger("hippo.config")
+
+
 def load_config(path: str | Path | None = None, *, env: bool = True) -> Config:
     p = Path(os.path.expanduser(str(path))) if path else Path.home() / ".hippo" / "config.yaml"
     raw: dict[str, Any] = {}
     if p.exists():
-        raw = yaml.safe_load(p.read_text(encoding="utf-8")) or {}
+        try:
+            loaded = yaml.safe_load(p.read_text(encoding="utf-8")) or {}
+            raw = loaded if isinstance(loaded, dict) else {}
+        except (yaml.YAMLError, OSError, UnicodeDecodeError) as exc:
+            # 配置文件坏了不能让插件"静默死亡"：用户改错一个缩进，
+            # 结果整个记忆功能起不来，现象是"装完没反应"，极难排查。
+            # 退到默认值继续跑，并把原因写进日志。
+            _log().warning("配置读取失败，改用默认值：%s", exc)
+            raw = {}
     if env:
         raw = _deep_merge(raw, _env_overrides())
-    return Config(**raw)
+    try:
+        return Config(**raw)
+    except Exception as exc:  # noqa: BLE001 - 字段名写错/类型不对
+        _log().warning("配置内容不合法，改用默认值：%s", exc)
+        return Config()
 
 
 def default_config_text() -> str:

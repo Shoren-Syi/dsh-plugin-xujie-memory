@@ -92,3 +92,58 @@ test('pickPort：跳过被占用的端口，不返回 0', async () => {
     await new Promise((resolve) => server.close(resolve))
   }
 })
+
+test('withRetry：传输失败重试一次，超时不重试', async () => {
+  let calls = 0
+  const flaky = async () => {
+    calls += 1
+    if (calls === 1) throw new TypeError('fetch failed')
+    return { ok: true }
+  }
+  assert.deepEqual(await __test.withRetry(flaky), { ok: true })
+  assert.equal(calls, 2)
+
+  let aborted = 0
+  const timeout = async () => {
+    aborted += 1
+    const error = new Error('aborted')
+    error.name = 'AbortError'
+    throw error
+  }
+  await assert.rejects(() => __test.withRetry(timeout), /aborted/)
+  assert.equal(aborted, 1, '超时不该重试')
+})
+
+test('createTurnQueue：失败重试、成功清空、有界丢弃最旧', async () => {
+  const sent = []
+  let failing = true
+  let scheduled = null
+  const q = __test.createTurnQueue({
+    send: async (item) => {
+      if (failing) throw new Error('down')
+      sent.push(item)
+    },
+    delayMs: 1,
+    max: 3,
+    timer: (fn) => { scheduled = fn; return { unref() {} } },
+  })
+
+  q.push({ text: 'a' })
+  await q.flush()
+  assert.equal(q.size, 1, '失败后应留在队列里')
+  assert.equal(sent.length, 0)
+
+  failing = false
+  scheduled?.()
+  await new Promise((r) => setTimeout(r, 5))
+  assert.equal(q.size, 0, '恢复后应该清空')
+  assert.deepEqual(sent, [{ text: 'a' }])
+
+  q.push({ text: '1' })
+  q.push({ text: '2' })
+  q.push({ text: '3' })
+  q.push({ text: '4' })
+  assert.equal(q.size, 3, '超过上限丢最旧的')
+  await q.flush()
+  assert.deepEqual(sent.slice(-3).map((x) => x.text), ['2', '3', '4'])
+})

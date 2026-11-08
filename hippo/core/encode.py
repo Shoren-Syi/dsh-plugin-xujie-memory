@@ -178,11 +178,14 @@ class Encoder:
         return payload
 
         # ---------------------------------------------------------------- 调用
-    async def encode(self, window: Window, *, known: str = "（暂无）") -> EncodeOutcome:
+    async def encode(self, window: Window, *, known: str = "（暂无）",
+                     extra_system: str = "") -> EncodeOutcome:
         """抽取一个窗口。**不抛异常**——失败返回 status=degraded。"""
         t0 = time.perf_counter()
         out = EncodeOutcome()
         messages = self.build_messages(window, known)
+        if extra_system and messages:
+            messages[0]["content"] = str(messages[0].get("content", "")) + "\n\n" + extra_system
         span = Span()
         last_err: str | None = None
 

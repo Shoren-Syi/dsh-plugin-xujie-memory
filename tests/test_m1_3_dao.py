@@ -240,7 +240,9 @@ def test_no_direct_db_access_outside_dao():
     # qq.py 是独立子系统：它管的是 OneBot 设置与预算账本（qq_* 四张表），
     # 不碰记忆 schema，也不该塞进 Store 的记忆 DAO 里。它的 SQL 全部参数化、
     # 全部集中在这一个模块内，所以单独放行——不是"图省事绕过"。
-    allowed = {"store.py", "migrate.py", "db.py", "qq.py"}
+    # migrate_lock.py 只执行一条 `PRAGMA database_list`（拿库文件路径去抢
+    # 迁移锁），不碰业务表；和 migrate.py 同级的基础设施，放行。
+    allowed = {"store.py", "migrate.py", "db.py", "qq.py", "migrate_lock.py"}
     offenders = []
     for f in root.rglob("*.py"):
         if f.name in allowed:

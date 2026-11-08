@@ -63,6 +63,8 @@ class Event(_Row):
     weight: float = 0.5
     w0: float = 0.5
     arousal: float = 0.0
+    importance: int = 3
+    key_values: str = ""
     recall_count: int = 0
     keywords: str = ""
     summary: str = ""
@@ -78,6 +80,11 @@ class Event(_Row):
     @property
     def keyword_list(self) -> list[str]:
         return [t for t in self.keywords.split() if t]
+
+    @property
+    def value_list(self) -> list[str]:
+        """关键值（数字/日期/金额/专名），渲染时优先给、检索时也当关键词。"""
+        return [v for v in str(getattr(self, "key_values", "") or "").split() if v]
 
 
 class Entity(_Row):

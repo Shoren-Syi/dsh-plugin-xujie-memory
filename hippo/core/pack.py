@@ -226,7 +226,7 @@ def _card(store: Any, session: str, budget: int) -> tuple[str, list[str]]:
 _SELF = "用户"   # 没挂实体的事实算在谁头上
 
 
-def _pinned(store: Any, session: str) -> tuple[str, list[str]]:
+def _pinned(store: Any, session: str, *, highlight: bool = True) -> tuple[str, list[str], int]:
     """C 段。两类东西：用户钉住的事件，和**每个槽位最新的那条事实**。
 
     ## 去重必须按 (人, 槽)，不能只按槽
@@ -280,12 +280,89 @@ def _pinned(store: Any, session: str) -> tuple[str, list[str]]:
         for who in sorted(per, key=lambda x: (x != _SELF, x)):
             lines.append(f"- {who}：{'；'.join(per[who])}")
 
+    # ---- 重点标注层：最近 + 最重要的几条，每轮固定带
+    #
+    # 设计里这一层不是"用户手动 pin"，而是"越重要带得越多"：
+    # 基础 3 条（按 权重→新近），权重 >= 0.8 的可以多带，最多 6 条。
+    # 放在 C 段而不是检索段，因为它不依赖本轮问了什么。
+    recent: list[tuple[Event, float]] = []
+    try:
+        if not highlight:
+            raise RuntimeError("degraded")
+        already = {e.id for e in store.list_pinned(session)}
+        for ev in store.highlight_events(session, limit=8):
+            if ev.id in already:
+                continue
+            weight = float(getattr(ev, "weight", 0) or 0)
+            if len(recent) >= 3 and weight < 0.8:
+                continue
+            if len(recent) >= 6:
+                break
+            recent.append((ev, weight))
+    except Exception:  # noqa: BLE001 - 标注层缺失不该影响装配
+        recent = []
+
+    extra_tokens = 0
+    if recent:
+        block: list[str] = ["最近："]
+        for ev, _w in recent:
+            day = datetime.fromtimestamp(int(ev.event_time)).strftime("%m-%d")
+            kws = " ".join(ev.keyword_list[:3])
+            text = (ev.summary or ev.raw or "").strip().replace("\n", " ")[:80]
+            block.append(f"- {day} {text}" + (f"（{kws}）" if kws else ""))
+        extra_tokens = estimate_tokens("\n".join(block))
+        lines.extend(block)
+
     if not lines:
-        return "", []
-    return "# 一定要记住的\n" + "\n".join(lines), []
+        return "", [], 0
+    return "# 一定要记住的\n" + "\n".join(lines), [], extra_tokens
 
 
-def _memory_block(items: list[MemoryItem], drilled: DrillResult | None) -> str:
+def _query_bigrams(text: str) -> set[str]:
+    """问题里的中文二元组（去掉标点空白）。"""
+    import unicodedata
+    norm = unicodedata.normalize("NFKC", str(text or "")).lower()
+    norm = "".join(c for c in norm if not c.isspace() and c not in "，。、；：！？,.;:!?（）()「」『』\"'“”‘’—…·")
+    return {norm[i:i + 2] for i in range(len(norm) - 1)}
+
+
+def _raw_hit(it: MemoryItem, query: str, *, max_chars: int = 60) -> str:
+    """问题里的词命中"原话"、却没命中"摘要"时，返回一小段原话。
+
+    为什么只在这时候补：之前无脑给前 K 条加原文，结果原话按档位预算挤掉了摘要，
+    gold 集直接掉 3~4 题（答案本来就在摘要里）。这里加的是**条件**：
+    只有"问题里的二元组出现在 raw、但摘要里没有"才补，并且单独加预算，
+    不占用摘要的额度。
+    """
+    if not query:
+        return ""
+    raw = str(getattr(it.event, "raw", "") or "")
+    summary = str(it.text or it.event.summary or "")
+    if not raw:
+        return ""
+    grams = _query_bigrams(query)
+    if not grams:
+        return ""
+    hit = [g for g in grams if g in raw and g not in summary]
+    if not hit:
+        return ""
+    # 从第一个命中位置取一小段，保证包含命中的词
+    pos = raw.find(hit[0])
+    if pos < 0:
+        pos = 0
+    return raw[max(0, pos - 10):pos + max_chars].strip()
+
+
+def _raw_excerpt(it: MemoryItem, *, max_chars: int = 60) -> str:
+    """取原话开头一小段（不依赖问题词）。"""
+    raw = str(getattr(it.event, "raw", "") or "").strip()
+    if not raw:
+        return ""
+    return raw[:max_chars].strip()
+
+
+def _memory_block(items: list[MemoryItem], drilled: DrillResult | None,
+                  query: str = "") -> str:
     """D 段。一条记忆长什么样，**只在 `drill.format_event` 里定义**（M16）。
 
     这里以前自己拼 `[记忆 · 日期 · tier]` + 关键词 + 摘要，`format_event`
@@ -300,11 +377,40 @@ def _memory_block(items: list[MemoryItem], drilled: DrillResult | None) -> str:
     if not items:
         return ""
     out: list[str] = ["# 我记得的"]
-    for it in items:
+    for ref in items:
+        body = ref.raw_text or None
+        budget = None
+        if body is None and len(out) <= 3:      # 只给前两条补，控制成本
+            # 只在"问题词命中原话、却没进摘要"时补。
+            # 试过"前两条无条件给原话"：真实召回只 +1 题，gold 反而掉 1 题
+            # （原话按档位预算挤占摘要，而 gold 的答案本来在摘要里），不划算。
+            # 只在"问题词命中原话、却没进摘要"时补。
+            # 试过"第一条无条件补 50 字原话"：召回 0 提升（答案常不在开头），
+            # 白花 token，撤回。
+            snippet = _raw_hit(ref, query)
+            if snippet:
+                body = snippet
+                tier = int(getattr(ref.event, "tier", 2) or 2)
+                from .drill import TIER_BUDGET
+                base = TIER_BUDGET.get(tier, TIER_BUDGET[2])[1]
+                # 单独加额度：原话不挤摘要
+                budget = base + int(estimate_tokens('原文：""') + estimate_tokens(snippet)) + 4
+        # cold 档默认只渲染关键词（省钱）。但**被检索选中的** cold 事件是
+        # "本轮问题的候选答案"，只给关键词等于把答案砍掉——实测"恢复密钥
+        # 存放在哪"就是这条：选中了，摘要里写着 U 盘，上下文里却只有关键词。
+        # 所以选中的 cold 至少按 warm 档渲染摘要头一段。
+        depth = None
+        if int(getattr(ref.event, "tier", 2) or 2) >= 3 and body is None:
+            from .drill import DEPTH_SUMMARY
+            depth = DEPTH_SUMMARY
+            if budget is None:
+                budget = 70
         out.append(format_event(
-            it.event,
-            summary=it.text or None,
-            body=it.raw_text or None,
+            ref.event,
+            depth=depth,
+            summary=ref.text or None,
+            body=body,
+            max_tokens=budget,
         ))
     return "\n".join(out)
 
@@ -490,8 +596,8 @@ def _pack_degraded(store: Any, session: str, *, cfg: Any, now: datetime,
     那几毫秒的 CPU。降级是临时状态，一次 miss 可以接受。
     """
     persona = Block("persona", _persona(cfg), budget=budget_of["persona"])
-    pin_text, pin_drop = _pinned(store, session)
-    pinned = Block("pinned", pin_text, budget=budget_of["pinned"], dropped=pin_drop)
+    pin_text, pin_drop, _pin_extra = _pinned(store, session, highlight=False)
+    pinned = Block("pinned", pin_text, budget=budget_of["pinned"] + _pin_extra, dropped=pin_drop)
     anchor = Block("anchor", _anchor(now, tz), budget=budget_of["anchor"])
 
     stable = persona.text + "\x00" + pinned.text
@@ -627,7 +733,7 @@ def pack(
                     budget=budget_of["persona"])
     card_text, card_drop = _card(store, session, budget_of["card"])
     card = Block("card", card_text, budget=budget_of["card"], dropped=card_drop)
-    pin_text, pin_drop = _pinned(store, session)
+    pin_text, pin_drop, pin_extra = _pinned(store, session)
     # 会话摘要放 C 段（必记），不放 D 段：总预算吃紧时 D 段最先被砍，
     # 放那儿等于白写。它是任务型对话里"总是存在"的锚点。
     try:
@@ -641,13 +747,13 @@ def pack(
         pin_text = _digest_line + ("\n" + pin_text if pin_text else "")
     # C 段原来的预算只够放事实；摘要单独占一行、单独给额度，
     # 否则 _trim_to 会把这一行（也是唯一一行）弹掉，摘要等于没注入。
-    pin_budget = budget_of["pinned"] + estimate_tokens(_digest_line) if _digest_line else budget_of["pinned"]
+    pin_budget = budget_of["pinned"] + pin_extra + (estimate_tokens(_digest_line) if _digest_line else 0)
     pinned = Block("pinned", pin_text, budget=pin_budget, dropped=pin_drop)
 
     if reused:
         mem_text = store.get_state(session, "last_pack_d", "")
     else:
-        mem_text = _memory_block(items, dr)
+        mem_text = _memory_block(items, dr, query=user_msg or "")
         # 裁剪是"从后往前砍行"，所以活下来的是前缀。数一下还剩几个条目头，
         # 就知道哪几条真的发出去了——**不能拿 items 全量当注入**，
         # 那会把"考虑过但被砍掉"的也算成被想起（手册 §M14.3 明确禁止）。

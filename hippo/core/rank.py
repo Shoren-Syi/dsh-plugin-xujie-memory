@@ -262,6 +262,26 @@ def l2_search(
             candidates=cand, include_historical=q.include_historical)
         hits = {ev.id: (h, m) for ev, h, m in rows}
 
+    # ---- 子串兜底：关键词零命中/命中太少时，用问题里的二元组扫 summary+raw
+    #
+    # 中文里"用户问法"和"抽出来的关键词"经常对不上（问"从什么时候开始爆发"，
+    # 库里关键词是"3月份"），关键词检索直接 0 命中，而答案就躺在原话里。
+    # LIKE 是全表扫，所以只在会话规模可控时开，并且最多用 4 个片断。
+    if len(hits) < max_items and cand:
+        try:
+            total = store.count_events(session)
+        except Exception:  # noqa: BLE001
+            total = 0
+        if int(total) <= 2000:
+            grams = [t for t in toks if 2 <= len(t) <= 6][:4]
+            seen = set(hits)
+            for gram in grams:
+                for eid in store.search_events_substring(session, gram, limit=max_items * 2):
+                    if eid in seen:
+                        continue
+                    seen.add(eid)
+                    hits[eid] = (1, [gram])
+
     # ---- 钉住的必须进（手册验收 #4）
     pinned = store.list_pinned(session, include_historical=q.include_historical)
     pinned = [e for e in pinned if not cand or e.id in set(cand)]

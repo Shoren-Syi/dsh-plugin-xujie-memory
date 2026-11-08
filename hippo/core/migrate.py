@@ -15,6 +15,7 @@ from dataclasses import dataclass
 from pathlib import Path
 
 from .db import table_exists
+from .migrate_lock import migration_lock
 
 MIGRATIONS_DIR = Path(__file__).resolve().parent.parent / "data" / "migrations"
 _NAME_RE = re.compile(r"^(\d+)_(.+)\.sql$")
@@ -69,15 +70,18 @@ def migrate(
 
     幂等：重复调用只返回空列表。
     """
-    applied: list[int] = []
-    for mig in available_migrations(directory):
-        if target is not None and mig.version > target:
-            break
-        if mig.version <= current_version(conn):
-            continue
-        _apply(conn, mig)
-        applied.append(mig.version)
-    return applied
+    # 跨进程串行：两个实例同时打开新库时，只有一个能跑迁移，
+    # 另一个等锁释放后重新读版本号（已是最新，直接返回空列表）。
+    with migration_lock(conn):
+        applied: list[int] = []
+        for mig in available_migrations(directory):
+            if target is not None and mig.version > target:
+                break
+            if mig.version <= current_version(conn):
+                continue
+            _apply(conn, mig)
+            applied.append(mig.version)
+        return applied
 
 
 def _child_counts(conn: sqlite3.Connection, table: str) -> dict[str, int]:

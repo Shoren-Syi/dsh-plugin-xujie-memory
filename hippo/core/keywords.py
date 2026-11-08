@@ -187,3 +187,25 @@ def is_empty_word(token: str, entities: Iterable[str] = ()) -> bool:
     if t in {_norm(e) for e in entities if e}:
         return False
     return t in GENERIC or t.lower() in STOPWORDS or t in STOPWORDS
+
+
+def clean_values(values) -> list[str]:
+    """清洗"关键值"：数字/日期/金额/比例/专名。
+
+    和 `clean_keywords` 的区别：**允许纯数字、允许单字**（"3:4""2万""¥50"）。
+    关键词清洗为了防噪声会把这些扔掉，而它们恰恰是最该逐字保留的。
+    """
+    if not values:
+        return []
+    out: list[str] = []
+    for raw in values if isinstance(values, (list, tuple)) else str(values).split():
+        token = unicodedata.normalize("NFKC", str(raw or "")).strip().strip(_TRIM)
+        token = re.sub(r"\s+", " ", token)
+        if not token or len(token) > 24:
+            continue
+        if token in out:
+            continue
+        out.append(token)
+        if len(out) >= 6:
+            break
+    return out

@@ -102,6 +102,38 @@ class SessionReport:
         return out
 
 
+# ---------------------------------------------------------------- 二次抽取
+# 成本纪律：先本地判断，再决定花不花那一次调用。
+RETRY_EXTRACT_HINT = """上一次你判断这个窗口没有值得记的内容。换一个视角再找一遍：
+只找**用户敲定的东西**——规则、数值、比例、格式、名单、名称、决定、范围。
+每一处定义单独一条事件，数字与专有名词原样保留。
+如果确实没有（纯寒暄 / 纯提问 / 纯评价），仍然返回空数组。"""
+
+_DEF_MARKERS = (
+    "格式", "规则", "设定", "属性", "比例", "字以内", "不超过", "上限",
+    "名字", "叫做", "定为", "确定", "名单", "标准", "章节", "卷", "版本",
+)
+
+
+def definitional_window(w, min_chars: int = 20) -> bool:
+    """本地判断：这个窗口像不像"用户在定义/敲定某个规范"。
+
+    零成本、零延迟。只用两条判据：
+      1. 用户文字够长（短句几乎不可能是"定义"）；
+      2. 出现数字（比例/字数/数值），或出现"格式/规则/设定"这类定义词。
+    宁可漏判也不多花调用——判错的代价是少一次二次抽取，不是用户体验。
+    """
+    texts = [str(t.content or "") for t in getattr(w, "turns", []) if getattr(t, "role", "") == "user"]
+    if not texts:
+        return False
+    blob = "".join(texts)
+    if len(blob) < min_chars:
+        return False
+    if any(ch.isdigit() for ch in blob):
+        return True
+    return any(marker in blob for marker in _DEF_MARKERS)
+
+
 class Extractor:
     def __init__(
         self,
@@ -212,11 +244,23 @@ class Extractor:
             if rep.results[-1].status == "error":
                 break
 
+            # ---- 二次抽取：只有"抽空了 + 本地判断像在定义"才补一次
+            #
+            # 成本纪律：这个判断是纯本地的（正则 + 长度），零调用零延迟；
+            # 只有真的像"用户敲定了一个规范/数值/格式"才多花一次模型调用。
+            if (self.cfg.extract.retry_empty
+                    and rep.results[-1].status == "ok"
+                    and rep.results[-1].events == 0
+                    and definitional_window(w, self.cfg.extract.retry_min_chars)):
+                await self._one(rep, session, w, known,
+                                extra_system=RETRY_EXTRACT_HINT)
+
         return rep
 
     async def _one(self, rep: SessionReport, session: str, w: Window,
-                   known: str) -> None:
-        out: EncodeOutcome = await self.encoder.encode(w, known=known)
+                   known: str, *, extra_system: str = "") -> None:
+        out: EncodeOutcome = await self.encoder.encode(w, known=known,
+                                                       extra_system=extra_system)
         row = RunResult(
             session=session, start_idx=w.start_idx, end_idx=w.end_idx,
             status=out.status, attempts=out.attempts, cost=out.cost,

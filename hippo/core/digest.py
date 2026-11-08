@@ -19,9 +19,11 @@ from ..log import get_logger
 
 log = get_logger("digest")
 
-__all__ = ["DIGEST_KEY", "get_digest", "save_digest", "build_digest", "DIGEST_PROMPT"]
+__all__ = ["DIGEST_KEY", "get_digest", "save_digest", "build_digest", "DIGEST_PROMPT",
+           "need_refresh", "read_meta", "save_meta"]
 
 DIGEST_KEY = "session_digest"
+META_KEY = "session_digest_meta"
 
 DIGEST_PROMPT = """把下面这段对话压缩成一条**会话摘要**，给三个月后的自己看。
 
@@ -99,3 +101,49 @@ async def build_digest(store: Any, session: str, cfg: Any, client: Any, api_key:
     save_digest(store, session, body)
     log.info("digest.saved", extra={"fields": {"session": session, "chars": len(body)}})
     return body
+
+
+def read_meta(store: Any, session: str) -> dict:
+    """上次生成摘要时的元信息：{idx, at}。没有就返回空。"""
+    import json as _json
+
+    raw = str(store.get_state(session, META_KEY, "") or "")
+    if not raw:
+        return {}
+    try:
+        data = _json.loads(raw)
+    except ValueError:
+        return {}
+    return data if isinstance(data, dict) else {}
+
+
+def save_meta(store: Any, session: str, *, idx: int, at: int) -> None:
+    import json as _json
+
+    store.set_state(session, META_KEY, _json.dumps({"idx": int(idx), "at": int(at)}))
+
+
+def need_refresh(*, last_idx: int, meta: dict, now: int, cfg: Any) -> bool:
+    """要不要（重新）生成摘要。纯函数，方便单测。
+
+    两个条件任一：
+      - 从来没有摘要；
+      - 攒够 min_new_turns 条新内容，或者距上次生成已超过 refresh_minutes。
+    原因是"空闲触发"没法可靠判断：meta 里记的是摘要生成时间，不是最后说话时间。
+    与其留一个永远走不到的参数，不如只留一个能解释清楚的重写间隔。
+    """
+    dcfg = getattr(cfg, "digest", None)
+    if dcfg is not None and not getattr(dcfg, "enabled", True):
+        return False
+    if last_idx < 0:
+        return False
+    prev_idx = int(meta.get("idx", -1)) if meta else -1
+    prev_at = int(meta.get("at", 0)) if meta else 0
+    if prev_idx < 0:
+        return True
+    new_turns = last_idx - prev_idx
+    if new_turns <= 0:
+        return False
+    if new_turns >= int(getattr(dcfg, "min_new_turns", 8)):
+        return True
+    return (now - prev_at) >= int(getattr(dcfg, "refresh_minutes", 30)) * 60

@@ -242,7 +242,7 @@ def test_no_warning_when_few_pins(store, cfg):
 def test_pinned_section_lists_events(store):
     """C 段里必须出现钉住事件的摘要。"""
     _ev(store, "我对花生过敏", pinned=1, summary="用户对花生过敏")
-    text, _drop = _pinned(store, S)
+    text, _drop, _extra = _pinned(store, S)
     assert "花生" in text
 
 
