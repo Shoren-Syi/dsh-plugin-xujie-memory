@@ -19,7 +19,7 @@
           "source": {
             "type": "git",
             "url": "https://github.com/Shoren-Syi/dsh-plugin-xujie-memory",
-            "commit": "f1e86409f8515c92cd1f22a9a7221e943729247f"
+            "commit": "90c4f4c114532de3ba2475976ba6330e53b27447"
           },
           "engines": {
             "dsh": ">=0.2.0"
