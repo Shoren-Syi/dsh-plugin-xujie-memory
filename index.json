@@ -14,12 +14,12 @@
       },
       "versions": [
         {
-          "version": "1.1.8",
+          "version": "1.1.19",
           "publishTimestamp": 1762579200,
           "source": {
             "type": "git",
             "url": "https://github.com/Shoren-Syi/dsh-plugin-xujie-memory",
-            "commit": "12d7da9273327acb4b83b868ee018df945d0e39e"
+            "commit": "492a2c2e99d0a5eaaa4cba847a9efdfc3abca5fa"
           },
           "engines": {
             "dsh": ">=0.2.0"
