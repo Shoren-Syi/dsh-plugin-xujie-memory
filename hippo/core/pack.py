@@ -183,7 +183,7 @@ def _persona(cfg: Any) -> str:
     return f"{text}\n\n{GIVEUP_PROTOCOL}"
 
 
-def _card(store: Any, session: str, budget: int) -> tuple[str, list[str]]:
+def _card(store: Any, session: str, budget: int, *, cross: bool = False) -> tuple[str, list[str]]:
     """B 段。按"特征数多的人优先"排，超预算先丢 inferred，再丢低置信。
 
     `[ctx-v{n}]` 是版本号：内容变了才递增，用来观测缓存失效点。
@@ -191,17 +191,26 @@ def _card(store: Any, session: str, budget: int) -> tuple[str, list[str]]:
     而且"内容一样版本就一样"是天然成立的。
     """
     drop: list[str] = []
-    ents = store.list_entities(session)
-    if not ents:
-        return "", drop
-
     rows: list[tuple[int, str, str]] = []
-    for e in ents:
-        traits = store.list_traits(e.id)
-        lines = render_traits(traits)
-        if not lines:
-            continue
-        rows.append((e.id, e.canonical, "\n".join(lines)))
+    if cross:
+        # 跨会话：特征属于"这个人"，新开会话不该失忆。
+        # 事件/计划/存疑仍然严格按会话隔离。
+        grouped: dict[str, list[Any]] = {}
+        for tr, who in store.list_traits_cross():
+            grouped.setdefault(who or _SELF, []).append(tr)
+        for idx, (who, traits) in enumerate(grouped.items()):
+            lines = render_traits(traits)
+            if not lines:
+                continue
+            rows.append((idx, who, "\n".join(lines)))
+    else:
+        ents = store.list_entities(session)
+        for e in ents:
+            traits = store.list_traits(e.id)
+            lines = render_traits(traits)
+            if not lines:
+                continue
+            rows.append((e.id, e.canonical, "\n".join(lines)))
     if not rows:
         return "", drop
 
@@ -226,7 +235,8 @@ def _card(store: Any, session: str, budget: int) -> tuple[str, list[str]]:
 _SELF = "用户"   # 没挂实体的事实算在谁头上
 
 
-def _pinned(store: Any, session: str, *, highlight: bool = True) -> tuple[str, list[str], int]:
+def _pinned(store: Any, session: str, *, highlight: bool = True,
+            cross: bool = False) -> tuple[str, list[str], int]:
     """C 段。两类东西：用户钉住的事件，和**每个槽位最新的那条事实**。
 
     ## 去重必须按 (人, 槽)，不能只按槽
@@ -256,7 +266,9 @@ def _pinned(store: Any, session: str, *, highlight: bool = True) -> tuple[str, l
 
     # (谁, 槽) → [(valid_from, 值)]，多值槽留着全部
     latest: dict[tuple[str, str], list[tuple[int, str]]] = {}
-    for f, who in store.list_facts(session, include_historical=False):
+    fact_rows = (store.list_facts_cross(include_historical=False) if cross
+                 else store.list_facts(session, include_historical=False))
+    for f, who in fact_rows:
         if f.valid_from is None:
             continue
         k = (who or _SELF, f.key)
@@ -359,6 +371,30 @@ def _raw_excerpt(it: MemoryItem, *, max_chars: int = 60) -> str:
     if not raw:
         return ""
     return raw[:max_chars].strip()
+
+
+def _raw_turn_block(rows: list[dict], *, max_chars: int = 80) -> tuple[str, int]:
+    """原话兜底段（L1_RAW）。事件没命中时，给几句原文当线索。
+
+    单独成段而不是混进事件里：它的优先级更低、格式也不同（没有关键词/权重），
+    混排会让模型分不清"这是记忆还是原话"。
+    """
+    if not rows:
+        return "", 0
+    lines = ["# 原话（没抽成事件，可能是线索）"]
+    for row in rows[:3]:
+        text = " ".join(str(row.get("text") or "").split())[:max_chars]
+        if not text:
+            continue
+        try:
+            day = datetime.fromtimestamp(int(row.get("ts") or 0)).strftime("%m-%d")
+        except (TypeError, ValueError, OSError):
+            day = "--"
+        lines.append(f"- {day} {text}")
+    if len(lines) == 1:
+        return "", 0
+    body = "\n".join(lines)
+    return body, estimate_tokens(body)
 
 
 def _memory_block(items: list[MemoryItem], drilled: DrillResult | None,
@@ -687,16 +723,25 @@ def pack(
                               budget_of=budget_of)
 
     # ---- 1. 要不要检索（M12）
+    # 检索用的问题串截断：超长粘贴（5 万字）会让 n-gram 分词吃掉 140ms，
+    # 而 4000 字之外的词对"这一轮该想起什么"没有贡献。
+    user_msg = str(user_msg or "")[:4000]
     trig = should_retrieve(store, session, user_msg) if user_msg else None
     items: list[MemoryItem] = []
+    raw_turns: list[dict] = []
     dr: DrillResult | None = None
     reused = False
     inj_ids: list[int] = []      # 这一轮真正进了 prompt 的事件（M14.3 用）
 
     if trig is not None and trig.fire:
-        res: L2Result = l2_search(store, session, user_msg)
+        res: L2Result = l2_search(store, session, user_msg,
+                                   use_raw=bool(getattr(getattr(cfg, "retrieve", None),
+                                                        "raw_turns", True)),
+                                   use_recent=bool(getattr(getattr(cfg, "retrieve", None),
+                                                           "raw_recent", False)))
         res = _drop_regret(res)
         items = res.items
+        raw_turns = list(getattr(res, "raw_turns", []) or [])
         dr = drill(store, res, text=user_msg, tz=tz)
 
         # ---- 结果级复用（D80）
@@ -731,9 +776,11 @@ def pack(
     persona = Block("persona",
                     (f"{_VSLOT}\n" + persona_body) if persona_body.strip() else "",
                     budget=budget_of["persona"])
-    card_text, card_drop = _card(store, session, budget_of["card"])
+    # 跨会话范围：事实/特征属于"这个人"，事件/计划/存疑仍按会话隔离
+    cross = bool(getattr(getattr(cfg, "retrieve", None), "cross_session", True))
+    card_text, card_drop = _card(store, session, budget_of["card"], cross=cross)
     card = Block("card", card_text, budget=budget_of["card"], dropped=card_drop)
-    pin_text, pin_drop, pin_extra = _pinned(store, session)
+    pin_text, pin_drop, pin_extra = _pinned(store, session, cross=cross)
     # 会话摘要放 C 段（必记），不放 D 段：总预算吃紧时 D 段最先被砍，
     # 放那儿等于白写。它是任务型对话里"总是存在"的锚点。
     try:
@@ -750,15 +797,19 @@ def pack(
     pin_budget = budget_of["pinned"] + pin_extra + (estimate_tokens(_digest_line) if _digest_line else 0)
     pinned = Block("pinned", pin_text, budget=pin_budget, dropped=pin_drop)
 
+    raw_extra = 0
     if reused:
         mem_text = store.get_state(session, "last_pack_d", "")
     else:
         mem_text = _memory_block(items, dr, query=user_msg or "")
+        raw_text, raw_extra = _raw_turn_block(raw_turns)
+        if raw_text:
+            mem_text = f"{mem_text}\n{raw_text}" if mem_text else raw_text
         # 裁剪是"从后往前砍行"，所以活下来的是前缀。数一下还剩几个条目头，
         # 就知道哪几条真的发出去了——**不能拿 items 全量当注入**，
         # 那会把"考虑过但被砍掉"的也算成被想起（手册 §M14.3 明确禁止）。
         inj_ids = [it.id for it in items[:mem_text.count("[记忆 · ")]]
-    memory = Block("memory", mem_text, budget=budget_of["memory"])
+    memory = Block("memory", mem_text, budget=budget_of["memory"] + raw_extra)
     dyn_text, dyn_drop = _dynamic(store, session, now, cfg=cfg,
                                   upcoming_action=upcoming_action)
     direct_fact = _targeted_self_fact(store, session, user_msg)

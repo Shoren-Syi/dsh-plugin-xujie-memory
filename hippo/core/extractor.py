@@ -22,6 +22,8 @@ M5 不做空闲检测，CLI 的 `hippo extract --force` 可以先手动补。
 
 from __future__ import annotations
 
+import re
+
 from dataclasses import dataclass, field
 from typing import Any
 
@@ -132,6 +134,42 @@ def definitional_window(w, min_chars: int = 20) -> bool:
     if any(ch.isdigit() for ch in blob):
         return True
     return any(marker in blob for marker in _DEF_MARKERS)
+
+
+# ---------------------------------------------------------------- 代码窗口判断
+# 成本纪律：纯本地正则，不调模型。判错了最差是多带一段提示词，不影响结果正确性。
+_CODING_MARKERS = (
+    "```", "Traceback (most recent call last)", "Exception:", "Error:",
+    "npm ", "pnpm ", "pip install", "git ", "docker ", "kubectl ", "cargo ",
+    "def ", "import ", "function ", "class ", "=>", "const ", "return ",
+    "SELECT ", "ALTER TABLE", "CREATE TABLE", "PRAGMA ",
+)
+_PATH_RE = re.compile(
+    r"(?:[A-Za-z]:\\|/)?(?:[\w.-]+[/\\])+[\w.-]+\.(?:py|js|mjs|cjs|ts|tsx|jsx|go|rs|java|cs|cpp|c|h|sql|ya?ml|json|toml|sh|ps1|bat|md)\b",
+    re.IGNORECASE,
+)
+
+
+def coding_window(w, *, min_chars: int = 40) -> bool:
+    """判断这个窗口像不像软件工程任务（本机正则，零调用零延迟）。
+
+    阈值故意宽松：代码任务用"工程记忆"提示词只有好处（记文件/命令/决策），
+    误判的代价只是多带一段规则；漏判才是真的丢信息。
+    """
+    texts = [str(t.content or "") for t in getattr(w, "turns", [])]
+    blob = "\n".join(texts)
+    if len(blob) < min_chars:
+        return False
+    score = 0
+    if "```" in blob:
+        score += 2
+    if "Traceback (most recent call last)" in blob:
+        score += 2
+    if _PATH_RE.search(blob):
+        score += 1
+    hits = sum(1 for m in _CODING_MARKERS if m in blob)
+    score += min(hits, 3)
+    return score >= 2
 
 
 class Extractor:
@@ -259,8 +297,9 @@ class Extractor:
 
     async def _one(self, rep: SessionReport, session: str, w: Window,
                    known: str, *, extra_system: str = "") -> None:
-        out: EncodeOutcome = await self.encoder.encode(w, known=known,
-                                                       extra_system=extra_system)
+        out: EncodeOutcome = await self.encoder.encode(
+            w, known=known, extra_system=extra_system,
+            coding=bool(getattr(self.cfg.extract, "coding_prompt", True)) and coding_window(w))
         row = RunResult(
             session=session, start_idx=w.start_idx, end_idx=w.end_idx,
             status=out.status, attempts=out.attempts, cost=out.cost,

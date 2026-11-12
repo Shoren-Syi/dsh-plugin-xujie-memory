@@ -304,6 +304,13 @@ def l1_candidates(
             "session": session, "cap": cap, "entities": len(query.entity_ids),
             "mode": query.mode, "ms": round(elapsed, 2)}})
 
+    # 权重下限：**只作用于日常检索**（"平时不主动想起"），
+    # 显式回忆（HISTORICAL：以前/之前/当时…）直接穿透，
+    # 否则旧事会因为在底层躺久了而永远翻不到——那是丢失，不是遗忘。
+    floor = float(getattr(cfg, "min_weight", 0.0) or 0.0)
+    if floor > 0 and not query.include_historical:
+        ids = store.filter_by_min_weight(session, ids, floor)
+
     return L1Result(
         event_ids=ids, total=len(ids), truncated=truncated,
         elapsed_ms=elapsed, query=query,

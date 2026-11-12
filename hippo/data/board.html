@@ -283,6 +283,12 @@
 .st-label { flex: 0 0 120px; font-size: 12px; color: rgba(206,215,232,.65); }
 .st-value { font-size: 13px; color: #e8f1f8; font-weight: 600; font-variant-numeric: tabular-nums; }
 .st-hint { font-size: 11px; color: rgba(206,215,232,.5); }
+
+.bk-list { list-style: none; margin: 6px 0 0; padding: 0; display: flex; flex-direction: column; gap: 4px; }
+.bk-item { display: flex; align-items: center; gap: 8px; padding: 5px 0; border-bottom: 1px dashed rgba(120,160,190,.16); }
+.bk-name { flex: 1 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 12px; }
+.bk-meta { flex: none; color: rgba(206,215,232,.55); font-size: 11px; }
+.bk-empty { color: rgba(206,215,232,.5); font-size: 12px; }
 </style>
 </head>
 <body>
@@ -2955,7 +2961,18 @@ function renderStatus() {
     ${statusRow("内核版本", d.version || "-")}
     ${statusRow("库", baseName(d.db))}
     ${statusRow("抽取模型", d.extract_model || "-")}
-    <div class="qq-actions"><button type="button" class="btn" id="stReload">刷新</button></div>
+    <div class="qq-actions">
+      <button type="button" class="btn" id="stReload">刷新</button>
+      <button type="button" class="btn" id="stMaintain">立即维护</button>
+    </div>
+    <p class="qq-note" id="stMaintainNote"></p>
+    <h4 class="qq-h4">备份</h4>
+    <div class="qq-actions">
+      <button type="button" class="btn" id="stBackup">立即备份</button>
+      <button type="button" class="btn" id="stBackupList">刷新备份列表</button>
+    </div>
+    <p class="qq-note" id="stBackupNote"></p>
+    <ul class="bk-list" id="stBackupItems"></ul>
     <p class="qq-note">这里显示的是真实队列：待抽取为 0 表示当前没有积压；"最近一次抽取"为 ${
       ""}<code>skipped/degraded</code> 时说明模型或预筛跳过了那个窗口，不是故障。</p>
   </div>`;
@@ -2966,6 +2983,103 @@ function renderStatus() {
 function bindStatusButtons() {
   const btn = $("stReload");
   if (btn) btn.addEventListener("click", () => { void loadStatus(); });
+  const m = $("stMaintain");
+  if (m) m.addEventListener("click", () => { void runMaintain(); });
+  const b = $("stBackup");
+  if (b) b.addEventListener("click", () => { void runBackup(); });
+  const bl = $("stBackupList");
+  if (bl) bl.addEventListener("click", () => { void loadBackups(); });
+}
+
+async function runBackup() {
+  const note = $("stBackupNote");
+  const btn = $("stBackup");
+  if (!note || !btn) return;
+  btn.disabled = true;
+  note.textContent = "备份中…";
+  try {
+    const res = await fetch(`${API}/backup`, { method: "POST" });
+    const body = await res.json();
+    note.textContent = body.ok
+      ? `已备份：${body.name}（${Math.round(body.size / 1024)} KB，共 ${body.count} 份）`
+      : `备份失败：${body.error || res.status}`;
+    await loadBackups();
+  } catch (err) {
+    note.textContent = `备份失败：${err.message}`;
+  } finally {
+    btn.disabled = false;
+  }
+}
+
+async function loadBackups() {
+  const list = $("stBackupItems");
+  const note = $("stBackupNote");
+  if (!list) return;
+  try {
+    const res = await fetch(`${API}/backups`);
+    const body = await res.json();
+    if (!body.ok) { if (note) note.textContent = `读取备份失败：${body.error || res.status}`; return; }
+    if (!body.items.length) {
+      list.innerHTML = '<li class="bk-empty">还没有备份</li>';
+      if (note) note.textContent = `备份目录：${body.dir}`;
+      return;
+    }
+    list.innerHTML = body.items.map((it) => {
+      const when = new Date(it.mtime * 1000).toLocaleString();
+      return `<li class="bk-item"><span class="bk-name" title="${esc(it.name)}">${esc(it.name)}</span>
+        <span class="bk-meta">${Math.round(it.size / 1024)} KB · ${esc(when)}</span>
+        <button type="button" class="btn bk-restore" data-name="${esc(it.name)}">恢复</button></li>`;
+    }).join("");
+    list.querySelectorAll(".bk-restore").forEach((el) => {
+      el.addEventListener("click", () => { void restoreBackup(el.dataset.name || ""); });
+    });
+    if (note) note.textContent = `备份目录：${body.dir}`;
+  } catch (err) {
+    if (note) note.textContent = `读取备份失败：${err.message}`;
+  }
+}
+
+async function restoreBackup(name) {
+  if (!name) return;
+  if (!confirm(`用备份 ${name} 覆盖当前库？
+当前库会改名保留为 .pre-restore-*.bak，恢复后建议重启 DSH。`)) return;
+  const note = $("stBackupNote");
+  if (note) note.textContent = "恢复中…";
+  try {
+    const res = await fetch(`${API}/restore?name=${encodeURIComponent(name)}`, { method: "POST" });
+    const body = await res.json();
+    if (note) note.textContent = body.ok
+      ? `已恢复。${body.hint || ""}`
+      : `恢复失败：${body.error || res.status}`;
+    if (body.ok) void loadStatus();
+  } catch (err) {
+    if (note) note.textContent = `恢复失败：${err.message}`;
+  }
+}
+
+async function runMaintain() {
+  const note = $("stMaintainNote");
+  const btn = $("stMaintain");
+  if (!note || !btn) return;
+  btn.disabled = true;
+  note.textContent = "维护中（重算权重 + 本地巩固）…";
+  try {
+    const res = await fetch(`${API}/maintain`, { method: "POST" });
+    const body = await res.json();
+    if (body.ok) {
+      const rec = body.recompute ? `重算：${body.recompute}` : "重算：未到期，跳过";
+      const con = body.consolidate && body.consolidate.length
+        ? `巩固：${body.consolidate.length} 个会话` : "巩固：未到期或没有可合并项";
+      note.textContent = `${rec} · ${con}`;
+    } else {
+      note.textContent = `维护失败：${body.error || res.status}`;
+    }
+    void loadStatus();
+  } catch (err) {
+    note.textContent = `维护失败：${err.message}`;
+  } finally {
+    btn.disabled = false;
+  }
 }
 
 function startStatusPoll() {

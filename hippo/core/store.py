@@ -451,6 +451,101 @@ class Store:
             (session,)).fetchone()
         return int(row[0]) if row else 0
 
+    def merge_event(self, event_id: int, *, keywords: Sequence[str] = (),
+                    importance: int = 3, weight: float | None = None) -> bool:
+        """把新信息合并进已有事件：关键词取并集、importance/权重取大。
+
+        为什么合并而不是丢弃：同一条记忆被抽两遍时，第二遍常带**新关键词**
+        （新的专名、命令、错误码）。直接丢会永久损失这些线索；
+        合并只动关键词和权重，raw/summary 保持不变（原文不可变）。
+        """
+        ev = self.get_event(event_id)
+        if ev is None:
+            return False
+        old = [t for t in str(ev.keywords or "").split() if t]
+        merged = list(dict.fromkeys([*old, *[str(k) for k in keywords if k]]))[:8]
+        new_weight = max(float(ev.weight or 0.0), float(weight or 0.0))
+        new_imp = max(int(getattr(ev, "importance", 3) or 3), int(importance))
+        with self.tx():
+            self.conn.execute(
+                "UPDATE events SET keywords = ?, importance = ?, weight = ?,"
+                " w0 = MAX(w0, ?) WHERE id = ?",
+                (" ".join(merged), new_imp, new_weight, new_weight, int(event_id)),
+            )
+            if merged:
+                self.conn.executemany(
+                    "INSERT OR IGNORE INTO kw_index(token, event_id) VALUES (?,?)",
+                    [(t.lower(), int(event_id)) for t in merged],
+                )
+        return True
+
+    def filter_by_min_weight(self, session: str, ids: Sequence[int],
+                             floor: float) -> list[int]:
+        """把权重低于 floor 的事件剔掉（只用于"日常检索"）。
+
+        显式回忆（"我以前是不是说过…"）必须绕过它——否则用户明确要找的旧事
+        会因为在底层躺久了而永远翻不到，那就不叫遗忘，叫丢失。
+        """
+        ids = [int(i) for i in ids]
+        if not ids or floor <= 0:
+            return ids
+        marks = ",".join("?" * len(ids))
+        rows = self.conn.execute(
+            f"SELECT id FROM events WHERE id IN ({marks}) AND archived = 0"
+            f" AND weight >= ?", (*ids, float(floor))).fetchall()
+        keep = {int(r[0]) for r in rows}
+        return [i for i in ids if i in keep]
+
+    def recent_turns(self, session: str, *, limit: int = 2,
+                    role: str = "user") -> list[dict]:
+        """最近几条原始对话（不按关键词筛）。回答"刚才说了什么"这类问题时兜底。"""
+        rows = self.conn.execute(
+            "SELECT idx, role, content, ts FROM turns"
+            " WHERE session = ? AND role = ? ORDER BY idx DESC LIMIT ?",
+            (session, role, int(limit)),
+        ).fetchall()
+        return [{"idx": int(r["idx"]), "ts": r["ts"], "text": str(r["content"] or "").strip()}
+                for r in rows if str(r["content"] or "").strip()]
+
+    def search_turns(self, session: str, terms: Sequence[str], *,
+                     limit: int = 3, role: str = "user",
+                     scan_limit: int = 5000) -> list[dict]:
+        """在原始对话里按子串找（召回兜底，等价 Hy-Memory 的 L1_RAW 层）。
+
+        为什么需要：事件抽取会漏（实测 194 题里 74% 的漏题，答案其实还在
+        turns 表里）。这一层不调模型、不加依赖，只在事件没命中时把原话捞出来。
+        """
+        cleaned = [t.strip() for t in terms if t and len(t.strip()) >= 2][:3]
+        if not cleaned:
+            return []
+        conds = " OR ".join(["content LIKE ?"] * len(cleaned))
+        # 扫描边界：只搜最近 scan_limit 条 turn。
+        #
+        # 为什么必须加：`LIKE '%词%'` 用不上索引，不命中就是全表扫。
+        # 10 万条 turn 实测单次 40ms（命中密集时才快，因为命中即停）。
+        # 加边界后走 (session, idx) 索引做范围扫描，5000 条约 2ms。
+        # 代价：更早的原话不参与兜底——但它们本来就该由事件层负责。
+        rows = self.conn.execute(
+            f"SELECT idx, role, content, ts FROM turns"
+            f" WHERE session = ? AND role = ? AND ({conds})"
+            f" AND idx > (SELECT max(idx) FROM turns WHERE session = ?) - ?"
+            f" ORDER BY idx DESC LIMIT ?",
+            (session, role, *[f"%{t}%" for t in cleaned], session,
+             int(max(0, int(scan_limit))), int(limit) * 4),
+        ).fetchall()
+        out: list[dict] = []
+        seen: set[str] = set()
+        for row in rows:
+            text = str(row["content"] or "").strip()
+            key = text[:60]
+            if not text or key in seen:
+                continue
+            seen.add(key)
+            out.append({"idx": int(row["idx"]), "ts": row["ts"], "text": text})
+            if len(out) >= limit:
+                break
+        return out
+
     def search_events_substring(self, session: str, term: str, *,
                                 limit: int = 30) -> list[int]:
         """会话内按子串找事件（摘要或原话里出现）。检索兜底用。
@@ -1948,6 +2043,51 @@ class Store:
         rows = self.conn.execute(sql + " ORDER BY f.key, f.valid_from DESC",
                                  (session,)).fetchall()
         return [(Fact.from_row(r), str(r["who"] or "")) for r in rows]
+
+    def list_facts_cross(self, *, include_historical: bool = False,
+                         limit: int = 200) -> list[tuple[Fact, str]]:
+        """跨会话列事实（用户长期记忆层）。
+
+        为什么需要：facts 原来按 session 查，新开会话等于"失忆"——
+        但"我住杭州""我妈生日"这类不属于某一次对话，属于这个人。
+        去重规则：同一 (实体, 槽) 只留 valid_from 最新的一条。
+        """
+        sql = ("SELECT f.*, e.canonical AS who FROM facts f "
+               "LEFT JOIN entities e ON e.id = f.entity_id WHERE 1=1")
+        if not include_historical:
+            sql += " AND f.valid_to IS NULL"
+        rows = self.conn.execute(sql + " ORDER BY f.valid_from DESC", ()).fetchall()
+        seen: set[tuple] = set()
+        out: list[tuple[Fact, str]] = []
+        for row in rows:
+            key = (row["entity_id"], row["key"])
+            if key in seen:
+                continue
+            seen.add(key)
+            out.append((Fact.from_row(row), str(row["who"] or "")))
+            if len(out) >= limit:
+                break
+        return out
+
+    def list_traits_cross(self, *, active_only: bool = True,
+                          limit: int = 60) -> list[tuple[CardTrait, str]]:
+        """跨会话列特征（角色卡层）。同一 (实体名, 特征) 只留一条。"""
+        sql = ("SELECT t.*, e.canonical AS who FROM card_traits t "
+               "LEFT JOIN entities e ON e.id = t.entity_id WHERE 1=1")
+        if active_only:
+            sql += " AND t.valid_to IS NULL"
+        rows = self.conn.execute(sql + " ORDER BY t.id DESC", ()).fetchall()
+        seen: set[tuple] = set()
+        out: list[tuple[CardTrait, str]] = []
+        for row in rows:
+            key = (str(row["who"] or ""), str(row["trait"]))
+            if key in seen:
+                continue
+            seen.add(key)
+            out.append((CardTrait.from_row(row), str(row["who"] or "")))
+            if len(out) >= limit:
+                break
+        return out
 
     def fact_as_of(
         self, session: str, key: str, ts: int, *, entity_id: int | None = None,

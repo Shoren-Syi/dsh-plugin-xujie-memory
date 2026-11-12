@@ -38,7 +38,7 @@ M9 量出来 21 条真机查询里有 16 条认不出实体，其中"我几点�
 from __future__ import annotations
 
 import time
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, field
 from datetime import datetime
 from typing import Any
 
@@ -97,6 +97,8 @@ class L2Result:
     query: Query | None = None
     degraded: str = ""         # 非空 = 走了兜底，值说明原因
     budget: int = 0
+    # 原始对话兜底（L1_RAW）：事件没命中时，把 turns 里的原话带上来
+    raw_turns: list[dict] = field(default_factory=list)
 
     def __len__(self) -> int:
         return len(self.items)
@@ -223,6 +225,8 @@ def l2_search(
     now: datetime | None = None,
     tz: str = "Asia/Shanghai",
     candidates: list[int] | None = None,
+    use_raw: bool = True,
+    use_recent: bool = False,
 ) -> L2Result:
     """L2：L1 候选 → 关键词打分 → top-N。
 
@@ -230,6 +234,9 @@ def l2_search(
     不传就自己调 L1。
     """
     t0 = time.perf_counter()
+    # 查询串上限：超长输入（粘贴整篇文章、5 万字）会让分词/信号匹配变成几十毫秒，
+    # 而前 2000 字之外的词对"这一轮该想起什么"几乎没有贡献。
+    text = str(text or "")[:2000]
     pol = _policy(store, limit)
     max_items, per_tokens = pol["max_items"], pol["per_tokens"]
     budget, weights, half_life = pol["budget"], pol["weights"], pol["half_life"]
@@ -330,10 +337,39 @@ def l2_search(
 
     picked, used = _fill(ordered, max_items, budget)
 
+    # ---- 原话兜底（L1_RAW）：事件没命中的时候，把 turns 里的原话捞上来
+    #
+    # 实测 194 题里 74% 的漏题是"任何事件里都没有"，但原文还在 turns 表里。
+    # 这一层不调模型、不加依赖；只挑"没被已选事件原文覆盖"的句子，
+    # 最多 3 条，交给 pack 用低优先级渲染。
+    raw_turns: list[dict] = []
+    try:
+        if use_raw and toks:
+            covered = " ".join(str(it.event.raw or "") for it in picked)
+            for row in store.search_turns(session, toks, limit=4):
+                text = str(row.get("text") or "").strip()
+                if not text or text in covered:
+                    continue
+                raw_turns.append(row)
+                if len(raw_turns) >= 3:
+                    break
+            # 二级兜底：答案词往往不在问题里（问"多少字"，原话是"10478个字"），
+            # 关键词捞不到时，把最近两条原话带上——代价只有一次索引查询。
+            if use_recent and len(raw_turns) < 2:
+                for row in store.recent_turns(session, limit=2):
+                    text = str(row.get("text") or "").strip()
+                    if not text or text in covered or any(r["text"] == text for r in raw_turns):
+                        continue
+                    raw_turns.append(row)
+                    if len(raw_turns) >= 3:
+                        break
+    except Exception:  # noqa: BLE001 - 兜底层失败不影响主检索
+        raw_turns = []
+
     return L2Result(
         items=picked, candidates=len(cand), matched=len(hits),
         total_tokens=used, elapsed_ms=(time.perf_counter() - t0) * 1000,
-        query=q, degraded=degraded, budget=budget,
+        query=q, degraded=degraded, budget=budget, raw_turns=raw_turns,
     )
 
 

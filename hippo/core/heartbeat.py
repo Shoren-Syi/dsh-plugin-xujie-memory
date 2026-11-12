@@ -114,7 +114,11 @@ class Heartbeat:
         self.wall = wall or time.time
         self.clock = clock or time.monotonic
         self.on_curiosity = on_curiosity
-        self.escalator = Escalator(store, cfg=cfg, wall=self.wall)
+        # Escalator 只在真有外发通道时才有意义（QQ 桥接 / CLI 排查）。
+        # 插件本身没有"主动给用户发消息"的通道，所以**不在这里创建**——
+        # 以前每个 tick 都建一个却从不调用，属于"设计了但没用"。
+        self._escalator: Escalator | None = None
+        self._escalator_cfg = (store, cfg)
         self._last: dict[str, float] = {}
         self.last_report: TickReport | None = None
         # counts 的每一项都是"执行次数"，不是"处理条数"：
@@ -153,6 +157,14 @@ class Heartbeat:
         return True
 
     # ------------------------------------------------------------ 主循环体
+    @property
+    def escalator(self) -> "Escalator":
+        """按需创建：只有真要用的人（CLI/QQ 桥接）才会拿到实例。"""
+        if self._escalator is None:
+            store, cfg = self._escalator_cfg
+            self._escalator = Escalator(store, cfg=cfg, wall=self.wall)
+        return self._escalator
+
     def tick(self, *, now: int | None = None,
              jitter_ms: float = 0.0) -> TickReport:
         """跑一轮六步。任何一步抛异常都不影响其余五步。"""

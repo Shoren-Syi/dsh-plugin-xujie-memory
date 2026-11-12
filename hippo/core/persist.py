@@ -71,6 +71,7 @@ class PersistStats:
     doubts_resolved: int = 0         # M18.3：用户自己回答关闭的疑问
     verbatim_fail: int = 0           # raw 锚定失败
     events_dup: int = 0              # 和最近事件重复、被跳过的条数
+    events_merged: int = 0           # 重复但带新信息、合并进旧事件的条数
     affect_changed: int = 0
     ledger_settled: int = 0          # M23.2：这一轮结算掉的自主动作
     ledger_regret: int = 0           # M23.3：其中写成懊悔记忆的
@@ -266,13 +267,26 @@ def persist_result(
                 imp = max(1, min(5, int(getattr(ev, "importance", 3) or 3)))
                 # ---- 去重：同一件事被抽成两条（用户原话 + 助手复述）是"记忆变脏"的主因
                 summary_try = ev.summary or anchored[:60]
-                recent = [e.summary or e.raw for e in
-                          store.recent_events(session, limit=12, since_ts=ingest - 6 * 3600)]
-                if is_duplicate(summary_try, recent):
-                    stats.events_dup += 1
-                    log.info("persist.event.duplicate", extra={"fields": {
-                        "session": session, "summary": summary_try[:60]}})
-                    continue
+                recent = store.recent_events(session, limit=12, since_ts=ingest - 6 * 3600)
+                match = next((e for e in recent
+                              if is_duplicate(summary_try, [e.summary or e.raw])), None)
+                if match is not None:
+                    if str(match.raw or "") == anchored:
+                        # 幂等：同一段原话再次写入（重试/重放），什么都不用做
+                        stats.events_dup += 1
+                        log.info("persist.event.duplicate", extra={"fields": {
+                            "session": session, "summary": summary_try[:60]}})
+                        continue
+                    # 同一件事换了说法：把新关键词/重要性合并进旧事件，不新增
+                    imp_merge = max(1, min(5, int(getattr(ev, "importance", 3) or 3)))
+                    w_guess = max(0.15, min(0.95, w0 + (imp_merge - 3) * 0.12))
+                    if store.merge_event(match.id, keywords=kws, importance=imp_merge,
+                                         weight=w_guess):
+                        stats.events_merged += 1
+                        log.info("persist.event.merged", extra={"fields": {
+                            "session": session, "into": match.id,
+                            "summary": summary_try[:60]}})
+                        continue
                 w0_adj = max(0.15, min(0.95, w0 + (imp - 3) * 0.12))
                 key_values = clean_values(getattr(ev, "values", None))
                 event_id = store.add_event(

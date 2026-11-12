@@ -1,5 +1,98 @@
 # 更新日志
 
+## 1.1.19
+
+- 遗忘 ≠ 丢失：`retrieve.min_weight` 真正生效（日常过滤），显式回忆（以前/之前/当时）穿透
+- 跨会话身份边界：事实/特征跨会话继承（`retrieve.cross_session`，默认开），事件/计划/存疑仍按会话隔离
+- tests: `test_m77_forgetting.py` 3 例、`test_m78_cross_session.py` 3 例
+
+## 1.1.18
+
+- 清理：`Heartbeat` 不再每次 tick 创建从未调用的 `Escalator`，改为按需属性
+- 至此 recompute / consolidate / backup / heartbeat 全部接入运行时
+
+## 1.1.17
+
+- 心跳真正接入（以前 `Heartbeat` 只在 CLI 里被引用，插件从未启动）
+  - 内核按 `heartbeat.interval_seconds`(60s) 跑六步：plans/doubts/mood/tier/consolidate/curiosity
+  - 每日备份顺带在心跳里检查；单步失败不影响其它
+  - 结构上无 LLM 调用，挂机不额外花钱
+- 修复：`TickReport` 无 `llm_calls`（改用 `hb.counts`）、系统状态键 `_sys`
+- tests: `test_m75_heartbeat_loop.py` 3 例
+
+## 1.1.16
+
+- 备份接线到插件（以前只有 CLI）
+  - 维护循环每天自动备份一次（保留最近 7 份）
+  - `POST /backup` / `GET /backups` / `POST /restore`；面板「状态」页备份区
+  - 恢复保留 `.pre-restore-*.bak` 后悔药，并提示重启 DSH
+- tests: `test_m74_backup.py` 3 例
+
+## 1.1.15
+
+- 接线两个"只在 CLI 里有"的能力：权重/tier 重算、夜间巩固
+  - 内核后台任务默认每天跑一次，纯本地不调模型
+  - 面板「状态」页新增「立即维护」按钮（`POST /maintain`）
+  - 配置 `maintenance.*`；失败只记 warning，不影响内核
+- 新增 `scripts/audit-modules.py`（运行时可达性审计）与 `reports/R-52`
+- tests: `test_m73_maintenance.py` 3 例
+
+## 1.1.14
+
+- 修复：`/event` 接受空会话名/超长会话名（会产生"无归属"记忆）
+  - `session` 限制 1~200 字符，非法值 422
+- 已验证：无效 API key 下内核不崩、摘要失败静默重试
+- tests: `test_m61` 补 1 例
+
+## 1.1.13
+
+- 修复：超长问题串拖慢装配（5 万字 50.9ms → 6.8ms）
+  - 入口截断：pack 取前 4000 字做检索判断，l2_search 再兜底 2000 字
+- tests: `test_huge_query_is_bounded`
+
+## 1.1.12
+
+- 修复：原话兜底导致检索变慢（3000 条压测 p95 13.4 → 34.8ms）
+  - 根因：`LIKE '%词%'` 不命中时全表扫，10 万条 turn 单次 40ms
+  - 修法：只扫最近 5000 条 turn（走 (session, idx) 索引范围扫描）
+  - 结果：不命中查询 40.5ms → 1.65ms；压测检索 p95 回到 16.9ms
+  - 顺带修边界差一（`>=` → `>`）
+- tests: `test_m63_raw_turns.py` 补 2 例
+
+## 1.1.11
+
+- 写入幂等 + 本地合并（对标 Hy-Memory 的 reconcile，零额外模型调用）
+  - 同一段原话重放：跳过，不改任何东西（幂等）
+  - 同一件事换说法：把新关键词/更高 importance 合并进旧事件，raw/summary 不动
+  - 合并后的关键词补进检索索引，保证可召回
+- 新增 `stats.events_merged` 计数
+- tests: `test_m68_merge.py` 3 例
+
+## 1.1.10
+
+- 代码对话用「工程记忆」提示词（对标 Hy-Memory 的 coding 链路）
+  - 本地正则判断代码窗口（零调用），只在该窗口追加补充规则，不替换基础 prompt
+  - 记：改了什么/为什么/坑/决策，路径与命令逐字保留；importance 打分标准单列
+  - 合成对照：同一段代码对话 0 条 → 1 条，且抓到文件路径
+- 配置 `extract.coding_prompt`（默认开）
+- tests: `test_m67_coding_prompt.py` 3 例
+
+## 1.1.9
+
+- 新增「原话兜底」层（对标腾讯 Hy-Memory 的 L1_RAW）：事件没命中时，从 turns 表捞原话进上下文
+  - 只按关键词匹配、最多 3 条、独立预算，不挤事件；零模型调用
+  - A/B：143 题严格命中 55 → **60（+3.5pp）**
+  - 二级「最近两条原话」实测无增益，默认关闭
+- 新增脚本：`build-corpus.py`（从导出 zip 重建语料）、`ab-raw-turns.py` / `ab-raw-measure.py`（A/B）
+- tests: `test_m63_raw_turns.py` 4 例
+
+## 1.1.8
+
+- 修复：窗口缩窄时，会话头部工具条（智能体团队/费用明细/标签/移动到工作区/删除会话等）
+  互相压住并盖到标题上——宿主 headerActions 没有 flex-wrap，插件客户端补一条可换行兜底
+- 兜底只作用于 `[class*="_headerActions"]`，不改其它布局，重复注入去重
+- 回归测试：`test/header-shim.test.mjs`（断言换行/省略/去重，且不误伤别的选择器）
+
 ## 1.1.7
 
 - 统一版本号：包、内核 `__version__`、README、RELEASE、CHANGELOG、面板显示全部为 1.1.7

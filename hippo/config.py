@@ -91,6 +91,33 @@ class ReflectCfg(_Section):
     max_passive_per_day: int = 3
 
 
+class BackupCfg(_Section):
+    """备份：每日自动一份 + 面板手动入口。
+
+    `ensure_daily` 以前只在 CLI 的 serve 里调，插件运行期从不备份——
+    数据安全功能藏在命令行里，等于没有。
+    """
+
+    enabled: bool = True
+    keep: int = 7
+    daily: bool = True
+
+
+class MaintenanceCfg(_Section):
+    """自动维护：权重/tier 重算 + 本地巩固。
+
+    这两个能力以前只挂在 CLI 上（recompute / consolidate），
+    插件跑起来从没执行过——"设计了但没用"。
+    这里做成后台任务：默认每天一次，纯本地、不调模型。
+    """
+
+    enabled: bool = True
+    recompute_hours: int = 24
+    consolidate_hours: int = 24
+    # 巩固是否重写摘要。默认关：摘要重写要调模型，关键词并集已保证检索不丢。
+    consolidate_summary: bool = False
+
+
 class DigestCfg(_Section):
     """会话摘要的自动生成策略。
 
@@ -106,6 +133,17 @@ class DigestCfg(_Section):
 
 
 class RetrieveCfg(_Section):
+    # 事件没命中时，是否把 turns 里的原话兜底带上来（L1_RAW 等价层）。
+    # 关掉可以复现旧行为，用于 A/B 对比。
+    raw_turns: bool = True
+    # 二级兜底：关键词捞不到原话时，带最近两条用户原话。
+    # **默认关闭**：143 题 A/B 里它没有带来任何新增命中（terms 60 → terms+recent 60），
+    # 只会多占 token。代码保留，将来改成"按问题类型"再开。
+    raw_recent: bool = False
+    # 跨会话：事实/特征属于"这个人"而不是"这次对话"。
+    # 事件、计划、存疑仍严格按会话隔离。
+    cross_session: bool = True
+
     trigger_jaccard: float = Field(0.25, ge=0, le=1)
     max_summaries: int = Field(8, ge=1, le=50)
     max_raws: int = Field(2, ge=0, le=10)
@@ -209,6 +247,8 @@ class ExtractCfg(_Section):
     # **默认关闭**：194 题实测，28 次额外调用只多抽出 3 条事件，
     # 判定反而 127→123（噪声内）。成本优先，不划算，默认不开。
     retry_empty: bool = False
+    # 代码窗口是否附加「工程记忆」提示词（纯本地判断，零额外调用）
+    coding_prompt: bool = True
     retry_min_chars: int = Field(20, ge=8, le=1000)
     window_tokens: int = Field(1200, ge=100)
     prescreen: bool = True
@@ -320,6 +360,8 @@ class Config(BaseModel):
     budget: BudgetCfg = Field(default_factory=BudgetCfg)
     pack: PackCfg = Field(default_factory=PackCfg)
     digest: DigestCfg = Field(default_factory=DigestCfg)
+    maintenance: MaintenanceCfg = Field(default_factory=MaintenanceCfg)
+    backup: BackupCfg = Field(default_factory=BackupCfg)
     reflect: ReflectCfg = Field(default_factory=ReflectCfg)
     retrieve: RetrieveCfg = Field(default_factory=RetrieveCfg)
     rank: RankCfg = Field(default_factory=RankCfg)

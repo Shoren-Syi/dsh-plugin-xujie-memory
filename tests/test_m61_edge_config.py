@@ -58,3 +58,11 @@ def test_event_body_rejects_unknown_role():
     assert EventBody(session="s", role="assistant", text="hi").role == "assistant"
     with pytest.raises(ValidationError):
         EventBody(session="s", role="system", text="hi")
+
+
+def test_event_body_rejects_empty_session():
+    with pytest.raises(ValidationError):
+        EventBody(session="", role="user", text="hi")
+    with pytest.raises(ValidationError):
+        EventBody(session="a" * 201, role="user", text="hi")
+    assert EventBody(session="s1", role="user", text="hi").session == "s1"

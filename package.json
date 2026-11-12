@@ -1,6 +1,6 @@
 {
   "name": "dsh-plugin-xujie-memory",
-  "version": "1.1.7",
+  "version": "1.1.19",
   "description": "叙界记忆 1.0：基于海马体内核的 DeepSeek Harness 本地记忆插件。",
   "repository": { "type": "git", "url": "git+https://github.com/Shoren-Syi/dsh-plugin-xujie-memory.git" },
   "homepage": "https://github.com/Shoren-Syi/dsh-plugin-xujie-memory#readme",

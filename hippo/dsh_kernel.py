@@ -32,7 +32,7 @@ import httpx
 from fastapi import FastAPI, Request
 from fastapi.responses import HTMLResponse, JSONResponse, PlainTextResponse, Response
 from typing import Literal
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 from . import __version__
 from .config import Config, load_config
@@ -49,7 +49,9 @@ _BOARD_HTML = Path(__file__).resolve().parent / "data" / "board.html"
 
 
 class EventBody(BaseModel):
-    session: str
+    # 空会话名会造出一条"没有归属"的记忆：面板里显示空白、按会话检索也找不到。
+    # 长度上限防止有人把整段文本当会话名塞进来。
+    session: str = Field(min_length=1, max_length=200)
     # 只收这两种：其它角色（system/tool/随便乱传）进来只会污染记忆，
     # 而且它们本来就不是"人说过的内容"。
     role: Literal["user", "assistant"] = "user"
@@ -107,6 +109,91 @@ def create_kernel(cfg: Config, api_key: str = "", instance_id: str = "") -> Fast
     """构造内核 app。cfg.db_path 必须是绝对路径。"""
     db = Path(cfg.db_path).expanduser()
 
+    def _run_maintenance(*, force: bool = False) -> dict:
+        """权重/tier 重算 + 本地巩固。纯本地，不调模型。
+
+        以前这两件事只在 CLI 里，插件运行期从不执行——"设计了但没用"。
+        现在默认每天跑一次，也可以在面板里点"立即维护"强制跑。
+        """
+        from .core.consolidate import run as consolidate_run
+        from .core.dynamics import recompute
+
+        mcfg = cfg.maintenance
+        bcfg = cfg.backup
+        out_backup = None
+        if bcfg.enabled and bcfg.daily:
+            try:
+                from .core import backup as backup_mod
+                made = backup_mod.ensure_daily(db, keep=int(bcfg.keep))
+                out_backup = str(made) if made else "今天已备份"
+            except Exception as exc:  # noqa: BLE001 - 备份失败不影响维护
+                log.warning("kernel.backup.failed", extra={"fields": {"err": repr(exc)[:120]}})
+                out_backup = f"失败：{exc}"[:120]
+        if not mcfg.enabled and not force:
+            return {"ok": True, "skipped": "disabled", "backup": out_backup}
+        now = int(time.time())
+        out: dict = {"ok": True, "recompute": None, "consolidate": [], "backup": out_backup}
+        store = _store()
+        try:
+            last_rec = int(store.get_state("", "last_recompute_at", "0") or 0)
+            if force or now - last_rec >= mcfg.recompute_hours * 3600:
+                rep = recompute(store, cfg=cfg.weight)
+                store.set_state("", "last_recompute_at", str(now))
+                out["recompute"] = rep.line()
+            sessions = store.list_turn_sessions()
+            last_con = int(store.get_state("", "last_consolidate_at", "0") or 0)
+            if force or now - last_con >= mcfg.consolidate_hours * 3600:
+                for session in sessions:
+                    try:
+                        rep = consolidate_run(store, session)   # summarizer=None：只做结构合并
+                        out["consolidate"].append(rep.line())
+                    except Exception as exc:  # noqa: BLE001 - 单个会话失败不影响其它
+                        log.warning("kernel.maintain.consolidate_failed",
+                                    extra={"fields": {"session": session, "err": repr(exc)[:120]}})
+                store.set_state("", "last_consolidate_at", str(now))
+        finally:
+            store.close()
+        log.info("kernel.maintain.done", extra={"fields": {"force": force}})
+        return out
+
+    async def _heartbeat_loop(app: FastAPI) -> None:
+        """心跳循环：作者设计的六步（plans/doubts/mood/tier/consolidate/curiosity）。
+
+        `core/heartbeat.py` 的文档写着"宿主在 lifespan 里起一个 task"，
+        但插件里从来没起过——等于这些定时步骤全部没跑。这里补上：
+        按 `heartbeat.interval_seconds`（默认 60s）tick；结构上没有 await LLM，
+        升级/巩固都不额外花钱。每日备份顺带在这里检查。
+        """
+        interval = max(15, int(getattr(cfg.heartbeat, "interval_seconds", 60)))
+        await asyncio.sleep(10)
+        while True:
+            try:
+                def beat() -> dict:
+                    store = _store()
+                    try:
+                        from .core.heartbeat import Heartbeat
+                        hb = Heartbeat(store, cfg=cfg)
+                        rep = hb.tick()
+                        if cfg.backup.enabled and cfg.backup.daily:
+                            try:
+                                from .core import backup as backup_mod
+                                backup_mod.ensure_daily(db, keep=int(cfg.backup.keep))
+                            except Exception as exc:  # noqa: BLE001
+                                log.warning("kernel.backup.daily_failed",
+                                            extra={"fields": {"err": repr(exc)[:120]}})
+                        return {"ticks": 1, "steps": len(rep.steps),
+                                "errors": rep.errors,
+                                "llm_calls": int(hb.counts.get("llm_calls", 0))}
+                    finally:
+                        store.close()
+
+                await asyncio.to_thread(beat)
+            except asyncio.CancelledError:
+                raise
+            except Exception as exc:  # noqa: BLE001 - 心跳失败不许拖垮内核
+                log.warning("kernel.heartbeat.failed", extra={"fields": {"err": repr(exc)[:160]}})
+            await asyncio.sleep(interval)
+
     @asynccontextmanager
     async def lifespan(app: FastAPI):
         db.parent.mkdir(parents=True, exist_ok=True)
@@ -119,7 +206,11 @@ def create_kernel(cfg: Config, api_key: str = "", instance_id: str = "") -> Fast
         log.info("kernel.ready", extra={"fields": {"db": str(db), "version": __version__}})
         # 摘要后台补写：DSH 很少走 /drain，只靠它等于永远不生成。
         app.state.digest_task = asyncio.create_task(_digest_loop(app))
+        app.state.maintain_task = asyncio.create_task(_heartbeat_loop(app))
         yield
+        app.state.maintain_task.cancel()
+        with suppress(asyncio.CancelledError):
+            await app.state.maintain_task
         app.state.digest_task.cancel()
         with suppress(asyncio.CancelledError):
             await app.state.digest_task
@@ -174,6 +265,56 @@ def create_kernel(cfg: Config, api_key: str = "", instance_id: str = "") -> Fast
             return _BOARD_HTML.read_text(encoding="utf-8")
         except OSError:
             return "<h1>board.html 缺失</h1>"
+
+    @app.post("/backup")
+    async def make_backup() -> dict:
+        """手动备份一份（面板按钮用）。"""
+        from .core import backup as backup_mod
+        try:
+            target = backup_mod.backup(db, keep=int(cfg.backup.keep))
+            files = backup_mod.list_backups(target.parent)
+            return {"ok": True, "path": str(target), "name": target.name,
+                    "size": target.stat().st_size, "count": len(files)}
+        except Exception as exc:  # noqa: BLE001
+            return {"ok": False, "error": repr(exc)[:200]}
+
+    @app.get("/backups")
+    def list_backups_route() -> dict:
+        from .core import backup as backup_mod
+        try:
+            items = [
+                {"name": p.name, "size": p.stat().st_size,
+                 "mtime": int(p.stat().st_mtime)}
+                for p in backup_mod.list_backups(backup_mod.backups_dir_for(db))
+            ]
+            items.sort(key=lambda x: x["mtime"], reverse=True)
+            return {"ok": True, "items": items, "dir": str(backup_mod.backups_dir_for(db))}
+        except Exception as exc:  # noqa: BLE001
+            return {"ok": False, "error": repr(exc)[:200]}
+
+    @app.post("/restore")
+    async def restore_backup(name: str) -> dict:
+        """用指定备份覆盖当前库。
+
+        运行中恢复有风险：restore() 会把旧库改名留作 `.pre-restore-*.bak`，
+        之后新的连接读到的是恢复后的库。恢复完成后建议重启 DSH。
+        """
+        from .core import backup as backup_mod
+        try:
+            path = backup_mod.backups_dir_for(db) / name
+            if not path.exists():
+                return {"ok": False, "error": "备份不存在"}
+            if app.state.extract_tasks:
+                return {"ok": False, "error": "还有抽取任务在跑，稍后再试"}
+            target = backup_mod.restore(db, path)
+            return {"ok": True, "db": str(target), "hint": "建议重启 DSH 让所有连接重新打开"}
+        except Exception as exc:  # noqa: BLE001
+            return {"ok": False, "error": repr(exc)[:200]}
+
+    @app.post("/maintain")
+    async def maintain(force: bool = True) -> dict:
+        """手动触发维护（面板"立即维护"按钮用）。"""
+        return await asyncio.to_thread(_run_maintenance, force=force)
 
     @app.get("/stats")
     def stats() -> dict:

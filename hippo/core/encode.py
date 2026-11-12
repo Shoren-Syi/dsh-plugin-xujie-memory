@@ -136,15 +136,22 @@ class Encoder:
         self.client = client
         self.api_key = api_key
         self._template = template
+        self._coding_addendum = _load_coding_addendum()
 
     # ---------------------------------------------------------------- 组装
-    def build_messages(self, window: Window, known: str = "（暂无）") -> list[dict[str, str]]:
+    def build_messages(self, window: Window, known: str = "（暂无）",
+                       *, coding: bool = False) -> list[dict[str, str]]:
         conversation = build_conversation(window)
+        template = self._template or load_template()
+        if coding and self._coding_addendum:
+            # 代码任务用"基础规则 + 工程补充"：补充只讲记什么，不重复基础规则，
+            # 这样基础 prompt 改一处，两条链路都跟着变。
+            template = template.rstrip() + "\n" + self._coding_addendum
         prompt = render_prompt(
             conversation,
             known_entities=known,
             now_hint=_now_hint(self.cfg.timezone),
-            template=self._template,
+            template=template,
         )
         return [{"role": "user", "content": prompt}]
 
@@ -179,11 +186,11 @@ class Encoder:
 
         # ---------------------------------------------------------------- 调用
     async def encode(self, window: Window, *, known: str = "（暂无）",
-                     extra_system: str = "") -> EncodeOutcome:
+                     extra_system: str = "", coding: bool = False) -> EncodeOutcome:
         """抽取一个窗口。**不抛异常**——失败返回 status=degraded。"""
         t0 = time.perf_counter()
         out = EncodeOutcome()
-        messages = self.build_messages(window, known)
+        messages = self.build_messages(window, known, coding=coding)
         if extra_system and messages:
             messages[0]["content"] = str(messages[0].get("content", "")) + "\n\n" + extra_system
         span = Span()
@@ -482,3 +489,14 @@ __all__ = [
     "Encoder", "EncodeOutcome", "build_conversation", "build_known_entities",
     "degrade_event_text", "load_template", "anchor_raw",
 ]
+
+
+def _load_coding_addendum() -> str:
+    """代码任务专用补充提示词；文件不存在就退回空串（不影响主链路）。"""
+    from pathlib import Path
+
+    path = Path(__file__).resolve().parent.parent / "data" / "prompts" / "extract_coding.md"
+    try:
+        return path.read_text(encoding="utf-8")
+    except OSError:
+        return ""

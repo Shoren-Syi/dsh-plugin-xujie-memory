@@ -51,7 +51,8 @@ def test_persist_skips_echo_of_same_event(store):
     rows = store.conn.execute("select summary from events").fetchall()
     assert len(rows) == 1, [r[0] for r in rows]
     assert len(rep.event_ids) == 1
-    assert rep.events_dup == 1
+    # 1.1.11 起：换说法的重复不再直接丢，而是合并进旧事件（幂等仍由 raw 完全相同判定）
+    assert (rep.events_dup + rep.events_merged) == 1
 
 
 def test_persist_keeps_genuinely_different_events(store):

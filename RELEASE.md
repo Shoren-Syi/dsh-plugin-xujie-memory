@@ -1,12 +1,12 @@
-# 上线说明 · 叙界记忆 1.1.7
+# 上线说明 · 叙界记忆 1.1.19
 
-> 包名：`dsh-plugin-xujie-memory` · 版本：**1.1.7** · 记忆库：`~/.hippo/mem.db` · 内核日志：`~/.hippo/kernel.log`
+> 包名：`dsh-plugin-xujie-memory` · 版本：**1.1.19** · 记忆库：`~/.hippo/mem.db` · 内核日志：`~/.hippo/kernel.log`
 
 ## 安装
 
 ```bash
 # 从 tgz 安装（Windows x64 包内自带 Python 运行时）
-dsh plugin --profile <你的profile> add <路径>/dsh-plugin-xujie-memory-1.1.7.tgz
+dsh plugin --profile <你的profile> add <路径>/dsh-plugin-xujie-memory-1.1.19.tgz
 ```
 
 装完重启 DSH。侧栏「记忆」打开面板；面板里的「状态」页能看到内核版本、待抽队列与最近一次抽取结果。
@@ -31,7 +31,7 @@ dsh plugin --profile <你的profile> add <旧版本 tgz>
 
 回退前备份 `~/.hippo/mem.db`。新版数据库结构可能比旧版多列，旧版不会读新库的全部字段。
 
-## 验收记录（1.1.7）
+## 验收记录（1.1.19）
 
 | 项 | 结果 |
 | --- | --- |
